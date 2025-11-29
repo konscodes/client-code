@@ -1,0 +1,739 @@
+// Clients list page - browse and manage all clients
+import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useApp } from '../lib/app-context';
+import { formatDate, getClientOrders } from '../lib/utils';
+import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, CalendarIcon } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
+import { Label } from '../components/ui/label';
+import { Calendar } from '../components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { PaginationWithLinks } from '../components/ui/pagination-with-links';
+
+interface ClientsListProps {
+  onNavigate: (page: string, id?: string) => void;
+}
+
+type ColumnKey = 'name' | 'company' | 'email' | 'phone' | 'orders' | 'lastOrder';
+
+export function ClientsList({ onNavigate }: ClientsListProps) {
+  const { clients, orders } = useApp();
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Filter states
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
+  const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>({});
+  
+  // Column visibility state - Name is default, checked, and disabled
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>({
+    name: true, // default, cannot be unchecked
+    company: true,
+    email: true,
+    phone: true,
+    orders: true,
+    lastOrder: true,
+  });
+  
+  // Column order state
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([
+    'name',
+    'company',
+    'email',
+    'phone',
+    'orders',
+    'lastOrder',
+  ]);
+  
+  // Panel states
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  
+  // Drag and drop state
+  const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Sorting state
+  const [sortBy, setSortBy] = useState<ColumnKey>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  const filteredClients = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return clients.filter(client => {
+      // Search filter
+      const matchesSearch = 
+        client.name.toLowerCase().includes(query) ||
+        client.company.toLowerCase().includes(query) ||
+        client.email.toLowerCase().includes(query) ||
+        client.phone.toLowerCase().includes(query);
+      
+      if (!matchesSearch) return false;
+      
+      // Date filter (last order date)
+      const clientOrders = getClientOrders(orders, client.id);
+      const lastOrder = clientOrders.length > 0 
+        ? clientOrders.reduce((latest, order) => 
+            order.createdAt > latest.createdAt ? order : latest
+          )
+        : null;
+      
+      let matchesDate = true;
+      if (dateFilter.from || dateFilter.to) {
+        if (!lastOrder) {
+          matchesDate = false; // No orders means no date match
+        } else {
+          const lastOrderDate = new Date(lastOrder.createdAt);
+          if (dateFilter.from) {
+            const fromDate = new Date(dateFilter.from);
+            fromDate.setHours(0, 0, 0, 0);
+            if (lastOrderDate < fromDate) matchesDate = false;
+          }
+          if (dateFilter.to) {
+            const toDate = new Date(dateFilter.to);
+            toDate.setHours(23, 59, 59, 999);
+            if (lastOrderDate > toDate) matchesDate = false;
+          }
+        }
+      }
+      
+      // Orders count filter
+      let matchesOrdersCount = true;
+      if (ordersCountFilter.min !== undefined || ordersCountFilter.max !== undefined) {
+        const orderCount = clientOrders.length;
+        if (ordersCountFilter.min !== undefined && orderCount < ordersCountFilter.min) {
+          matchesOrdersCount = false;
+        }
+        if (ordersCountFilter.max !== undefined && orderCount > ordersCountFilter.max) {
+          matchesOrdersCount = false;
+        }
+      }
+      
+      return matchesSearch && matchesDate && matchesOrdersCount;
+    }).sort((a, b) => {
+      let comparison = 0;
+      const clientOrdersA = getClientOrders(orders, a.id);
+      const clientOrdersB = getClientOrders(orders, b.id);
+      const lastOrderA = clientOrdersA.length > 0 
+        ? clientOrdersA.reduce((latest, order) => 
+            order.createdAt > latest.createdAt ? order : latest
+          )
+        : null;
+      const lastOrderB = clientOrdersB.length > 0 
+        ? clientOrdersB.reduce((latest, order) => 
+            order.createdAt > latest.createdAt ? order : latest
+          )
+        : null;
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'company':
+          comparison = a.company.localeCompare(b.company);
+          break;
+        case 'email':
+          comparison = a.email.localeCompare(b.email);
+          break;
+        case 'phone':
+          comparison = a.phone.localeCompare(b.phone);
+          break;
+        case 'orders':
+          comparison = clientOrdersA.length - clientOrdersB.length;
+          break;
+        case 'lastOrder':
+          if (!lastOrderA && !lastOrderB) comparison = 0;
+          else if (!lastOrderA) comparison = 1;
+          else if (!lastOrderB) comparison = -1;
+          else comparison = new Date(lastOrderA.createdAt).getTime() - new Date(lastOrderB.createdAt).getTime();
+          break;
+        default:
+          comparison = 0;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [clients, orders, searchQuery, dateFilter, ordersCountFilter, sortBy, sortDirection]);
+  
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedClients = filteredClients.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters, itemsPerPage, or sorting change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, dateFilter.from, dateFilter.to, ordersCountFilter.min, ordersCountFilter.max, itemsPerPage, sortBy, sortDirection]);
+  
+  // Get ordered visible columns
+  const orderedVisibleColumns = useMemo(() => {
+    return columnOrder.filter(key => visibleColumns[key]);
+  }, [columnOrder, visibleColumns]);
+  
+  // Drag and drop handlers
+  const handleDragStart = (columnKey: ColumnKey) => {
+    setDraggedColumn(columnKey);
+  };
+  
+  const handleDragOver = (e: React.DragEvent, targetColumn: ColumnKey) => {
+    e.preventDefault();
+    if (draggedColumn === null || draggedColumn === targetColumn) return;
+    setDragOverColumn(targetColumn);
+  };
+  
+  const handleDrop = (e: React.DragEvent, targetColumn: ColumnKey) => {
+    e.preventDefault();
+    if (draggedColumn === null || draggedColumn === targetColumn) {
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+      return;
+    }
+    
+    const draggedIndex = columnOrder.indexOf(draggedColumn);
+    const targetIndex = columnOrder.indexOf(targetColumn);
+    
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+      return;
+    }
+    
+    const newOrder = [...columnOrder];
+    newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedColumn);
+    setColumnOrder(newOrder);
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
+  
+  const handleDragEnd = () => {
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
+  
+  // Column label mapping
+  const columnLabels: Record<ColumnKey, string> = {
+    name: 'Name',
+    company: 'Company',
+    email: 'Email',
+    phone: 'Phone',
+    orders: 'Orders',
+    lastOrder: 'Last Order',
+  };
+  
+  // Helper function to render table header
+  const renderTableHeader = (columnKey: ColumnKey) => {
+    if (!visibleColumns[columnKey]) return null;
+    
+    return (
+      <th 
+        key={columnKey}
+        className="px-6 py-3 text-left text-[#555A60]"
+      >
+        {columnLabels[columnKey]}
+      </th>
+    );
+  };
+  
+  // Helper function to render table cell
+  const renderTableCell = (columnKey: ColumnKey, client: typeof clients[0], clientOrders: typeof orders) => {
+    if (!visibleColumns[columnKey]) return null;
+    
+    const lastOrder = clientOrders.length > 0 
+      ? clientOrders.reduce((latest, order) => 
+          order.createdAt > latest.createdAt ? order : latest
+        )
+      : null;
+    
+    switch (columnKey) {
+      case 'name':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#1E2025]">{client.name}</p>
+          </td>
+        );
+      case 'company':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#555A60]">{client.company}</p>
+          </td>
+        );
+      case 'email':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#555A60]">{client.email}</p>
+          </td>
+        );
+      case 'phone':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#555A60]">{client.phone}</p>
+          </td>
+        );
+      case 'orders':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#1E2025]">{clientOrders.length}</p>
+          </td>
+        );
+      case 'lastOrder':
+        return (
+          <td key={columnKey} className="px-6 py-4">
+            <p className="text-[#555A60]">
+              {lastOrder ? formatDate(lastOrder.createdAt) : 'No orders'}
+            </p>
+          </td>
+        );
+      default:
+        return null;
+    }
+  };
+  
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[#1E2025] mb-2">Clients</h1>
+          <p className="text-[#555A60]">Manage your client relationships and contact information.</p>
+        </div>
+        <button
+          onClick={() => onNavigate('client-detail', 'new')}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+        >
+          <Plus size={20} aria-hidden="true" />
+          New Client
+        </button>
+      </div>
+      
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-[300px] max-w-md relative">
+          <Search 
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+            size={20}
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            placeholder="Search clients by name, company, email, or phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            aria-label="Search clients"
+          />
+        </div>
+        
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setFiltersOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Filter size={16} />
+            Filters
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Columns size={16} />
+            Customize
+          </Button>
+        </div>
+      </div>
+      
+      {/* Clients table */}
+      <div className="bg-white rounded-xl border border-[#E4E7E7] overflow-hidden">
+        {filteredClients.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            {searchQuery ? (
+              <>
+                <p className="text-[#7C8085] mb-2">No clients found</p>
+                <p className="text-[#7C8085]">Try adjusting your search query</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[#7C8085] mb-4">No clients yet</p>
+                <button
+                  onClick={() => onNavigate('client-detail', 'new')}
+                  className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                >
+                  Add your first client
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#E4E7E7]">
+                {orderedVisibleColumns.map(renderTableHeader)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E4E7E7]">
+              {paginatedClients.map(client => {
+                const clientOrders = getClientOrders(orders, client.id);
+                
+                return (
+                  <tr 
+                    key={client.id}
+                    onClick={() => onNavigate('client-detail', client.id)}
+                    className="hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                  >
+                    {orderedVisibleColumns.map(columnKey => renderTableCell(columnKey, client, clientOrders))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      
+      {filteredClients.length > 0 && (
+        <div className="flex items-center justify-between">
+          <p className="text-[#555A60] text-sm">
+            Showing {startIndex + 1} to {Math.min(endIndex, filteredClients.length)} of {filteredClients.length} clients
+            {filteredClients.length !== clients.length && ` (filtered from ${clients.length} total)`}
+          </p>
+          
+          <PaginationWithLinks
+            page={currentPage}
+            pageSize={itemsPerPage}
+            totalCount={filteredClients.length}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
+      
+      {/* Filters Panel - Portal to body */}
+      {filtersOpen && createPortal(
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div 
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setFiltersOpen(false)}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <div 
+            className="absolute right-0 top-0 h-full w-[400px] bg-white shadow-lg overflow-y-auto"
+            style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: '400px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">Filters</h2>
+                  <p className="text-sm text-[#555A60] mt-1">Filter clients by date and order count</p>
+                </div>
+                <button
+                  onClick={() => setFiltersOpen(false)}
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
+                  aria-label="Close"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+              
+              <div className="space-y-8">
+                {/* Date Filter */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1E2025]">Last Order Date Range</Label>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="date-from" className="text-xs font-medium text-[#555A60]">
+                        From Date
+                      </Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal h-9"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
+                            {dateFilter.from ? (
+                              formatDate(new Date(dateFilter.from))
+                            ) : (
+                              <span className="text-[#7C8085]">Pick a date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dateFilter.from ? new Date(dateFilter.from) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                setDateFilter({ ...dateFilter, from: date.toISOString().split('T')[0] });
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="date-to" className="text-xs font-medium text-[#555A60]">
+                        To Date
+                      </Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal h-9"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
+                            {dateFilter.to ? (
+                              formatDate(new Date(dateFilter.to))
+                            ) : (
+                              <span className="text-[#7C8085]">Pick a date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dateFilter.to ? new Date(dateFilter.to) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                setDateFilter({ ...dateFilter, to: date.toISOString().split('T')[0] });
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {(dateFilter.from || dateFilter.to) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDateFilter({})}
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9]"
+                      >
+                        Clear date filter
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Orders Count Filter */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1E2025]">Number of Orders</Label>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="orders-min" className="text-xs font-medium text-[#555A60]">
+                        Minimum
+                      </Label>
+                      <Input
+                        id="orders-min"
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={ordersCountFilter.min ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setOrdersCountFilter({ ...ordersCountFilter, min: value });
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="orders-max" className="text-xs font-medium text-[#555A60]">
+                        Maximum
+                      </Label>
+                      <Input
+                        id="orders-max"
+                        type="number"
+                        min="0"
+                        placeholder="No limit"
+                        value={ordersCountFilter.max ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setOrdersCountFilter({ ...ordersCountFilter, max: value });
+                        }}
+                        className="w-full"
+                      />
+                    </div>
+                    {(ordersCountFilter.min !== undefined || ordersCountFilter.max !== undefined) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setOrdersCountFilter({})}
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9]"
+                      >
+                        Clear orders filter
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      
+      {/* Customize Panel - Portal to body */}
+      {settingsOpen && createPortal(
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div 
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSettingsOpen(false)}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <div 
+            className="absolute right-0 top-0 h-full w-[400px] bg-white shadow-lg overflow-y-auto"
+            style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: '400px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">Column Settings</h2>
+                  <p className="text-sm text-[#555A60] mt-1">Select which columns to display in the table</p>
+                </div>
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
+                  aria-label="Close"
+                >
+                  <XIcon size={18} />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                {/* Column Ordering */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-semibold text-[#1E2025]">Column Order</Label>
+                  <p className="text-xs text-[#555A60]">Drag columns to reorder them</p>
+                  <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
+                    {columnOrder.map((columnKey) => {
+                      const isRequired = columnKey === 'name';
+                      const isVisible = visibleColumns[columnKey];
+                      
+                      return (
+                        <div
+                          key={columnKey}
+                          draggable={isVisible}
+                          onDragStart={() => handleDragStart(columnKey)}
+                          onDragOver={(e) => handleDragOver(e, columnKey)}
+                          onDrop={(e) => handleDrop(e, columnKey)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors ${
+                            isVisible 
+                              ? 'bg-white border border-[#E4E7E7] cursor-move hover:shadow-sm' 
+                              : 'opacity-50 cursor-not-allowed'
+                          } ${
+                            draggedColumn === columnKey ? 'opacity-50' : ''
+                          } ${
+                            dragOverColumn === columnKey && draggedColumn !== columnKey ? 'ring-2 ring-[#1F744F] ring-offset-2' : ''
+                          }`}
+                        >
+                          <GripVertical 
+                            className={`h-4 w-4 flex-shrink-0 ${
+                              isVisible ? 'text-[#7C8085] cursor-grab active:cursor-grabbing' : 'text-[#E4E7E7]'
+                            }`}
+                          />
+                          <Checkbox
+                            id={`col-${columnKey}`}
+                            checked={isVisible}
+                            disabled={isRequired}
+                            onCheckedChange={(checked) => {
+                              if (!isRequired) {
+                                setVisibleColumns({ ...visibleColumns, [columnKey]: checked === true });
+                              }
+                            }}
+                          />
+                          <Label 
+                            htmlFor={`col-${columnKey}`}
+                            className={`flex-1 text-sm font-medium ${
+                              isRequired 
+                                ? 'cursor-not-allowed text-[#7C8085]' 
+                                : isVisible 
+                                  ? 'cursor-pointer text-[#1E2025]' 
+                                  : 'cursor-not-allowed text-[#7C8085]'
+                            }`}
+                          >
+                            {columnLabels[columnKey]}
+                            {isRequired && <span className="ml-2 text-xs text-[#7C8085]">(required)</span>}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Sorting Settings */}
+                <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
+                  <Label className="text-sm font-semibold text-[#1E2025]">Sort By</Label>
+                  <p className="text-xs text-[#555A60]">Choose how to sort the clients</p>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="sort-field" className="text-xs font-medium text-[#555A60]">
+                        Sort Field
+                      </Label>
+                      <Select value={sortBy} onValueChange={(value) => setSortBy(value as ColumnKey)}>
+                        <SelectTrigger id="sort-field" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="company">Company</SelectItem>
+                          <SelectItem value="email">Email</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="orders">Orders</SelectItem>
+                          <SelectItem value="lastOrder">Last Order</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sort-direction" className="text-xs font-medium text-[#555A60]">
+                        Sort Direction
+                      </Label>
+                      <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as 'asc' | 'desc')}>
+                        <SelectTrigger id="sort-direction" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Pagination Settings */}
+                <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
+                  <Label className="text-sm font-semibold text-[#1E2025]">Items Per Page</Label>
+                  <p className="text-xs text-[#555A60]">Select how many clients to display per page</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[10, 25, 50, 100].map((size) => (
+                      <Button
+                        key={size}
+                        variant={itemsPerPage === size ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setItemsPerPage(size)}
+                        className={itemsPerPage === size ? "bg-[#1F744F] hover:bg-[#165B3C] text-white" : ""}
+                      >
+                        {size}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}

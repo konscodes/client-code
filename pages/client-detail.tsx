@@ -1,0 +1,543 @@
+// Client detail page - view and manage a single client
+import { useState, useMemo } from 'react';
+import { useApp } from '../lib/app-context';
+import { StatusPill } from '../components/status-pill';
+import { 
+  formatCurrency, 
+  formatDate, 
+  getClientOrders, 
+  getClientLifetimeValue,
+  calculateOrderTotal,
+  generateId
+} from '../lib/utils';
+import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import type { Client } from '../lib/types';
+
+interface ClientDetailProps {
+  clientId: string;
+  onNavigate: (page: string, id?: string) => void;
+}
+
+export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
+  const { clients, orders, addClient, updateClient } = useApp();
+  const [isEditing, setIsEditing] = useState(clientId === 'new');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders'>('overview');
+  
+  const isNewClient = clientId === 'new';
+  const client = useMemo(() => 
+    isNewClient ? null : clients.find(c => c.id === clientId),
+    [clients, clientId, isNewClient]
+  );
+  
+  const [formData, setFormData] = useState<Partial<Client>>(
+    client || {
+      name: '',
+      company: '',
+      email: '',
+      phone: '',
+      address: '',
+      inn: '',
+      kpp: '',
+      ogrn: '',
+      bank: {
+        name: '',
+        accountNumber: '',
+        correspondentAccount: '',
+        bik: '',
+      },
+      notes: '',
+    }
+  );
+  
+  const clientOrders = useMemo(() => 
+    client ? getClientOrders(orders, client.id) : [],
+    [orders, client]
+  );
+  
+  const lifetimeValue = useMemo(() =>
+    client ? getClientLifetimeValue(orders, client.id) : 0,
+    [orders, client]
+  );
+  
+  const handleSave = () => {
+    if (isNewClient) {
+      const newClient: Client = {
+        id: generateId('client'),
+        name: formData.name || '',
+        company: formData.company || '',
+        email: formData.email || '',
+        phone: formData.phone || '',
+        address: formData.address || '',
+        inn: formData.inn,
+        kpp: formData.kpp,
+        ogrn: formData.ogrn,
+        bank: formData.bank,
+        notes: formData.notes,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      addClient(newClient);
+      onNavigate('client-detail', newClient.id);
+    } else if (client) {
+      updateClient(client.id, formData);
+      setIsEditing(false);
+    }
+  };
+  
+  const handleCancel = () => {
+    if (isNewClient) {
+      onNavigate('clients');
+    } else {
+      setFormData(client || {});
+      setIsEditing(false);
+    }
+  };
+  
+  if (!isNewClient && !client) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-[#7C8085] mb-4">Client not found</p>
+        <button
+          onClick={() => onNavigate('clients')}
+          className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+        >
+          Back to Clients
+        </button>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => onNavigate('clients')}
+            className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors"
+            aria-label="Back to clients"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-[#1E2025] mb-1">
+              {isNewClient ? 'New Client' : (isEditing ? 'Edit Client' : client?.name)}
+            </h1>
+            {!isNewClient && !isEditing && (
+              <p className="text-[#555A60]">{client?.company}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-3">
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                disabled={!formData.name || !formData.email}
+              >
+                {isNewClient ? 'Create Client' : 'Save Changes'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+              >
+                <Edit size={20} aria-hidden="true" />
+                Edit
+              </button>
+              <button
+                onClick={() => onNavigate('orders', `new?client=${client?.id}`)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+              >
+                <Plus size={20} aria-hidden="true" />
+                New Order
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      
+      {isEditing ? (
+        /* Edit Form */
+        <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="company">Company</Label>
+              <Input
+                id="company"
+                value={formData.company || ''}
+                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email || ''}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                value={formData.address || ''}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="inn">INN (Tax ID)</Label>
+              <Input
+                id="inn"
+                value={formData.inn || ''}
+                onChange={(e) => setFormData({ ...formData, inn: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="kpp">KPP</Label>
+              <Input
+                id="kpp"
+                value={formData.kpp || ''}
+                onChange={(e) => setFormData({ ...formData, kpp: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="ogrn">OGRN</Label>
+              <Input
+                id="ogrn"
+                value={formData.ogrn || ''}
+                onChange={(e) => setFormData({ ...formData, ogrn: e.target.value })}
+              />
+            </div>
+            
+            <div className="space-y-2 md:col-span-2">
+              <Label className="text-[#555A60] font-medium">Banking Information</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bankName">Bank Name</Label>
+                  <Input
+                    id="bankName"
+                    value={formData.bank?.name || ''}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      bank: { ...formData.bank, name: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bankAccount">Account Number</Label>
+                  <Input
+                    id="bankAccount"
+                    value={formData.bank?.accountNumber || ''}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      bank: { ...formData.bank, accountNumber: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bankCorrespondent">Correspondent Account</Label>
+                  <Input
+                    id="bankCorrespondent"
+                    value={formData.bank?.correspondentAccount || ''}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      bank: { ...formData.bank, correspondentAccount: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bankBik">BIK</Label>
+                  <Input
+                    id="bankBik"
+                    value={formData.bank?.bik || ''}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      bank: { ...formData.bank, bik: e.target.value }
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes || ''}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={4}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* View Mode */
+        <>
+          {/* Client Info Card */}
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h3 className="text-[#555A60] mb-4">Contact Information</h3>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Mail size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="text-[#7C8085]">Email</p>
+                      <a 
+                        href={`mailto:${client?.email}`}
+                        className="text-[#1F744F] hover:underline"
+                      >
+                        {client?.email}
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Phone size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="text-[#7C8085]">Phone</p>
+                      <a 
+                        href={`tel:${client?.phone}`}
+                        className="text-[#1E2025]"
+                      >
+                        {client?.phone}
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <MapPin size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <div>
+                      <p className="text-[#7C8085]">Address</p>
+                      <p className="text-[#1E2025]">{client?.address}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-[#555A60] mb-4">Tax Information</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[#7C8085]">INN</p>
+                    <p className="text-[#1E2025]">{client?.inn || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7C8085]">KPP</p>
+                    <p className="text-[#1E2025]">{client?.kpp || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7C8085]">OGRN</p>
+                    <p className="text-[#1E2025]">{client?.ogrn || 'Not provided'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-[#555A60] mb-4">Statistics</h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[#7C8085]">Total Orders</p>
+                    <p className="text-[#1E2025]">{clientOrders.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7C8085]">Lifetime Value</p>
+                    <p className="text-[#1E2025]">{formatCurrency(lifetimeValue)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {client?.bank && (client.bank.name || client.bank.accountNumber || client.bank.correspondentAccount || client.bank.bik) && (
+              <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+                <h3 className="text-[#555A60] mb-4">Banking Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {client.bank.name && (
+                    <div>
+                      <p className="text-[#7C8085]">Bank Name</p>
+                      <p className="text-[#1E2025]">{client.bank.name}</p>
+                    </div>
+                  )}
+                  {client.bank.accountNumber && (
+                    <div>
+                      <p className="text-[#7C8085]">Account Number</p>
+                      <p className="text-[#1E2025]">{client.bank.accountNumber}</p>
+                    </div>
+                  )}
+                  {client.bank.correspondentAccount && (
+                    <div>
+                      <p className="text-[#7C8085]">Correspondent Account</p>
+                      <p className="text-[#1E2025]">{client.bank.correspondentAccount}</p>
+                    </div>
+                  )}
+                  {client.bank.bik && (
+                    <div>
+                      <p className="text-[#7C8085]">BIK</p>
+                      <p className="text-[#1E2025]">{client.bank.bik}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {client?.notes && (
+              <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+                <h3 className="text-[#555A60] mb-2">Notes</h3>
+                <p className="text-[#1E2025]">{client.notes}</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Tabs */}
+          <div className="border-b border-[#E4E7E7]">
+            <nav className="flex gap-6" role="tablist">
+              <button
+                role="tab"
+                aria-selected={activeTab === 'overview'}
+                onClick={() => setActiveTab('overview')}
+                className={`px-4 py-3 border-b-2 transition-colors ${
+                  activeTab === 'overview'
+                    ? 'border-[#1F744F] text-[#1F744F]'
+                    : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                role="tab"
+                aria-selected={activeTab === 'orders'}
+                onClick={() => setActiveTab('orders')}
+                className={`px-4 py-3 border-b-2 transition-colors ${
+                  activeTab === 'orders'
+                    ? 'border-[#1F744F] text-[#1F744F]'
+                    : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
+                }`}
+              >
+                Orders ({clientOrders.length})
+              </button>
+            </nav>
+          </div>
+          
+          {/* Tab Content */}
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+                <h3 className="text-[#1E2025] mb-4">Recent Orders</h3>
+                {clientOrders.length === 0 ? (
+                  <p className="text-[#7C8085]">No orders yet</p>
+                ) : (
+                  <div className="space-y-3">
+                    {clientOrders.slice(0, 5).map(order => (
+                      <button
+                        key={order.id}
+                        onClick={() => onNavigate('order-detail', order.id)}
+                        className="w-full flex items-center justify-between p-3 hover:bg-[#F7F8F8] rounded-lg transition-colors text-left"
+                      >
+                        <div>
+                          <p className="text-[#1E2025]">{order.id}</p>
+                          <p className="text-[#7C8085]">{formatDate(order.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusPill status={order.status} />
+                          <p className="text-[#1E2025]">{formatCurrency(calculateOrderTotal(order))}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'orders' && (
+            <div className="bg-white rounded-xl border border-[#E4E7E7] overflow-hidden">
+              {clientOrders.length === 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <FileText size={48} className="mx-auto text-[#B5BDB9] mb-4" aria-hidden="true" />
+                  <p className="text-[#7C8085] mb-4">No orders yet for this client</p>
+                  <button
+                    onClick={() => onNavigate('orders', `new?client=${client?.id}`)}
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                  >
+                    Create First Order
+                  </button>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-[#E4E7E7]">
+                      <th className="px-6 py-3 text-left text-[#555A60]">Order ID</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">Date</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">Status</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E4E7E7]">
+                    {clientOrders.map(order => (
+                      <tr
+                        key={order.id}
+                        onClick={() => onNavigate('order-detail', order.id)}
+                        className="hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                      >
+                        <td className="px-6 py-4">
+                          <p className="text-[#1E2025]">{order.id}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-[#555A60]">{formatDate(order.createdAt)}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <StatusPill status={order.status} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-[#1E2025]">{formatCurrency(calculateOrderTotal(order))}</p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
