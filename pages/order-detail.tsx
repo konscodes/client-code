@@ -16,7 +16,8 @@ import {
   Trash2, 
   Save,
   FileText,
-  Layers
+  Layers,
+  Search
 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -61,6 +62,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
   
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
+  const [jobSearchQuery, setJobSearchQuery] = useState('');
+  const [presetSearchQuery, setPresetSearchQuery] = useState('');
   
   const selectedClient = useMemo(() => 
     formData.clientId ? clients.find(c => c.id === formData.clientId) : null,
@@ -71,6 +74,32 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     getOrderTotals(formData as Order),
     [formData]
   );
+  
+  const filteredJobs = useMemo(() => {
+    if (!jobSearchQuery.trim()) return [];
+    const query = jobSearchQuery.toLowerCase().trim();
+    const queryWords = query.split(/\s+/).filter(word => word.length > 0);
+    
+    return jobTemplates
+      .filter(job => {
+        const searchableText = `${job.name} ${job.description} ${job.category}`.toLowerCase();
+        // Check if all query words appear in the searchable text
+        return queryWords.every(word => searchableText.includes(word));
+      })
+      .slice(0, 10);
+  }, [jobTemplates, jobSearchQuery]);
+  
+  const filteredPresets = useMemo(() => {
+    if (!presetSearchQuery.trim()) return jobPresets;
+    const query = presetSearchQuery.toLowerCase().trim();
+    const queryWords = query.split(/\s+/).filter(word => word.length > 0);
+    
+    return jobPresets.filter(preset => {
+      const searchableText = `${preset.name} ${preset.description} ${preset.category}`.toLowerCase();
+      // Check if all query words appear in the searchable text
+      return queryWords.every(word => searchableText.includes(word));
+    });
+  }, [jobPresets, presetSearchQuery]);
   
   const handleSave = () => {
     if (!formData.clientId) {
@@ -338,14 +367,32 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
               <h2 className="text-[#1E2025]">Line Items</h2>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowPresetPicker(!showPresetPicker)}
+                  onClick={() => {
+                    if (showPresetPicker) {
+                      setPresetSearchQuery('');
+                    }
+                    setShowPresetPicker(!showPresetPicker);
+                    if (!showPresetPicker) {
+                      setShowJobPicker(false);
+                      setJobSearchQuery('');
+                    }
+                  }}
                   className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
                 >
                   <Layers size={18} aria-hidden="true" />
                   Add Preset
                 </button>
                 <button
-                  onClick={() => setShowJobPicker(!showJobPicker)}
+                  onClick={() => {
+                    if (showJobPicker) {
+                      setJobSearchQuery('');
+                    }
+                    setShowJobPicker(!showJobPicker);
+                    if (!showJobPicker) {
+                      setShowPresetPicker(false);
+                      setPresetSearchQuery('');
+                    }
+                  }}
                   className="flex items-center gap-2 px-3 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                 >
                   <Plus size={18} aria-hidden="true" />
@@ -358,23 +405,44 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             {showJobPicker && (
               <div className="px-6 py-4 border-b border-[#E4E7E7] bg-[#F7F8F8]">
                 <h3 className="text-[#555A60] mb-3">Select a job to add:</h3>
+                <div className="relative mb-3">
+                  <Search 
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  <Input
+                    type="search"
+                    placeholder="Search jobs by name, description, or category..."
+                    value={jobSearchQuery}
+                    onChange={(e) => setJobSearchQuery(e.target.value)}
+                    className="pl-10"
+                    aria-label="Search jobs"
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                  {jobTemplates.map(job => (
-                    <button
-                      key={job.id}
-                      onClick={() => {
-                        handleAddJob(job.id);
-                        setShowJobPicker(false);
-                      }}
-                      className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
-                    >
-                      <p className="text-[#1E2025] mb-1">{job.name}</p>
-                      <p className="text-[#7C8085] mb-1">{job.description}</p>
-                      <p className="text-[#1F744F]">
-                        {formatCurrency(job.unitPrice)} / {job.unitOfMeasure}
-                      </p>
-                    </button>
-                  ))}
+                  {filteredJobs.length === 0 ? (
+                    <div className="col-span-2 text-center py-4 text-[#7C8085]">
+                      {jobSearchQuery.trim() ? 'No jobs found matching your search' : 'Start typing to search for jobs'}
+                    </div>
+                  ) : (
+                    filteredJobs.map(job => (
+                      <button
+                        key={job.id}
+                        onClick={() => {
+                          handleAddJob(job.id);
+                          setShowJobPicker(false);
+                          setJobSearchQuery('');
+                        }}
+                        className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
+                      >
+                        <p className="text-[#1E2025] mb-1">{job.name}</p>
+                        <p className="text-[#1F744F]">
+                          {formatCurrency(job.unitPrice)} / {job.unitOfMeasure}
+                        </p>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -383,18 +451,43 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             {showPresetPicker && (
               <div className="px-6 py-4 border-b border-[#E4E7E7] bg-[#F7F8F8]">
                 <h3 className="text-[#555A60] mb-3">Select a preset to add:</h3>
+                <div className="relative mb-3">
+                  <Search 
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+                    size={18}
+                    aria-hidden="true"
+                  />
+                  <Input
+                    type="search"
+                    placeholder="Search presets by name, description, or category..."
+                    value={presetSearchQuery}
+                    onChange={(e) => setPresetSearchQuery(e.target.value)}
+                    className="pl-10"
+                    aria-label="Search presets"
+                  />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
-                  {jobPresets.map(preset => (
-                    <button
-                      key={preset.id}
-                      onClick={() => handleAddPreset(preset.id)}
-                      className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
-                    >
-                      <p className="text-[#1E2025] mb-1">{preset.name}</p>
-                      <p className="text-[#7C8085] mb-1">{preset.description}</p>
-                      <p className="text-[#555A60]">{preset.jobs.length} jobs</p>
-                    </button>
-                  ))}
+                  {filteredPresets.length === 0 ? (
+                    <div className="col-span-2 text-center py-4 text-[#7C8085]">
+                      {presetSearchQuery.trim() ? 'No presets found matching your search' : 'No presets available'}
+                    </div>
+                  ) : (
+                    filteredPresets.map(preset => (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          handleAddPreset(preset.id);
+                          setShowPresetPicker(false);
+                          setPresetSearchQuery('');
+                        }}
+                        className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
+                      >
+                        <p className="text-[#1E2025] mb-1">{preset.name}</p>
+                        <p className="text-[#7C8085] mb-1 line-clamp-2">{preset.description}</p>
+                        <p className="text-[#555A60]">{preset.jobs.length} jobs</p>
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             )}

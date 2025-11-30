@@ -18,9 +18,10 @@ import type { JobPreset, PresetJob } from '../lib/types';
 
 interface JobPresetsProps {
   onNavigate: (page: string, id?: string) => void;
+  presetIdToEdit?: string;
 }
 
-export function JobPresets({ onNavigate }: JobPresetsProps) {
+export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
   const { jobPresets, jobTemplates, addJobPreset, updateJobPreset, deleteJobPreset } = useApp();
   const [editingPreset, setEditingPreset] = useState<JobPreset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -30,7 +31,6 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
     category: '',
     jobs: [],
   });
-  const [showJobPicker, setShowJobPicker] = useState(false);
   
   const handleOpenCreate = () => {
     setFormData({
@@ -58,26 +58,9 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
       category: '',
       jobs: [],
     });
-    setShowJobPicker(false);
   };
   
-  const handleAddJob = (jobId: string) => {
-    const job = jobTemplates.find(j => j.id === jobId);
-    if (!job) return;
-    
-    const presetJob: PresetJob = {
-      jobId,
-      defaultQty: 1,
-      position: formData.jobs?.length || 0,
-    };
-    
-    setFormData({
-      ...formData,
-      jobs: [...(formData.jobs || []), presetJob],
-    });
-    
-    setShowJobPicker(false);
-  };
+  // Removed - jobs are now added from job catalog
   
   const handleRemoveJob = (jobId: string) => {
     setFormData({
@@ -95,19 +78,14 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
     });
   };
   
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.category) {
       toast.error('Please fill in all required fields');
       return;
     }
     
-    if (!formData.jobs || formData.jobs.length === 0) {
-      toast.error('Please add at least one job to the preset');
-      return;
-    }
-    
     if (editingPreset) {
-      updateJobPreset(editingPreset.id, formData);
+      await updateJobPreset(editingPreset.id, formData);
       toast.success('Preset updated');
     } else {
       const newPreset: JobPreset = {
@@ -115,10 +93,10 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
         name: formData.name,
         description: formData.description || '',
         category: formData.category,
-        jobs: formData.jobs,
+        jobs: formData.jobs || [],
         lastUpdated: new Date(),
       };
-      addJobPreset(newPreset);
+      await addJobPreset(newPreset);
       toast.success('Preset created');
     }
     
@@ -166,7 +144,8 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
           {jobPresets.map(preset => (
             <div
               key={preset.id}
-              className="bg-white rounded-xl border border-[#E4E7E7] p-6 hover:border-[#1F744F] transition-colors"
+              onClick={() => handleOpenEdit(preset)}
+              className="bg-white rounded-xl border border-[#E4E7E7] p-6 hover:border-[#1F744F] transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -177,14 +156,20 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
                 </div>
                 <div className="flex gap-1">
                   <button
-                    onClick={() => handleOpenEdit(preset)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEdit(preset);
+                    }}
                     className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors"
                     aria-label={`Edit ${preset.name}`}
                   >
                     <Edit size={16} />
                   </button>
                   <button
-                    onClick={() => handleDelete(preset)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(preset);
+                    }}
                     className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
                     aria-label={`Delete ${preset.name}`}
                   >
@@ -256,39 +241,14 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
             </div>
             
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Jobs in Preset</Label>
-                <button
-                  onClick={() => setShowJobPicker(!showJobPicker)}
-                  className="flex items-center gap-2 px-3 py-1 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors text-sm"
-                >
-                  <Plus size={16} aria-hidden="true" />
-                  Add Job
-                </button>
-              </div>
-              
-              {showJobPicker && (
-                <div className="border border-[#E4E7E7] rounded-lg p-3 bg-[#F7F8F8] max-h-60 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-2">
-                    {jobTemplates
-                      .filter(job => !formData.jobs?.some(j => j.jobId === job.id))
-                      .map(job => (
-                        <button
-                          key={job.id}
-                          onClick={() => handleAddJob(job.id)}
-                          className="p-2 bg-white rounded border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
-                        >
-                          <p className="text-[#1E2025] text-sm">{job.name}</p>
-                          <p className="text-[#7C8085] text-xs">{job.category}</p>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
+              <Label>Jobs in Preset</Label>
+              <p className="text-xs text-[#555A60] mb-3">
+                Jobs are managed from the Job Catalog page. Edit jobs there and select which presets they belong to.
+              </p>
               
               {!formData.jobs || formData.jobs.length === 0 ? (
                 <p className="text-[#7C8085] text-center py-6 border border-dashed border-[#E4E7E7] rounded-lg">
-                  No jobs added yet
+                  No jobs added yet. Go to Job Catalog to add jobs to this preset.
                 </p>
               ) : (
                 <div className="border border-[#E4E7E7] rounded-lg divide-y divide-[#E4E7E7]">
@@ -300,7 +260,6 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
                       <div key={presetJob.jobId} className="p-3 flex items-center gap-3">
                         <div className="flex-1">
                           <p className="text-[#1E2025]">{job.name}</p>
-                          <p className="text-[#7C8085]">{job.description}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Label htmlFor={`qty-${presetJob.jobId}`} className="text-[#7C8085] whitespace-nowrap">

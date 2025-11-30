@@ -6,6 +6,7 @@ import { Search, Plus, Edit, Trash2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { Checkbox } from '../components/ui/checkbox';
 import { PaginationWithLinks } from '../components/ui/pagination-with-links';
 import {
   Dialog,
@@ -22,7 +23,7 @@ interface JobCatalogProps {
 }
 
 export function JobCatalog({ onNavigate }: JobCatalogProps) {
-  const { jobTemplates, addJobTemplate, updateJobTemplate, deleteJobTemplate } = useApp();
+  const { jobTemplates, jobPresets, addJobTemplate, updateJobTemplate, deleteJobTemplate, updateJobPreset } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [editingJob, setEditingJob] = useState<JobTemplate | null>(null);
@@ -39,6 +40,7 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
     unitOfMeasure: 'hour',
     defaultTax: true,
   });
+  const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   
   const categories = useMemo(() => {
     const cats = new Set(jobTemplates.map(j => j.category));
@@ -46,12 +48,15 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
   }, [jobTemplates]);
   
   const filteredJobs = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
+    const queryWords = query.split(/\s+/).filter(word => word.length > 0);
+    
     return jobTemplates.filter(job => {
-      const matchesSearch = 
-        job.name.toLowerCase().includes(query) ||
-        job.description.toLowerCase().includes(query) ||
-        job.category.toLowerCase().includes(query);
+      const matchesSearch = queryWords.length === 0 || (() => {
+        const searchableText = `${job.name} ${job.description} ${job.category}`.toLowerCase();
+        // Check if all query words appear in the searchable text
+        return queryWords.every(word => searchableText.includes(word));
+      })();
       
       const matchesCategory = categoryFilter === 'all' || job.category === categoryFilter;
       
@@ -79,6 +84,7 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
       unitOfMeasure: 'hour',
       defaultTax: true,
     });
+    setSelectedPresets([]);
     setEditingJob(null);
     setIsCreating(true);
   };
@@ -86,6 +92,11 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
   const handleOpenEdit = (job: JobTemplate) => {
     setFormData(job);
     setEditingJob(job);
+    // Find which presets contain this job
+    const presetsWithJob = jobPresets
+      .filter(preset => preset.jobs.some(presetJob => presetJob.jobId === job.id))
+      .map(preset => preset.id);
+    setSelectedPresets(presetsWithJob);
     setIsCreating(true);
   };
   
@@ -100,16 +111,20 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
       unitOfMeasure: 'hour',
       defaultTax: true,
     });
+    setSelectedPresets([]);
   };
   
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.category || formData.unitPrice === undefined) {
       toast.error('Please fill in all required fields');
       return;
     }
     
+    let jobId: string;
+    
     if (editingJob) {
-      updateJobTemplate(editingJob.id, formData);
+      jobId = editingJob.id;
+      await updateJobTemplate(editingJob.id, formData);
       toast.success('Job template updated');
     } else {
       const newJob: JobTemplate = {
@@ -122,16 +137,65 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
         defaultTax: formData.defaultTax ?? true,
         lastUpdated: new Date(),
       };
-      addJobTemplate(newJob);
+      jobId = newJob.id;
+      await addJobTemplate(newJob);
       toast.success('Job template created');
+    }
+    
+    // Update presets: remove job from presets not in selectedPresets, add to new ones
+    const previousPresets = editingJob 
+      ? jobPresets.filter(preset => preset.jobs.some(presetJob => presetJob.jobId === editingJob.id))
+      : [];
+    const previousPresetIds = previousPresets.map(p => p.id);
+    
+    // Remove from presets that are no longer selected
+    for (const preset of previousPresets) {
+      if (!selectedPresets.includes(preset.id)) {
+        const updatedJobs = preset.jobs
+          .filter(presetJob => presetJob.jobId !== jobId)
+          .map((job, index) => ({ ...job, position: index }));
+        await updateJobPreset(preset.id, { jobs: updatedJobs });
+      }
+    }
+    
+    // Add to newly selected presets
+    for (const presetId of selectedPresets) {
+      const preset = jobPresets.find(p => p.id === presetId);
+      if (preset) {
+        // Check if job is already in preset
+        const existingPresetJob = preset.jobs.find(presetJob => presetJob.jobId === jobId);
+        if (!existingPresetJob) {
+          // Job not in preset, add it with default quantity 1
+          const newPresetJob = {
+            jobId,
+            defaultQty: 1,
+            position: preset.jobs.length,
+          };
+          const updatedJobs = [...preset.jobs, newPresetJob];
+          await updateJobPreset(preset.id, { jobs: updatedJobs });
+        }
+        // If job already exists in preset, keep it as is (preserve quantity)
+      }
     }
     
     handleClose();
   };
   
-  const handleDelete = (job: JobTemplate) => {
+  const handleDelete = async (job: JobTemplate) => {
     if (confirm(`Are you sure you want to delete "${job.name}"?`)) {
-      deleteJobTemplate(job.id);
+      // Remove job from all presets
+      const presetsWithJob = jobPresets.filter(preset => 
+        preset.jobs.some(presetJob => presetJob.jobId === job.id)
+      );
+      
+      for (const preset of presetsWithJob) {
+        const updatedJobs = preset.jobs
+          .filter(presetJob => presetJob.jobId !== job.id)
+          .map((presetJob, index) => ({ ...presetJob, position: index }));
+        await updateJobPreset(preset.id, { jobs: updatedJobs });
+      }
+      
+      await deleteJobTemplate(job.id);
       toast.success('Job template deleted');
     }
   };
@@ -362,6 +426,44 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
               <Label htmlFor="defaultTax" className="cursor-pointer">
                 Tax applicable by default
               </Label>
+            </div>
+            
+            <div className="space-y-2 pt-2 border-t border-[#E4E7E7]">
+              <Label>Presets</Label>
+              <p className="text-xs text-[#555A60] mb-3">Select which presets this job belongs to</p>
+              <div className="border border-[#E4E7E7] rounded-lg p-3 bg-[#F7F8F8] max-h-60 overflow-y-auto">
+                {jobPresets.length === 0 ? (
+                  <p className="text-[#7C8085] text-sm text-center py-4">No presets available. Create presets first.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {jobPresets.map(preset => (
+                      <div
+                        key={preset.id}
+                        className="flex items-center gap-3 p-2 bg-white rounded border border-[#E4E7E7] hover:border-[#1F744F] transition-colors"
+                      >
+                        <Checkbox
+                          id={`preset-${preset.id}`}
+                          checked={selectedPresets.includes(preset.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedPresets([...selectedPresets, preset.id]);
+                            } else {
+                              setSelectedPresets(selectedPresets.filter(id => id !== preset.id));
+                            }
+                          }}
+                        />
+                        <Label
+                          htmlFor={`preset-${preset.id}`}
+                          className="flex-1 cursor-pointer"
+                        >
+                          <p className="text-[#1E2025] text-sm">{preset.name}</p>
+                          <p className="text-[#7C8085] text-xs">{preset.category}</p>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
