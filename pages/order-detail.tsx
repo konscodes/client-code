@@ -8,8 +8,10 @@ import {
   calculateLineTotal,
   getOrderTotals,
   generateOrderId,
-  generateId
+  generateId,
+  generateDocumentNumber
 } from '../lib/utils';
+import { generateInvoice, generatePurchaseOrder } from '../lib/document-generator';
 import { 
   ArrowLeft, 
   Plus, 
@@ -17,7 +19,12 @@ import {
   Save,
   FileText,
   Layers,
-  Search
+  Search,
+  Loader2,
+  Copy,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -38,7 +45,9 @@ interface OrderDetailProps {
 }
 
 export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
-  const { orders, clients, jobTemplates, jobPresets, addOrder, updateOrder } = useApp();
+  const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder } = useApp();
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [generatingPO, setGeneratingPO] = useState(false);
   
   const isNewOrder = orderId === 'new';
   const existingOrder = useMemo(() => 
@@ -64,6 +73,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
   const [jobSearchQuery, setJobSearchQuery] = useState('');
   const [presetSearchQuery, setPresetSearchQuery] = useState('');
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editingJobName, setEditingJobName] = useState('');
   
   const selectedClient = useMemo(() => 
     formData.clientId ? clients.find(c => c.id === formData.clientId) : null,
@@ -190,6 +201,42 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       ...formData,
       jobs: formData.jobs?.filter(j => j.id !== jobId) || [],
     });
+  };
+  
+  const handleDuplicateJob = (jobId: string) => {
+    const jobToDuplicate = formData.jobs?.find(j => j.id === jobId);
+    if (!jobToDuplicate) return;
+    
+    const duplicatedJob: OrderJob = {
+      ...jobToDuplicate,
+      id: generateId('order-job'),
+    };
+    
+    setFormData({
+      ...formData,
+      jobs: [...(formData.jobs || []), duplicatedJob],
+    });
+  };
+  
+  const handleStartEditJobName = (jobId: string) => {
+    const job = formData.jobs?.find(j => j.id === jobId);
+    if (job) {
+      setEditingJobId(jobId);
+      setEditingJobName(job.jobName);
+    }
+  };
+  
+  const handleSaveJobName = (jobId: string) => {
+    if (editingJobName.trim()) {
+      handleUpdateJob(jobId, { jobName: editingJobName.trim() });
+    }
+    setEditingJobId(null);
+    setEditingJobName('');
+  };
+  
+  const handleCancelEditJobName = () => {
+    setEditingJobId(null);
+    setEditingJobName('');
   };
   
   const handleUpdateJob = (jobId: string, updates: Partial<OrderJob>) => {
@@ -499,29 +546,91 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                 <p className="text-[#7C8085]">Add jobs from the catalog or use a preset to get started</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto relative">
+                <div 
+                  className="absolute right-[120px] top-0 bottom-0 w-8 pointer-events-none z-20"
+                  style={{
+                    background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)'
+                  }}
+                />
+                <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                   <thead>
-                    <tr className="border-b border-[#E4E7E7]">
-                      <th className="px-6 py-3 text-left text-[#555A60]">Job</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Qty</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Unit Price</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Markup %</th>
-                      <th className="px-6 py-3 text-right text-[#555A60]">Line Total</th>
-                      <th className="px-6 py-3 text-right text-[#555A60]">Actions</th>
+                    <tr>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Job</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Qty</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Unit Price</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Markup %</th>
+                      <th className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7]">Line Total</th>
+                      <th 
+                        className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7] sticky right-0 z-10 bg-white border-l border-[#E4E7E7] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+                        style={{ 
+                          position: 'sticky', 
+                          right: 0, 
+                          zIndex: 10, 
+                          minWidth: '120px',
+                          background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+                        }}
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#E4E7E7]">
+                  <tbody>
                     {formData.jobs.map(job => {
                       const lineTotal = calculateLineTotal(job);
                       
                       return (
                         <tr key={job.id}>
-                          <td className="px-6 py-4">
-                            <p className="text-[#1E2025]">{job.jobName}</p>
-                            <p className="text-[#7C8085]">{job.description}</p>
+                          <td className={`px-6 py-4 border-b border-[#E4E7E7] ${editingJobId === job.id ? 'min-w-[300px]' : ''}`}>
+                            {editingJobId === job.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={editingJobName}
+                                  onChange={(e) => setEditingJobName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleSaveJobName(job.id);
+                                    } else if (e.key === 'Escape') {
+                                      handleCancelEditJobName();
+                                    }
+                                  }}
+                                  className="flex-1 min-w-[200px]"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleSaveJobName(job.id)}
+                                  className="p-1.5 text-[#1F744F] hover:bg-[#E8F5E9] rounded transition-colors"
+                                  aria-label="Save"
+                                >
+                                  <Check size={16} />
+                                </button>
+                                <button
+                                  onClick={handleCancelEditJobName}
+                                  className="p-1.5 text-[#7C8085] hover:bg-[#F7F8F8] rounded transition-colors"
+                                  aria-label="Cancel"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group">
+                                <p 
+                                  className="text-[#1E2025] cursor-pointer hover:text-[#1F744F] transition-colors"
+                                  onClick={() => handleStartEditJobName(job.id)}
+                                >
+                                  {job.jobName}
+                                </p>
+                                <button
+                                  onClick={() => handleStartEditJobName(job.id)}
+                                  className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-[#F7F8F8] rounded transition-all"
+                                  aria-label="Edit job name"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              </div>
+                            )}
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 border-b border-[#E4E7E7]">
                             <Input
                               type="number"
                               min="0"
@@ -534,7 +643,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                               aria-label={`Quantity for ${job.jobName}`}
                             />
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 border-b border-[#E4E7E7]">
                             <Input
                               type="number"
                               min="0"
@@ -547,7 +656,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                               aria-label={`Unit price for ${job.jobName}`}
                             />
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-6 py-4 border-b border-[#E4E7E7]">
                             <Input
                               type="number"
                               min="0"
@@ -560,17 +669,36 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                               aria-label={`Markup for ${job.jobName}`}
                             />
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right border-b border-[#E4E7E7]">
                             <p className="text-[#1E2025]">{formatCurrency(lineTotal)}</p>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => handleRemoveJob(job.id)}
-                              className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
-                              aria-label={`Remove ${job.jobName}`}
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                          <td 
+                            className="px-6 py-4 text-right border-b border-[#E4E7E7] sticky right-0 z-10 border-l border-[#E4E7E7] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]"
+                            data-sticky="true"
+                            style={{ 
+                              position: 'sticky', 
+                              right: 0, 
+                              zIndex: 10, 
+                              minWidth: '120px',
+                              background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+                            }}
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => handleDuplicateJob(job.id)}
+                                className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors"
+                                aria-label={`Duplicate ${job.jobName}`}
+                              >
+                                <Copy size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveJob(job.id)}
+                                className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
+                                aria-label={`Remove ${job.jobName}`}
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -654,20 +782,104 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             <h3 className="text-[#1E2025] mb-4">Documents</h3>
             <div className="space-y-2">
               <button
-                onClick={() => toast.info('Invoice generation coming soon')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0}
+                onClick={async () => {
+                  if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
+                    toast.error('Please select a client and add line items');
+                    return;
+                  }
+                  
+                  const client = clients.find(c => c.id === formData.clientId);
+                  if (!client) {
+                    toast.error('Client not found');
+                    return;
+                  }
+                  
+                  if (!formData.id) {
+                    toast.error('Please save the order first');
+                    return;
+                  }
+                  
+                  setGeneratingInvoice(true);
+                  try {
+                    const order = formData as Order;
+                    const invoiceNumber = generateDocumentNumber(
+                      companySettings.invoicePrefix,
+                      order.id,
+                      order.createdAt || new Date()
+                    );
+                    await generateInvoice(order, client, companySettings, invoiceNumber);
+                    toast.success('Invoice generated successfully');
+                  } catch (error) {
+                    console.error('Error generating invoice:', error);
+                    toast.error('Failed to generate invoice. Make sure the Python service is running on port 5001.');
+                  } finally {
+                    setGeneratingInvoice(false);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
               >
-                <FileText size={18} aria-hidden="true" />
-                Generate Invoice
+                {generatingInvoice ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText size={18} aria-hidden="true" />
+                    Generate Invoice
+                  </>
+                )}
               </button>
               <button
-                onClick={() => toast.info('PO generation coming soon')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
-                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0}
+                onClick={async () => {
+                  if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
+                    toast.error('Please select a client and add line items');
+                    return;
+                  }
+                  
+                  const client = clients.find(c => c.id === formData.clientId);
+                  if (!client) {
+                    toast.error('Client not found');
+                    return;
+                  }
+                  
+                  if (!formData.id) {
+                    toast.error('Please save the order first');
+                    return;
+                  }
+                  
+                  setGeneratingPO(true);
+                  try {
+                    const order = formData as Order;
+                    const poNumber = generateDocumentNumber(
+                      companySettings.poPrefix,
+                      order.id,
+                      order.createdAt || new Date()
+                    );
+                    await generatePurchaseOrder(order, client, companySettings, poNumber);
+                    toast.success('Purchase order generated successfully');
+                  } catch (error) {
+                    console.error('Error generating PO:', error);
+                    toast.error('Failed to generate purchase order. Make sure the Python service is running on port 5001.');
+                  } finally {
+                    setGeneratingPO(false);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
               >
-                <FileText size={18} aria-hidden="true" />
-                Generate PO
+                {generatingPO ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText size={18} aria-hidden="true" />
+                    Generate PO
+                  </>
+                )}
               </button>
             </div>
           </div>
