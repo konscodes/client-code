@@ -1,12 +1,16 @@
 // Settings page - manage company settings and preferences
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { PhoneInput } from '../components/ui/phone-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { localeToLanguage } from '../lib/i18n';
 import type { CompanySettings } from '../lib/types';
 
 interface SettingsProps {
@@ -14,22 +18,41 @@ interface SettingsProps {
 }
 
 export function Settings({ onNavigate }: SettingsProps) {
+  const { t } = useTranslation();
   const { companySettings, updateCompanySettings } = useApp();
   const [formData, setFormData] = useState<CompanySettings>(companySettings);
   const [hasChanges, setHasChanges] = useState(false);
+  const [localeOpen, setLocaleOpen] = useState(false);
+  const [currencyOpen, setCurrencyOpen] = useState(false);
+  
+  // Update form data when company settings change
+  useEffect(() => {
+    setFormData(companySettings);
+  }, [companySettings]);
   
   const handleChange = (field: keyof CompanySettings, value: string | number) => {
-    setFormData({
+    const newFormData = {
       ...formData,
       [field]: value,
-    });
+    };
+    setFormData(newFormData);
     setHasChanges(true);
+    
+    // If locale changed, update i18n language immediately
+    if (field === 'locale' && typeof value === 'string') {
+      const { i18n } = require('../lib/i18n');
+      i18n.changeLanguage(localeToLanguage(value));
+    }
   };
   
-  const handleSave = () => {
-    updateCompanySettings(formData);
+  const handleSave = async () => {
+    await updateCompanySettings(formData);
     setHasChanges(false);
-    toast.success('Settings saved successfully');
+    toast.success(t('settings.savedSuccessfully'));
+    
+    // Update i18n language if locale changed
+    const { i18n } = require('../lib/i18n');
+    i18n.changeLanguage(localeToLanguage(formData.locale));
   };
   
   return (
@@ -37,8 +60,8 @@ export function Settings({ onNavigate }: SettingsProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[#1E2025] mb-2">Settings</h1>
-          <p className="text-[#555A60]">Manage your company information and application preferences.</p>
+          <h1 className="text-[#1E2025] mb-2">{t('settings.title')}</h1>
+          <p className="text-[#555A60]">{t('settings.subtitle')}</p>
         </div>
         {hasChanges && (
           <button
@@ -46,25 +69,26 @@ export function Settings({ onNavigate }: SettingsProps) {
             className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
           >
             <Save size={20} aria-hidden="true" />
-            Save Changes
+            {t('common.saveChanges')}
           </button>
         )}
       </div>
       
       <Tabs defaultValue="company" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="company">Company</TabsTrigger>
-          <TabsTrigger value="financial">Financial</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="company">{t('settings.company')}</TabsTrigger>
+          <TabsTrigger value="financial">{t('settings.financial')}</TabsTrigger>
+          <TabsTrigger value="locale">{t('settings.locale')}</TabsTrigger>
+          <TabsTrigger value="documents">{t('settings.documents')}</TabsTrigger>
         </TabsList>
         
         {/* Company Tab */}
         <TabsContent value="company">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-6">Company Information</h2>
+            <h2 className="text-[#1E2025] mb-6">{t('settings.companyInformation')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name</Label>
+                <Label htmlFor="companyName">{t('settings.companyName')}</Label>
                 <Input
                   id="companyName"
                   value={formData.name}
@@ -73,7 +97,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="legalName">Legal Name</Label>
+                <Label htmlFor="legalName">{t('settings.legalName')}</Label>
                 <Input
                   id="legalName"
                   value={formData.legalName}
@@ -82,7 +106,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address">{t('settings.address')}</Label>
                 <Input
                   id="address"
                   value={formData.address}
@@ -91,7 +115,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="phone">{t('settings.phone')}</Label>
                 <PhoneInput
                   id="phone"
                   value={formData.phone}
@@ -100,7 +124,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('settings.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -110,7 +134,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="taxId">Tax ID</Label>
+                <Label htmlFor="taxId">{t('settings.taxId')}</Label>
                 <Input
                   id="taxId"
                   value={formData.taxId}
@@ -124,29 +148,10 @@ export function Settings({ onNavigate }: SettingsProps) {
         {/* Financial Tab */}
         <TabsContent value="financial">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-6">Financial Settings</h2>
+            <h2 className="text-[#1E2025] mb-6">{t('settings.financialSettings')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <Input
-                  id="currency"
-                  value={formData.currency}
-                  onChange={(e) => handleChange('currency', e.target.value)}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="locale">Locale</Label>
-                <Input
-                  id="locale"
-                  value={formData.locale}
-                  onChange={(e) => handleChange('locale', e.target.value)}
-                  placeholder="e.g., en-US"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="defaultTaxRate">Default Tax Rate (%)</Label>
+                <Label htmlFor="defaultTaxRate">{t('settings.defaultTaxRate')}</Label>
                 <Input
                   id="defaultTaxRate"
                   type="number"
@@ -158,7 +163,7 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="defaultMarkup">Default Markup (%)</Label>
+                <Label htmlFor="defaultMarkup">{t('settings.defaultMarkup')}</Label>
                 <Input
                   id="defaultMarkup"
                   type="number"
@@ -172,7 +177,66 @@ export function Settings({ onNavigate }: SettingsProps) {
             
             <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
               <p className="text-[#555A60] mb-4">
-                These settings will be used as defaults when creating new orders and invoices.
+                {t('settings.financialSettingsDescription')}
+              </p>
+            </div>
+          </div>
+        </TabsContent>
+        
+        {/* Locale Tab */}
+        <TabsContent value="locale">
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+            <h2 className="text-[#1E2025] mb-6">{t('settings.localeSettings')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="currency">{t('settings.currency')}</Label>
+                <Select
+                  value={formData.currency}
+                  onValueChange={(value) => {
+                    handleChange('currency', value);
+                    // Close dropdown after state update
+                    setTimeout(() => setCurrencyOpen(false), 0);
+                  }}
+                  open={currencyOpen}
+                  onOpenChange={setCurrencyOpen}
+                >
+                  <SelectTrigger id="currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD - US Dollar</SelectItem>
+                    <SelectItem value="RUB">RUB - Russian Ruble</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="locale">{t('settings.locale')}</Label>
+                <Select
+                  value={formData.locale}
+                  onValueChange={(value) => {
+                    // Close dropdown first to avoid re-render interference
+                    setLocaleOpen(false);
+                    // Then update the locale (this triggers i18n change and re-render)
+                    handleChange('locale', value);
+                  }}
+                  open={localeOpen}
+                  onOpenChange={setLocaleOpen}
+                >
+                  <SelectTrigger id="locale">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en-US">English (en-US)</SelectItem>
+                    <SelectItem value="ru-RU">Русский (ru-RU)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+              <p className="text-[#555A60] mb-4">
+                {t('settings.localeSettingsDescription')}
               </p>
             </div>
           </div>
@@ -180,57 +244,112 @@ export function Settings({ onNavigate }: SettingsProps) {
         
         {/* Documents Tab */}
         <TabsContent value="documents">
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-6">Document Settings</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
-                <Input
-                  id="invoicePrefix"
-                  value={formData.invoicePrefix}
-                  onChange={(e) => handleChange('invoicePrefix', e.target.value)}
-                  placeholder="e.g., INV"
-                />
-                <p className="text-[#7C8085]">
-                  Example: {formData.invoicePrefix}-2025-001
-                </p>
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+              <h2 className="text-[#1E2025] mb-6">{t('settings.documentSettings')}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="invoicePrefix">{t('settings.invoicePrefix')}</Label>
+                  <Input
+                    id="invoicePrefix"
+                    value={formData.invoicePrefix}
+                    onChange={(e) => handleChange('invoicePrefix', e.target.value)}
+                    placeholder="e.g., INV"
+                  />
+                  <p className="text-[#7C8085]">
+                    {t('settings.invoicePrefixExample', { prefix: formData.invoicePrefix })}
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="poPrefix">{t('settings.poPrefix')}</Label>
+                  <Input
+                    id="poPrefix"
+                    value={formData.poPrefix}
+                    onChange={(e) => handleChange('poPrefix', e.target.value)}
+                    placeholder="e.g., PO"
+                  />
+                  <p className="text-[#7C8085]">
+                    {t('settings.poPrefixExample', { prefix: formData.poPrefix })}
+                  </p>
+                </div>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="poPrefix">Purchase Order Prefix</Label>
-                <Input
-                  id="poPrefix"
-                  value={formData.poPrefix}
-                  onChange={(e) => handleChange('poPrefix', e.target.value)}
-                  placeholder="e.g., PO"
-                />
-                <p className="text-[#7C8085]">
-                  Example: {formData.poPrefix}-2025-001
+              <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+                <p className="text-[#555A60] mb-4">
+                  {t('settings.documentPrefixDescription')}
                 </p>
               </div>
             </div>
             
-            <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-              <p className="text-[#555A60] mb-4">
-                These prefixes will be used when generating document numbers for invoices and purchase orders.
+            {/* Variable Reference */}
+            <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+              <h2 className="text-[#1E2025] mb-6">{t('settings.availableTemplateVariables')}</h2>
+              <p className="text-[#555A60] mb-6">
+                {t('settings.templateVariablesDescription')}
               </p>
+              
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="company">
+                  <AccordionTrigger className="text-[#1E2025]">{t('settings.companyVariables')}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3">
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.name}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.address}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.phone}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.email}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.taxId}}'}</div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+                
+                <AccordionItem value="client">
+                  <AccordionTrigger className="text-[#1E2025]">{t('settings.clientVariables')}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3">
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.name}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.company}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.address}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.phone}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.email}}'}</div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+                
+                <AccordionItem value="order">
+                  <AccordionTrigger className="text-[#1E2025]">{t('settings.orderVariables')}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3">
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.id}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.date}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.invoiceNumber}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.poNumber}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.subtotal}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.tax}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.total}}'}</div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+                
+                <AccordionItem value="jobs">
+                  <AccordionTrigger className="text-[#1E2025]">{t('settings.jobLineItemVariables')}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-3">
+                      <p className="text-[#555A60] mb-3">{t('settings.forEachJob')}</p>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].code}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].name}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].qty}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].unit}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].unitPrice}}'}</div>
+                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].lineTotal}}'}</div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           </div>
         </TabsContent>
       </Tabs>
-      
-      {/* Save reminder */}
-      {hasChanges && (
-        <div className="fixed bottom-8 right-8 bg-[#1F744F] text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-4">
-          <p>You have unsaved changes</p>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-white text-[#1F744F] rounded-lg hover:bg-[#F7F8F8] transition-colors"
-          >
-            Save Now
-          </button>
-        </div>
-      )}
     </div>
   );
 }

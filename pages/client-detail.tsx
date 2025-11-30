@@ -1,10 +1,10 @@
 // Client detail page - view and manage a single client
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
+import { useFormatting } from '../lib/use-formatting';
 import { StatusPill } from '../components/status-pill';
 import { 
-  formatCurrency, 
-  formatDate, 
   getClientOrders, 
   getClientLifetimeValue,
   calculateOrderTotal,
@@ -13,7 +13,7 @@ import {
   normalizePhoneNumber,
   isValidEmail
 } from '../lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User, Save } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
@@ -26,6 +26,8 @@ interface ClientDetailProps {
 }
 
 export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
+  const { t } = useTranslation();
+  const { formatCurrency, formatDate } = useFormatting();
   const { clients, orders, addClient, updateClient } = useApp();
   const [isEditing, setIsEditing] = useState(clientId === 'new');
   const [activeTab, setActiveTab] = useState<'overview' | 'orders'>('overview');
@@ -206,12 +208,12 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
   if (!isNewClient && !client) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#7C8085] mb-4">Client not found</p>
+        <p className="text-[#7C8085] mb-4">{t('clientDetail.clientNotFound')}</p>
         <button
           onClick={() => onNavigate('clients')}
-          className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
         >
-          Back to Clients
+          {t('clientDetail.backToClients')}
         </button>
       </div>
     );
@@ -224,14 +226,14 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
         <div className="flex items-center gap-4">
           <button
             onClick={() => onNavigate('clients')}
-            className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors"
-            aria-label="Back to clients"
+            className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
+            aria-label={t('clientDetail.backToClients')}
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={20} aria-hidden="true" />
           </button>
           <div>
             <h1 className="text-[#1E2025] mb-1">
-              {isNewClient ? 'New Client' : (isEditing ? 'Edit Client' : client?.company)}
+              {isNewClient ? t('clientDetail.newClient') : (isEditing ? t('clientDetail.editClient') : client?.company)}
             </h1>
           </div>
         </div>
@@ -242,13 +244,14 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                 onClick={handleCancel}
                 className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
               >
-                Cancel
+                {t('clientDetail.cancel')}
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
               >
-                {isNewClient ? 'Create Client' : 'Save Changes'}
+                <Save size={20} aria-hidden="true" />
+                {isNewClient ? t('clientDetail.createClient') : t('common.saveChanges')}
               </button>
             </>
           ) : (
@@ -258,14 +261,14 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                 className="flex items-center gap-2 px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
               >
                 <Edit size={20} aria-hidden="true" />
-                Edit
+                {t('clientDetail.edit')}
               </button>
               <button
                 onClick={() => onNavigate('orders', `new?client=${client?.id}`)}
                 className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
               >
                 <Plus size={20} aria-hidden="true" />
-                New Order
+                {t('clientDetail.newOrder')}
               </button>
             </>
           )}
@@ -277,7 +280,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
         <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
+              <Label htmlFor="name">{t('clientDetail.name')} *</Label>
               <Input
                 id="name"
                 value={formData.name || ''}
@@ -293,7 +296,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="company">Company</Label>
+              <Label htmlFor="company">{t('clients.company')}</Label>
               <Input
                 id="company"
                 value={formData.company || ''}
@@ -302,7 +305,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email">{t('clientDetail.email')} *</Label>
               <Input
                 id="email"
                 type="email"
@@ -318,7 +321,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone *</Label>
+              <Label htmlFor="phone">{t('clientDetail.phone')} *</Label>
               <PhoneInput
                 id="phone"
                 value={formData.phone || ''}
@@ -333,7 +336,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="address">Address</Label>
+              <Label htmlFor="address">{t('clientDetail.address')}</Label>
               <Input
                 id="address"
                 value={formData.address || ''}
@@ -342,7 +345,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="inn">INN (Tax ID)</Label>
+              <Label htmlFor="inn">{t('clientDetail.innTaxId')}</Label>
               <Input
                 id="inn"
                 value={formData.inn || ''}
@@ -351,7 +354,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="kpp">KPP</Label>
+              <Label htmlFor="kpp">{t('clientDetail.kpp')}</Label>
               <Input
                 id="kpp"
                 value={formData.kpp || ''}
@@ -360,7 +363,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="ogrn">OGRN</Label>
+              <Label htmlFor="ogrn">{t('clientDetail.ogrn')}</Label>
               <Input
                 id="ogrn"
                 value={formData.ogrn || ''}
@@ -369,10 +372,10 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2 md:col-span-2">
-              <Label className="text-[#555A60] font-medium">Banking Information</Label>
+              <Label className="text-[#555A60] font-medium">{t('clientDetail.bankingInformation')}</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="bankName">Bank Name</Label>
+                  <Label htmlFor="bankName">{t('clientDetail.bankName')}</Label>
                   <Input
                     id="bankName"
                     value={formData.bank?.name || ''}
@@ -383,7 +386,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="bankAccount">Account Number</Label>
+                  <Label htmlFor="bankAccount">{t('clientDetail.accountNumber')}</Label>
                   <Input
                     id="bankAccount"
                     value={formData.bank?.accountNumber || ''}
@@ -394,7 +397,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="bankCorrespondent">Correspondent Account</Label>
+                  <Label htmlFor="bankCorrespondent">{t('clientDetail.correspondentAccount')}</Label>
                   <Input
                     id="bankCorrespondent"
                     value={formData.bank?.correspondentAccount || ''}
@@ -405,7 +408,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="bankBik">BIK</Label>
+                  <Label htmlFor="bankBik">{t('clientDetail.bik')}</Label>
                   <Input
                     id="bankBik"
                     value={formData.bank?.bik || ''}
@@ -419,7 +422,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             </div>
             
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">{t('clientDetail.notes')}</Label>
               <Textarea
                 id="notes"
                 value={formData.notes || ''}
@@ -436,21 +439,21 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <h3 className="text-[#555A60] mb-4">Contact Information</h3>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('clientDetail.contactInformation')}</h3>
                 <div className="space-y-3">
                   {client?.name && client.name !== 'Unknown' && (
                     <div className="flex items-start gap-3">
-                      <User size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                      <User size={20} className="text-[#7C8085] mt-0.5 flex-shrink-0" aria-hidden="true" />
                       <div>
-                        <p className="text-[#7C8085]">Name</p>
+                        <p className="text-[#7C8085]">{t('clientDetail.name')}</p>
                         <p className="text-[#1E2025]">{client.name}</p>
                       </div>
                     </div>
                   )}
                   <div className="flex items-start gap-3">
-                    <Mail size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <Mail size={20} className="text-[#7C8085] mt-0.5 flex-shrink-0" aria-hidden="true" />
                     <div>
-                      <p className="text-[#7C8085]">Email</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.email')}</p>
                       <a 
                         href={`mailto:${client?.email}`}
                         className="text-[#1F744F] hover:underline"
@@ -460,9 +463,9 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <Phone size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <Phone size={20} className="text-[#7C8085] mt-0.5 flex-shrink-0" aria-hidden="true" />
                     <div>
-                      <p className="text-[#7C8085]">Phone</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.phone')}</p>
                       <a 
                         href={`tel:${client?.phone ? '7' + normalizePhoneNumber(client.phone).substring(1) : ''}`}
                         className="text-[#1E2025]"
@@ -472,9 +475,9 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <MapPin size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                    <MapPin size={20} className="text-[#7C8085] mt-0.5 flex-shrink-0" aria-hidden="true" />
                     <div>
-                      <p className="text-[#7C8085]">Address</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.address')}</p>
                       <p className="text-[#1E2025]">{client?.address}</p>
                     </div>
                   </div>
@@ -482,32 +485,32 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
               </div>
               
               <div>
-                <h3 className="text-[#555A60] mb-4">Tax Information</h3>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('clientDetail.taxInformation')}</h3>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[#7C8085]">INN</p>
-                    <p className="text-[#1E2025]">{client?.inn || 'Not provided'}</p>
+                    <p className="text-[#7C8085]">{t('clientDetail.inn')}</p>
+                    <p className="text-[#1E2025]">{client?.inn || t('clientDetail.notProvided')}</p>
                   </div>
                   <div>
-                    <p className="text-[#7C8085]">KPP</p>
-                    <p className="text-[#1E2025]">{client?.kpp || 'Not provided'}</p>
+                    <p className="text-[#7C8085]">{t('clientDetail.kpp')}</p>
+                    <p className="text-[#1E2025]">{client?.kpp || t('clientDetail.notProvided')}</p>
                   </div>
                   <div>
-                    <p className="text-[#7C8085]">OGRN</p>
-                    <p className="text-[#1E2025]">{client?.ogrn || 'Not provided'}</p>
+                    <p className="text-[#7C8085]">{t('clientDetail.ogrn')}</p>
+                    <p className="text-[#1E2025]">{client?.ogrn || t('clientDetail.notProvided')}</p>
                   </div>
                 </div>
               </div>
               
               <div>
-                <h3 className="text-[#555A60] mb-4">Statistics</h3>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('clientDetail.statistics')}</h3>
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[#7C8085]">Total Orders</p>
+                    <p className="text-[#7C8085]">{t('clientDetail.totalOrders')}</p>
                     <p className="text-[#1E2025]">{clientOrders.length}</p>
                   </div>
                   <div>
-                    <p className="text-[#7C8085]">Lifetime Value</p>
+                    <p className="text-[#7C8085]">{t('clientDetail.lifetimeValue')}</p>
                     <p className="text-[#1E2025]">{formatCurrency(lifetimeValue)}</p>
                   </div>
                 </div>
@@ -516,29 +519,29 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             
             {client?.bank && (client.bank.name || client.bank.accountNumber || client.bank.correspondentAccount || client.bank.bik) && (
               <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-                <h3 className="text-[#555A60] mb-4">Banking Information</h3>
+                <h3 className="text-[#555A60] mb-4">{t('clientDetail.bankingInformation')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {client.bank.name && (
                     <div>
-                      <p className="text-[#7C8085]">Bank Name</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.bankName')}</p>
                       <p className="text-[#1E2025]">{client.bank.name}</p>
                     </div>
                   )}
                   {client.bank.accountNumber && (
                     <div>
-                      <p className="text-[#7C8085]">Account Number</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.accountNumber')}</p>
                       <p className="text-[#1E2025]">{client.bank.accountNumber}</p>
                     </div>
                   )}
                   {client.bank.correspondentAccount && (
                     <div>
-                      <p className="text-[#7C8085]">Correspondent Account</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.correspondentAccount')}</p>
                       <p className="text-[#1E2025]">{client.bank.correspondentAccount}</p>
                     </div>
                   )}
                   {client.bank.bik && (
                     <div>
-                      <p className="text-[#7C8085]">BIK</p>
+                      <p className="text-[#7C8085]">{t('clientDetail.bik')}</p>
                       <p className="text-[#1E2025]">{client.bank.bik}</p>
                     </div>
                   )}
@@ -548,7 +551,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
             
             {client?.notes && (
               <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-                <h3 className="text-[#555A60] mb-2">Notes</h3>
+                <h3 className="text-[#555A60] mb-2 font-semibold text-base">{t('clientDetail.notes')}</h3>
                 <p className="text-[#1E2025]">{client.notes}</p>
               </div>
             )}
@@ -561,25 +564,25 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                 role="tab"
                 aria-selected={activeTab === 'overview'}
                 onClick={() => setActiveTab('overview')}
-                className={`px-4 py-3 border-b-2 transition-colors ${
+                className={`px-4 py-3 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'overview'
                     ? 'border-[#1F744F] text-[#1F744F]'
                     : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
                 }`}
               >
-                Overview
+                {t('clientDetail.overview')}
               </button>
               <button
                 role="tab"
                 aria-selected={activeTab === 'orders'}
                 onClick={() => setActiveTab('orders')}
-                className={`px-4 py-3 border-b-2 transition-colors ${
+                className={`px-4 py-3 border-b-2 transition-colors cursor-pointer ${
                   activeTab === 'orders'
                     ? 'border-[#1F744F] text-[#1F744F]'
                     : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
                 }`}
               >
-                Orders ({clientOrders.length})
+                {t('clientDetail.orders')} ({clientOrders.length})
               </button>
             </nav>
           </div>
@@ -588,16 +591,16 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-                <h3 className="text-[#1E2025] mb-4">Recent Orders</h3>
+                <h3 className="text-[#1E2025] mb-4 font-semibold text-base">{t('clientDetail.recentOrders')}</h3>
                 {clientOrders.length === 0 ? (
-                  <p className="text-[#7C8085]">No orders yet</p>
+                  <p className="text-[#7C8085]">{t('clientDetail.noOrders')}</p>
                 ) : (
                   <div className="space-y-3">
                     {clientOrders.slice(0, 5).map(order => (
                       <button
                         key={order.id}
                         onClick={() => onNavigate('order-detail', order.id)}
-                        className="w-full flex items-center justify-between p-3 hover:bg-[#F7F8F8] rounded-lg transition-colors text-left"
+                        className="w-full flex items-center justify-between p-3 hover:bg-[#F7F8F8] rounded-lg transition-colors text-left cursor-pointer"
                       >
                         <div>
                           <p className="text-[#1E2025]">{order.id}</p>
@@ -620,22 +623,22 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
               {clientOrders.length === 0 ? (
                 <div className="px-6 py-12 text-center">
                   <FileText size={48} className="mx-auto text-[#B5BDB9] mb-4" aria-hidden="true" />
-                  <p className="text-[#7C8085] mb-4">No orders yet for this client</p>
+                  <p className="text-[#7C8085] mb-4">{t('clientDetail.noOrders')}</p>
                   <button
                     onClick={() => onNavigate('orders', `new?client=${client?.id}`)}
-                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
                   >
-                    Create First Order
+                    {t('orders.createFirstOrder')}
                   </button>
                 </div>
               ) : (
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#E4E7E7]">
-                      <th className="px-6 py-3 text-left text-[#555A60]">Order ID</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Date</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Status</th>
-                      <th className="px-6 py-3 text-left text-[#555A60]">Total</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">{t('orders.orderId')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">{t('orders.date')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">{t('orders.status')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60]">{t('orders.total')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E4E7E7]">

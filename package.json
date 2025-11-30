@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "migrate": "tsx scripts/migrate-xml-to-supabase.ts"
+    "migrate": "tsx scripts/migrate-xml-to-supabase.ts",
+    "python:setup": "cd python-service && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt",
+    "python:dev": "cd python-service && source venv/bin/activate && python docx_generator.py"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.1",
@@ -45,12 +47,15 @@
     "dotenv": "^16.3.1",
     "embla-carousel-react": "^8.6.0",
     "fast-xml-parser": "^4.3.5",
+    "i18next": "^25.6.3",
+    "i18next-browser-languagedetector": "^8.2.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.487.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.55.0",
+    "react-i18next": "^16.3.5",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "sonner": "^2.0.3",

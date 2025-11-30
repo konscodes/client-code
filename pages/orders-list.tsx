@@ -1,9 +1,11 @@
 // Orders list page - browse and manage all orders
 import { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
+import { useFormatting } from '../lib/use-formatting';
 import { StatusPill } from '../components/status-pill';
-import { formatCurrency, formatDate, calculateOrderTotal, getOrderTotals, extractIdNumbers } from '../lib/utils';
+import { calculateOrderTotal, getOrderTotals, extractIdNumbers } from '../lib/utils';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
@@ -25,6 +27,8 @@ interface OrdersListProps {
 type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'internalNotes' | 'visibleNotes';
 
 export function OrdersList({ onNavigate }: OrdersListProps) {
+  const { t } = useTranslation();
+  const { formatCurrency, formatDate } = useFormatting();
   const { orders, clients, loading } = useApp();
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
@@ -317,15 +321,15 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   
   // Column label mapping
   const columnLabels: Record<ColumnKey, string> = {
-    orderId: 'Order ID',
-    client: 'Client',
-    date: 'Date',
-    status: 'Status',
-    jobs: 'Jobs',
-    total: 'Total',
-    subtotal: 'Subtotal',
-    internalNotes: 'Internal Notes',
-    visibleNotes: 'Visible Notes',
+    orderId: t('orders.orderId'),
+    client: t('orders.client'),
+    date: t('orders.date'),
+    status: t('orders.status'),
+    jobs: t('orders.jobs'),
+    total: t('orders.total'),
+    subtotal: t('orders.subtotal'),
+    internalNotes: t('orders.internalNotes'),
+    visibleNotes: t('orders.visibleNotes'),
   };
   
   // Helper function to render table header
@@ -514,7 +518,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               backgroundColor: 'white'
             } : undefined}
           >
-            <p className="text-[#7C8085] line-clamp-2">{order.notesInternal || '-'}</p>
+            <p className="text-[#1E2025] line-clamp-2">{order.notesInternal || '-'}</p>
           </td>
         );
       case 'visibleNotes':
@@ -531,7 +535,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               backgroundColor: 'white'
             } : undefined}
           >
-            <p className="text-[#7C8085] line-clamp-2">{order.notesPublic || '-'}</p>
+            <p className="text-[#1E2025] line-clamp-2">{order.notesPublic || '-'}</p>
           </td>
         );
       default:
@@ -556,20 +560,20 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[#1E2025] mb-2">Orders</h1>
-          <p className="text-[#555A60]">Track and manage all customer orders.</p>
+          <h1 className="text-[#1E2025] mb-2">{t('orders.title')}</h1>
+          <p className="text-[#555A60]">{t('orders.subtitle')}</p>
         </div>
         <button
           onClick={() => onNavigate('order-detail', 'new')}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer whitespace-nowrap"
         >
           <Plus size={20} aria-hidden="true" />
-          New Order
+          {t('orders.newOrder')}
         </button>
       </div>
       
       {/* Search and Action Buttons */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[300px] max-w-md relative">
           <Search 
             className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
@@ -578,35 +582,37 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           />
           <Input
             type="search"
-            placeholder="Search orders by ID, client, or notes..."
+            placeholder={t('orders.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
-            aria-label="Search orders"
+            aria-label={t('orders.searchLabel')}
           />
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <Button
             variant="outline"
             onClick={() => setFiltersOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 relative cursor-pointer hover:shadow-sm transition-shadow"
+            aria-label={t('orders.filtersTitle')}
           >
             <Filter size={16} />
-            Filters
+            {t('orders.filtersTitle')}
             {hasActiveFilters && (
-              <span className="text-[#1F744F] font-semibold" aria-label="Active filters">*</span>
+              <span className="text-[#1F744F] font-semibold text-xs leading-none relative -top-1 ml-0.5" aria-label={t('orders.filtersTitle')}>*</span>
             )}
           </Button>
           <Button
             variant="outline"
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 relative cursor-pointer hover:shadow-sm transition-shadow"
+            aria-label={t('orders.columnSettings')}
           >
             <Columns size={16} />
-            Customize
+            {t('common.columns')}
             {hasActiveCustomizations && (
-              <span className="text-[#1F744F] font-semibold" aria-label="Active customizations">*</span>
+              <span className="text-[#1F744F] font-semibold text-xs leading-none relative -top-1 ml-0.5" aria-label={t('orders.columnSettings')}>*</span>
             )}
           </Button>
         </div>
@@ -662,17 +668,17 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <div className="px-6 py-12 text-center">
             {searchQuery || statusFilter !== 'all' || dateFilter.from || dateFilter.to ? (
               <>
-                <p className="text-[#7C8085] mb-2">No orders found</p>
-                <p className="text-[#7C8085]">Try adjusting your filters or search query</p>
+                <p className="text-[#7C8085] mb-2">{t('orders.noOrders')}</p>
+                <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
               </>
             ) : (
               <>
-                <p className="text-[#7C8085] mb-4">No orders yet</p>
+                <p className="text-[#7C8085] mb-4">{t('orders.noOrders')}</p>
                 <button
                   onClick={() => onNavigate('order-detail', 'new')}
                   className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                 >
-                  Create your first order
+                  {t('orders.createFirstOrder')}
                 </button>
               </>
             )}
@@ -719,8 +725,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       {filteredOrders.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-[#555A60] text-sm">
-            Showing {startIndex + 1} to {Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length} orders
-            {filteredOrders.length !== orders.length && ` (filtered from ${orders.length} total)`}
+            {t('orders.showing')} {startIndex + 1} {t('orders.to')} {Math.min(endIndex, filteredOrders.length)} {t('orders.of')} {filteredOrders.length} {t('orders.orders')}
+            {filteredOrders.length !== orders.length && ` (${t('orders.filteredFrom')} ${orders.length} ${t('orders.total')})`}
           </p>
           
           <PaginationWithLinks
@@ -748,13 +754,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
             <div className="p-6">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#1E2025]">Column Settings</h2>
-                  <p className="text-sm text-[#555A60] mt-1">Select which columns to display in the table</p>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">{t('orders.columnSettings')}</h2>
+                  <p className="text-sm text-[#555A60] mt-1">{t('orders.columnSettingsDescription')}</p>
                 </div>
                 <button
                   onClick={() => setSettingsOpen(false)}
-                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
-                  aria-label="Close"
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors cursor-pointer"
+                  aria-label={t('common.close')}
                 >
                   <XIcon size={18} />
                 </button>
@@ -763,8 +769,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               <div className="space-y-6">
                 {/* Column Ordering */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Column Order</Label>
-                  <p className="text-xs text-[#555A60]">Drag columns to reorder them</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.columnOrder')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('orders.columnOrderDescription')}</p>
                   <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
                     {columnOrder.map((columnKey) => {
                       const isRequired = columnKey === 'orderId' || columnKey === 'status';
@@ -814,7 +820,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                             }`}
                           >
                             {columnLabels[columnKey]}
-                            {isRequired && <span className="ml-2 text-xs text-[#7C8085]">(required)</span>}
+                            {isRequired && <span className="ml-2 text-xs text-[#7C8085]">({t('orders.required')})</span>}
                           </Label>
                         </div>
                       );
@@ -824,39 +830,39 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                 
                 {/* Sorting Settings */}
                 <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Sort By</Label>
-                  <p className="text-xs text-[#555A60]">Choose how to sort the orders</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.sortBy')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('orders.sortByDescription')}</p>
                   <div className="space-y-3">
                     <div className="space-y-2">
                       <Label htmlFor="sort-field" className="text-xs font-medium text-[#555A60]">
-                        Sort Field
+                        {t('orders.sortField')}
                       </Label>
                       <Select value={sortBy} onValueChange={(value) => setSortBy(value as ColumnKey | 'createdAt')}>
                         <SelectTrigger id="sort-field" className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="createdAt">Date</SelectItem>
-                          <SelectItem value="orderId">Order ID</SelectItem>
-                          <SelectItem value="client">Client</SelectItem>
-                          <SelectItem value="status">Status</SelectItem>
-                          <SelectItem value="jobs">Jobs</SelectItem>
-                          <SelectItem value="total">Total</SelectItem>
-                          <SelectItem value="subtotal">Subtotal</SelectItem>
+                          <SelectItem value="createdAt">{t('orders.date')}</SelectItem>
+                          <SelectItem value="orderId">{t('orders.orderId')}</SelectItem>
+                          <SelectItem value="client">{t('orders.client')}</SelectItem>
+                          <SelectItem value="status">{t('orders.status')}</SelectItem>
+                          <SelectItem value="jobs">{t('orders.jobs')}</SelectItem>
+                          <SelectItem value="total">{t('orders.total')}</SelectItem>
+                          <SelectItem value="subtotal">{t('orders.subtotal')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sort-direction" className="text-xs font-medium text-[#555A60]">
-                        Sort Direction
+                        {t('orders.sortDirectionLabel')}
                       </Label>
                       <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as 'asc' | 'desc')}>
                         <SelectTrigger id="sort-direction" className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="desc">Descending</SelectItem>
-                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">{t('orders.descending')}</SelectItem>
+                          <SelectItem value="asc">{t('orders.ascending')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -865,8 +871,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                 
                 {/* Pagination Settings */}
                 <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Items Per Page</Label>
-                  <p className="text-xs text-[#555A60]">Select how many orders to display per page</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.itemsPerPage')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('orders.itemsPerPageDescription')}</p>
                   <div className="grid grid-cols-4 gap-2">
                     {[10, 25, 50, 100].map((size) => (
                       <Button
@@ -874,7 +880,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                         variant={itemsPerPage === size ? "default" : "outline"}
                         size="sm"
                         onClick={() => setItemsPerPage(size)}
-                        className={itemsPerPage === size ? "bg-[#1F744F] hover:bg-[#165B3C] text-white" : ""}
+                        className={`cursor-pointer ${itemsPerPage === size ? "bg-[#1F744F] hover:bg-[#165B3C] text-white" : ""}`}
                       >
                         {size}
                       </Button>
@@ -888,9 +894,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                     <Button
                       variant="outline"
                       onClick={resetCustomizations}
-                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F] cursor-pointer"
                     >
-                      Reset All Custom Settings
+                      {t('orders.resetAllCustomSettings')}
                     </Button>
                   </div>
                 )}
@@ -917,13 +923,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
             <div className="p-6">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#1E2025]">Filters</h2>
-                  <p className="text-sm text-[#555A60] mt-1">Filter orders by status and date range</p>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">{t('orders.filtersTitle')}</h2>
+                  <p className="text-sm text-[#555A60] mt-1">{t('orders.filtersDescription')}</p>
                 </div>
                 <button
                   onClick={() => setFiltersOpen(false)}
-                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
-                  aria-label="Close"
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors cursor-pointer"
+                  aria-label={t('common.close')}
                 >
                   <XIcon size={18} />
                 </button>
@@ -932,7 +938,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               <div className="space-y-8">
                 {/* Status Filter */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Status</Label>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.statusFilter')}</Label>
                   <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
                     {(['all', 'draft', 'approved', 'in-progress', 'completed', 'billed'] as const).map((status) => (
                       <div
@@ -955,7 +961,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                             statusFilter === status ? 'text-[#1E2025]' : 'text-[#555A60] group-hover:text-[#1E2025]'
                           }`}
                         >
-                          {status === 'all' ? 'All' : status === 'in-progress' ? 'In Progress' : status}
+                          {status === 'all' ? t('orders.all') : status === 'in-progress' ? t('orders.inProgress') : t(`orders.${status}`)}
                           {status !== 'all' && (
                             <span className="ml-2 text-xs text-[#7C8085]">
                               ({statusCounts[status]})
@@ -969,11 +975,11 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                 
                 {/* Date Filter */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Date Range</Label>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.orderDateRange')}</Label>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="date-from" className="text-xs font-medium text-[#555A60]">
-                        From Date
+                        {t('orders.fromDate')}
                       </Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -985,7 +991,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                             {dateFilter.from ? (
                               formatDate(new Date(dateFilter.from))
                             ) : (
-                              <span className="text-[#7C8085]">Pick a date</span>
+                              <span className="text-[#7C8085]">{t('orders.pickDate')}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -1005,7 +1011,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="date-to" className="text-xs font-medium text-[#555A60]">
-                        To Date
+                        {t('orders.toDate')}
                       </Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -1017,7 +1023,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                             {dateFilter.to ? (
                               formatDate(new Date(dateFilter.to))
                             ) : (
-                              <span className="text-[#7C8085]">Pick a date</span>
+                              <span className="text-[#7C8085]">{t('orders.pickDate')}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -1040,9 +1046,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setDateFilter({})}
-                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9]"
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
                       >
-                        Clear date filter
+                        {t('orders.clearDateFilter')}
                       </Button>
                     )}
                   </div>
@@ -1054,9 +1060,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                     <Button
                       variant="outline"
                       onClick={resetFilters}
-                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F] cursor-pointer"
                     >
-                      Reset All Filters
+                      {t('orders.resetAllFilters')}
                     </Button>
                   </div>
                 )}

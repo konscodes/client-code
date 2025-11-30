@@ -1,8 +1,7 @@
+import { createRoot } from "react-dom/client";
+import App from "./App.tsx";
+import "./lib/i18n"; // Initialize i18n
+import "./index.css";
+import "./styles/globals.css";
 
-  import { createRoot } from "react-dom/client";
-  import App from "./App.tsx";
-  import "./index.css";
-  import "./styles/globals.css";
-
-  createRoot(document.getElementById("root")!).render(<App />);
-  
+createRoot(document.getElementById("root")!).render(<App />);

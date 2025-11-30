@@ -1,9 +1,11 @@
 // Dashboard page - overview with KPIs and recent activity
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
+import { useFormatting } from '../lib/use-formatting';
 import { KPICard } from '../components/kpi-card';
 import { StatusPill } from '../components/status-pill';
-import { formatCurrency, formatDate, calculateOrderTotal } from '../lib/utils';
+import { calculateOrderTotal } from '../lib/utils';
 import { FileText, Users, DollarSign, Clock } from 'lucide-react';
 import { Skeleton } from '../components/ui/skeleton';
 import type { Order } from '../lib/types';
@@ -13,7 +15,9 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
+  const { t } = useTranslation();
   const { orders, clients, loading } = useApp();
+  const { formatCurrency, formatDate } = useFormatting();
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
   const isLoading = loading || (orders.length === 0 && clients.length === 0);
@@ -59,21 +63,21 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       {/* Page title and actions */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[#1E2025] mb-2">Welcome back</h1>
-          <p className="text-[#555A60]">Here's what's happening with your business today.</p>
+          <h1 className="text-[#1E2025] mb-2">{t('dashboard.welcomeBack')}</h1>
+          <p className="text-[#555A60]">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex gap-3">
           <button
             onClick={() => onNavigate('clients', 'new')}
-            className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+            className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
           >
-            New Client
+            {t('dashboard.newClient')}
           </button>
           <button
             onClick={() => onNavigate('orders', 'new')}
-            className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+            className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
           >
-            New Order
+            {t('dashboard.newOrder')}
           </button>
         </div>
       </div>
@@ -83,25 +87,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <h2 id="kpi-heading" className="sr-only">Key Performance Indicators</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KPICard
-            title="Open Orders"
+            title={t('dashboard.openOrders')}
             value={kpiData.openOrders}
             icon={FileText}
             onClick={() => onNavigate('orders')}
           />
           <KPICard
-            title="Awaiting Invoice"
+            title={t('dashboard.awaitingInvoice')}
             value={kpiData.awaitingInvoice}
             icon={Clock}
             onClick={() => onNavigate('orders')}
           />
           <KPICard
-            title="Draft Orders"
+            title={t('dashboard.draftOrders')}
             value={kpiData.draftOrders}
             icon={FileText}
             onClick={() => onNavigate('orders')}
           />
           <KPICard
-            title="This Month Revenue"
+            title={t('dashboard.thisMonthRevenue')}
             value={formatCurrency(kpiData.monthRevenue)}
             icon={DollarSign}
           />
@@ -114,13 +118,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <div className="bg-white rounded-xl border border-[#E4E7E7]">
             <div className="px-6 py-4 border-b border-[#E4E7E7] flex items-center justify-between">
               <h2 id="recent-orders-heading" className="text-[#1E2025]">
-                Recent Orders
+                {t('dashboard.recentOrders')}
               </h2>
               <button
                 onClick={() => onNavigate('orders')}
-                className="text-[#1F744F] hover:text-[#165B3C] transition-colors"
+                className="text-[#1F744F] hover:text-[#165B3C] transition-colors cursor-pointer"
               >
-                View all
+                {t('common.viewAll')}
               </button>
             </div>
             <div className="divide-y divide-[#E4E7E7]">
@@ -131,26 +135,26 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     <div key={i} className="space-y-3 py-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 space-y-2">
-                          <Skeleton className="h-5 w-24" />
+                          <Skeleton className="h-5 w-20" />
                           <Skeleton className="h-4 w-20" />
                         </div>
                         <Skeleton className="h-6 w-20 rounded-full" />
                       </div>
                       <div className="flex items-center justify-between">
                         <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-20" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : recentOrders.length === 0 ? (
                 <div className="px-6 py-12 text-center">
-                  <p className="text-[#7C8085] mb-4">No orders yet</p>
+                  <p className="text-[#7C8085] mb-4">{t('dashboard.noOrders')}</p>
                   <button
                     onClick={() => onNavigate('orders', 'new')}
-                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
                   >
-                    Create your first order
+                    {t('dashboard.createFirstOrder')}
                   </button>
                 </div>
               ) : (
@@ -162,7 +166,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     <button
                       key={order.id}
                       onClick={() => onNavigate('order-detail', order.id)}
-                      className="w-full px-6 py-4 hover:bg-[#F7F8F8] transition-colors text-left"
+                      className="w-full px-6 py-4 hover:bg-[#F7F8F8] transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -188,13 +192,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <div className="bg-white rounded-xl border border-[#E4E7E7]">
             <div className="px-6 py-4 border-b border-[#E4E7E7] flex items-center justify-between">
               <h2 id="recent-clients-heading" className="text-[#1E2025]">
-                Recent Clients
+                {t('dashboard.recentClients')}
               </h2>
               <button
                 onClick={() => onNavigate('clients')}
-                className="text-[#1F744F] hover:text-[#165B3C] transition-colors"
+                className="text-[#1F744F] hover:text-[#165B3C] transition-colors cursor-pointer"
               >
-                View all
+                {t('common.viewAll')}
               </button>
             </div>
             <div className="divide-y divide-[#E4E7E7]">
@@ -205,25 +209,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     <div key={i} className="space-y-3 py-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 space-y-2">
-                          <Skeleton className="h-5 w-24" />
+                          <Skeleton className="h-5 w-20" />
                           <Skeleton className="h-4 w-32" />
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-20" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : recentClients.length === 0 ? (
                 <div className="px-6 py-12 text-center">
-                  <p className="text-[#7C8085] mb-4">No clients yet</p>
+                  <p className="text-[#7C8085] mb-4">{t('dashboard.noClients')}</p>
                   <button
                     onClick={() => onNavigate('clients', 'new')}
-                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
                   >
-                    Add your first client
+                    {t('dashboard.addFirstClient')}
                   </button>
                 </div>
               ) : (
@@ -234,7 +238,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     <button
                       key={client.id}
                       onClick={() => onNavigate('client-detail', client.id)}
-                      className="w-full px-6 py-4 hover:bg-[#F7F8F8] transition-colors text-left"
+                      className="w-full px-6 py-4 hover:bg-[#F7F8F8] transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
@@ -244,7 +248,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       </div>
                       <div className="flex items-center justify-between text-[#7C8085]">
                         <span>{client.email}</span>
-                        <span>{clientOrders.length} orders</span>
+                        <span>{clientOrders.length} {t('dashboard.orders')}</span>
                       </div>
                     </button>
                   );

@@ -10,7 +10,6 @@ import { OrdersList } from './pages/orders-list';
 import { OrderDetail } from './pages/order-detail';
 import { JobCatalog } from './pages/job-catalog';
 import { JobPresets } from './pages/job-presets';
-import { DocumentTemplates } from './pages/document-templates';
 import { Settings } from './pages/settings';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
@@ -23,7 +22,6 @@ type Page =
   | 'order-detail'
   | 'job-catalog'
   | 'presets'
-  | 'templates'
   | 'settings';
 
 function AppContent() {
@@ -78,9 +76,6 @@ function AppContent() {
       
       case 'presets':
         return <JobPresets onNavigate={handleNavigate} />;
-      
-      case 'templates':
-        return <DocumentTemplates onNavigate={handleNavigate} />;
       
       case 'settings':
         return <Settings onNavigate={handleNavigate} />;

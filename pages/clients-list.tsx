@@ -1,8 +1,10 @@
 // Clients list page - browse and manage all clients
 import { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
-import { formatDate, getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
+import { useFormatting } from '../lib/use-formatting';
+import { getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, CalendarIcon } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
@@ -21,6 +23,8 @@ interface ClientsListProps {
 type ColumnKey = 'clientId' | 'client' | 'email' | 'phone' | 'orders' | 'lastOrder';
 
 export function ClientsList({ onNavigate }: ClientsListProps) {
+  const { t } = useTranslation();
+  const { formatDate } = useFormatting();
   const { clients, orders, loading } = useApp();
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
@@ -80,12 +84,14 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter states - load from localStorage
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => 
-    loadFromStorage(STORAGE_KEYS.filters, {}).dateFilter || {}
-  );
-  const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>(() => 
-    loadFromStorage(STORAGE_KEYS.filters, {}).ordersCountFilter || {}
-  );
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => {
+    const stored = loadFromStorage<{ dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
+    return stored.dateFilter || {};
+  });
+  const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>(() => {
+    const stored = loadFromStorage<{ ordersCountFilter?: { min?: number; max?: number } }>(STORAGE_KEYS.filters, {});
+    return stored.ordersCountFilter || {};
+  });
   
   // Column visibility state - load from localStorage
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
@@ -354,12 +360,12 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Column label mapping
   const columnLabels: Record<ColumnKey, string> = {
-    clientId: 'Client ID',
-    client: 'Client',
-    email: 'Email',
-    phone: 'Phone',
-    orders: 'Orders',
-    lastOrder: 'Last Order',
+    clientId: t('clients.clientId'),
+    client: t('clients.client'),
+    email: t('clients.email'),
+    phone: t('clients.phone'),
+    orders: t('clients.orders'),
+    lastOrder: t('clients.lastOrder'),
   };
   
   // Helper function to render table header
@@ -516,7 +522,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
             } : { minWidth: '150px' }}
           >
             <p className="text-[#555A60]">
-              {lastOrder ? formatDate(lastOrder.createdAt) : 'No orders'}
+              {lastOrder ? formatDate(lastOrder.createdAt) : t('clients.noOrders')}
             </p>
           </td>
         );
@@ -530,20 +536,20 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[#1E2025] mb-2">Clients</h1>
-          <p className="text-[#555A60]">Manage your client relationships and contact information.</p>
+          <h1 className="text-[#1E2025] mb-2">{t('clients.title')}</h1>
+          <p className="text-[#555A60]">{t('clients.subtitle')}</p>
         </div>
         <button
           onClick={() => onNavigate('client-detail', 'new')}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer whitespace-nowrap"
         >
           <Plus size={20} aria-hidden="true" />
-          New Client
+          {t('clients.newClient')}
         </button>
       </div>
       
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[300px] max-w-md relative">
           <Search 
             className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
@@ -552,35 +558,37 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           />
           <Input
             type="search"
-            placeholder="Search clients by name, company, email, or phone..."
+            placeholder={t('clients.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
-            aria-label="Search clients"
+            aria-label={t('clients.searchLabel')}
           />
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <Button
             variant="outline"
             onClick={() => setFiltersOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 relative cursor-pointer hover:shadow-sm transition-shadow"
+            aria-label={t('clients.filters')}
           >
             <Filter size={16} />
-            Filters
+            {t('clients.filters')}
             {hasActiveFilters && (
-              <span className="text-[#1F744F] font-semibold" aria-label="Active filters">*</span>
+              <span className="text-[#1F744F] font-semibold text-xs leading-none relative -top-1 ml-0.5" aria-label={t('clients.filters')}>*</span>
             )}
           </Button>
           <Button
             variant="outline"
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 relative cursor-pointer hover:shadow-sm transition-shadow"
+            aria-label={t('clients.columnSettings')}
           >
             <Columns size={16} />
-            Customize
+            {t('common.columns')}
             {hasActiveCustomizations && (
-              <span className="text-[#1F744F] font-semibold" aria-label="Active customizations">*</span>
+              <span className="text-[#1F744F] font-semibold text-xs leading-none relative -top-1 ml-0.5" aria-label={t('clients.columnSettings')}>*</span>
             )}
           </Button>
         </div>
@@ -630,17 +638,17 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
             <div className="px-6 py-12 text-center">
               {searchQuery ? (
                 <>
-                  <p className="text-[#7C8085] mb-2">No clients found</p>
-                  <p className="text-[#7C8085]">Try adjusting your search query</p>
+                  <p className="text-[#7C8085] mb-2">{t('clients.noClients')}</p>
+                  <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
                 </>
               ) : (
                 <>
-                  <p className="text-[#7C8085] mb-4">No clients yet</p>
+                  <p className="text-[#7C8085] mb-4">{t('clients.noClients')}</p>
                   <button
                     onClick={() => onNavigate('client-detail', 'new')}
                     className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                   >
-                    Add your first client
+                    {t('clients.addFirstClient')}
                   </button>
                 </>
               )}
@@ -687,8 +695,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       {filteredClients.length > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-[#555A60] text-sm">
-            Showing {startIndex + 1} to {Math.min(endIndex, filteredClients.length)} of {filteredClients.length} clients
-            {filteredClients.length !== clients.length && ` (filtered from ${clients.length} total)`}
+            {t('clients.showing')} {startIndex + 1} {t('clients.to')} {Math.min(endIndex, filteredClients.length)} {t('clients.of')} {filteredClients.length} {t('clients.clients')}
+            {filteredClients.length !== clients.length && ` (${t('clients.filteredFrom')} ${clients.length} ${t('clients.total')})`}
           </p>
           
           <PaginationWithLinks
@@ -716,13 +724,13 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
             <div className="p-6">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#1E2025]">Filters</h2>
-                  <p className="text-sm text-[#555A60] mt-1">Filter clients by date and order count</p>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">{t('clients.filtersTitle')}</h2>
+                  <p className="text-sm text-[#555A60] mt-1">{t('clients.filtersDescription')}</p>
                 </div>
                 <button
                   onClick={() => setFiltersOpen(false)}
-                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
-                  aria-label="Close"
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors cursor-pointer"
+                  aria-label={t('common.close')}
                 >
                   <XIcon size={18} />
                 </button>
@@ -731,11 +739,11 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
               <div className="space-y-8">
                 {/* Date Filter */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Last Order Date Range</Label>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.lastOrderDateRange')}</Label>
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="date-from" className="text-xs font-medium text-[#555A60]">
-                        From Date
+                        {t('clients.fromDate')}
                       </Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -747,7 +755,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                             {dateFilter.from ? (
                               formatDate(new Date(dateFilter.from))
                             ) : (
-                              <span className="text-[#7C8085]">Pick a date</span>
+                              <span className="text-[#7C8085]">{t('clients.pickDate')}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -767,7 +775,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="date-to" className="text-xs font-medium text-[#555A60]">
-                        To Date
+                        {t('clients.toDate')}
                       </Label>
                       <Popover>
                         <PopoverTrigger asChild>
@@ -779,7 +787,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                             {dateFilter.to ? (
                               formatDate(new Date(dateFilter.to))
                             ) : (
-                              <span className="text-[#7C8085]">Pick a date</span>
+                              <span className="text-[#7C8085]">{t('clients.pickDate')}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -802,9 +810,9 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setDateFilter({})}
-                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9]"
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
                       >
-                        Clear date filter
+                        {t('clients.clearDateFilter')}
                       </Button>
                     )}
                   </div>
@@ -812,11 +820,11 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                 
                 {/* Orders Count Filter */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Number of Orders</Label>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.numberOfOrders')}</Label>
                   <div className="space-y-3">
                     <div className="space-y-2">
                       <Label htmlFor="orders-min" className="text-xs font-medium text-[#555A60]">
-                        Minimum
+                        {t('clients.minimum')}
                       </Label>
                       <Input
                         id="orders-min"
@@ -833,13 +841,13 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="orders-max" className="text-xs font-medium text-[#555A60]">
-                        Maximum
+                        {t('clients.maximum')}
                       </Label>
                       <Input
                         id="orders-max"
                         type="number"
                         min="0"
-                        placeholder="No limit"
+                        placeholder={t('clients.noLimit')}
                         value={ordersCountFilter.max ?? ''}
                         onChange={(e) => {
                           const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
@@ -853,9 +861,9 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setOrdersCountFilter({})}
-                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9]"
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
                       >
-                        Clear orders filter
+                        {t('clients.clearOrdersFilter')}
                       </Button>
                     )}
                   </div>
@@ -867,9 +875,9 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     <Button
                       variant="outline"
                       onClick={resetFilters}
-                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F] cursor-pointer"
                     >
-                      Reset All Filters
+                      {t('clients.resetAllFilters')}
                     </Button>
                   </div>
                 )}
@@ -896,13 +904,13 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
             <div className="p-6">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#E4E7E7]">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#1E2025]">Column Settings</h2>
-                  <p className="text-sm text-[#555A60] mt-1">Select which columns to display in the table</p>
+                  <h2 className="text-xl font-semibold text-[#1E2025]">{t('clients.columnSettings')}</h2>
+                  <p className="text-sm text-[#555A60] mt-1">{t('clients.columnSettingsDescription')}</p>
                 </div>
                 <button
                   onClick={() => setSettingsOpen(false)}
-                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors"
-                  aria-label="Close"
+                  className="rounded-md p-1.5 text-[#7C8085] hover:text-[#1E2025] hover:bg-[#F7F8F8] transition-colors cursor-pointer"
+                  aria-label={t('common.close')}
                 >
                   <XIcon size={18} />
                 </button>
@@ -911,8 +919,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
               <div className="space-y-6">
                 {/* Column Ordering */}
                 <div className="space-y-3">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Column Order</Label>
-                  <p className="text-xs text-[#555A60]">Drag columns to reorder them</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.columnOrder')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('clients.columnOrderDescription')}</p>
                   <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
                     {columnOrder.map((columnKey) => {
                       const isRequired = columnKey === 'clientId';
@@ -962,7 +970,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                             }`}
                           >
                             {columnLabels[columnKey]}
-                            {isRequired && <span className="ml-2 text-xs text-[#7C8085]">(required)</span>}
+                            {isRequired && <span className="ml-2 text-xs text-[#7C8085]">({t('clients.required')})</span>}
                           </Label>
                         </div>
                       );
@@ -972,12 +980,12 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                 
                 {/* Sorting Settings */}
                 <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Sort By</Label>
-                  <p className="text-xs text-[#555A60]">Choose how to sort the clients</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.sortBy')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('clients.sortByDescription')}</p>
                   <div className="space-y-3">
                     <div className="space-y-2">
                       <Label htmlFor="sort-field" className="text-xs font-medium text-[#555A60]">
-                        Sort Field
+                        {t('clients.sortField')}
                       </Label>
                       <Select value={sortBy} onValueChange={(value) => setSortBy(value as ColumnKey)}>
                         <SelectTrigger id="sort-field" className="w-full">
@@ -994,15 +1002,15 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="sort-direction" className="text-xs font-medium text-[#555A60]">
-                        Sort Direction
+                        {t('clients.sortDirectionLabel')}
                       </Label>
                       <Select value={sortDirection} onValueChange={(value) => setSortDirection(value as 'asc' | 'desc')}>
                         <SelectTrigger id="sort-direction" className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="asc">Ascending</SelectItem>
-                          <SelectItem value="desc">Descending</SelectItem>
+                          <SelectItem value="asc">{t('clients.ascending')}</SelectItem>
+                          <SelectItem value="desc">{t('clients.descending')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1011,8 +1019,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                 
                 {/* Pagination Settings */}
                 <div className="space-y-3 pt-4 border-t border-[#E4E7E7]">
-                  <Label className="text-sm font-semibold text-[#1E2025]">Items Per Page</Label>
-                  <p className="text-xs text-[#555A60]">Select how many clients to display per page</p>
+                  <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.itemsPerPage')}</Label>
+                  <p className="text-xs text-[#555A60]">{t('clients.itemsPerPageDescription')}</p>
                   <div className="grid grid-cols-4 gap-2">
                     {[10, 25, 50, 100].map((size) => (
                       <Button
@@ -1020,7 +1028,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                         variant={itemsPerPage === size ? "default" : "outline"}
                         size="sm"
                         onClick={() => setItemsPerPage(size)}
-                        className={itemsPerPage === size ? "bg-[#1F744F] hover:bg-[#165B3C] text-white" : ""}
+                        className={`cursor-pointer ${itemsPerPage === size ? "bg-[#1F744F] hover:bg-[#165B3C] text-white" : ""}`}
                       >
                         {size}
                       </Button>
@@ -1036,7 +1044,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                       onClick={resetCustomizations}
                       className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
                     >
-                      Reset All Custom Settings
+                      {t('clients.resetAllCustomSettings')}
                     </Button>
                   </div>
                 )}

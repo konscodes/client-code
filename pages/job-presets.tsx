@@ -1,7 +1,9 @@
 // Job presets page - manage preset bundles of jobs
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
-import { formatDate, generateId } from '../lib/utils';
+import { useFormatting } from '../lib/use-formatting';
+import { generateId } from '../lib/utils';
 import { Plus, Edit, Trash2, Layers } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -22,6 +24,8 @@ interface JobPresetsProps {
 }
 
 export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
+  const { t } = useTranslation();
+  const { formatDate } = useFormatting();
   const { jobPresets, jobTemplates, addJobPreset, updateJobPreset, deleteJobPreset } = useApp();
   const [editingPreset, setEditingPreset] = useState<JobPreset | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -80,13 +84,13 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
   
   const handleSave = async () => {
     if (!formData.name || !formData.category) {
-      toast.error('Please fill in all required fields');
+      toast.error(t('jobPresets.fillRequiredFields'));
       return;
     }
     
     if (editingPreset) {
       await updateJobPreset(editingPreset.id, formData);
-      toast.success('Preset updated');
+      toast.success(t('jobPresets.savedSuccessfully'));
     } else {
       const newPreset: JobPreset = {
         id: generateId('preset'),
@@ -97,16 +101,16 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
         lastUpdated: new Date(),
       };
       await addJobPreset(newPreset);
-      toast.success('Preset created');
+      toast.success(t('jobPresets.savedSuccessfully'));
     }
     
     handleClose();
   };
   
   const handleDelete = (preset: JobPreset) => {
-    if (confirm(`Are you sure you want to delete "${preset.name}"?`)) {
+    if (confirm(t('jobPresets.deleteConfirm'))) {
       deleteJobPreset(preset.id);
-      toast.success('Preset deleted');
+      toast.success(t('jobPresets.deletedSuccessfully'));
     }
   };
   
@@ -120,7 +124,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
         >
           <Plus size={20} aria-hidden="true" />
           New Preset
@@ -131,12 +135,12 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
       {jobPresets.length === 0 ? (
         <div className="bg-white rounded-xl border border-[#E4E7E7] px-6 py-12 text-center">
           <Layers size={48} className="mx-auto text-[#B5BDB9] mb-4" aria-hidden="true" />
-          <p className="text-[#7C8085] mb-4">No job presets yet</p>
-          <button
-            onClick={handleOpenCreate}
-            className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-          >
-            Create your first preset
+          <p className="text-[#7C8085] mb-4">{t('jobPresets.noPresets')}</p>
+            <button
+              onClick={handleOpenCreate}
+              className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
+            >
+            {t('jobPresets.createFirstPreset')}
           </button>
         </div>
       ) : (
@@ -155,24 +159,24 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
                   </span>
                 </div>
                 <div className="flex gap-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenEdit(preset);
-                    }}
-                    className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors"
-                    aria-label={`Edit ${preset.name}`}
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(preset);
-                    }}
-                    className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
-                    aria-label={`Delete ${preset.name}`}
-                  >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(preset);
+                          }}
+                          className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors cursor-pointer"
+                          aria-label={`Edit ${preset.name}`}
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(preset);
+                          }}
+                          className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
+                          aria-label={`Delete ${preset.name}`}
+                        >
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -183,11 +187,11 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
               <div className="pt-4 border-t border-[#E4E7E7]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[#7C8085]">Total Jobs</p>
+                    <p className="text-[#7C8085]">{t('jobPresets.totalJobs')}</p>
                     <p className="text-[#1E2025]">{preset.jobs.length}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[#7C8085]">Updated</p>
+                    <p className="text-[#7C8085]">{t('jobPresets.updated')}</p>
                     <p className="text-[#555A60]">{formatDate(preset.lastUpdated)}</p>
                   </div>
                 </div>
@@ -202,14 +206,14 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
         <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>
-              {editingPreset ? 'Edit Preset' : 'Create Preset'}
+              {editingPreset ? t('jobPresets.editPreset') : t('jobPresets.createPreset')}
             </DialogTitle>
           </DialogHeader>
           
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="presetName">Preset Name *</Label>
+                <Label htmlFor="presetName">{t('jobPresets.presetName')} *</Label>
                 <Input
                   id="presetName"
                   value={formData.name || ''}
@@ -219,7 +223,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="presetCategory">Category *</Label>
+                <Label htmlFor="presetCategory">{t('jobPresets.category')} *</Label>
                 <Input
                   id="presetCategory"
                   value={formData.category || ''}
@@ -230,7 +234,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="presetDescription">Description</Label>
+              <Label htmlFor="presetDescription">{t('jobPresets.description')}</Label>
               <Textarea
                 id="presetDescription"
                 value={formData.description || ''}
@@ -241,14 +245,14 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
             </div>
             
             <div className="space-y-2">
-              <Label>Jobs in Preset</Label>
+              <Label>{t('jobPresets.jobsInPreset')}</Label>
               <p className="text-xs text-[#555A60] mb-3">
-                Jobs are managed from the Job Catalog page. Edit jobs there and select which presets they belong to.
+                {t('jobPresets.jobsInPresetDescription')}
               </p>
               
               {!formData.jobs || formData.jobs.length === 0 ? (
                 <p className="text-[#7C8085] text-center py-6 border border-dashed border-[#E4E7E7] rounded-lg">
-                  No jobs added yet. Go to Job Catalog to add jobs to this preset.
+                  {t('jobPresets.noJobsAdded')}
                 </p>
               ) : (
                 <div className="border border-[#E4E7E7] rounded-lg divide-y divide-[#E4E7E7]">
@@ -263,7 +267,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
                         </div>
                         <div className="flex items-center gap-2">
                           <Label htmlFor={`qty-${presetJob.jobId}`} className="text-[#7C8085] whitespace-nowrap">
-                            Qty:
+                            {t('jobPresets.qty')}:
                           </Label>
                           <Input
                             id={`qty-${presetJob.jobId}`}
@@ -275,7 +279,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
                           />
                           <button
                             onClick={() => handleRemoveJob(presetJob.jobId)}
-                            className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
+                            className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
                             aria-label={`Remove ${job.name}`}
                           >
                             <Trash2 size={16} />
@@ -290,17 +294,17 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
           </div>
           
           <DialogFooter>
-            <button
-              onClick={handleClose}
-              className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-            >
-              {editingPreset ? 'Save Changes' : 'Create Preset'}
+              <button
+                onClick={handleClose}
+                className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
+              >
+                {t('jobPresets.cancel')}
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
+              >
+              {editingPreset ? t('common.saveChanges') : t('jobPresets.createPreset')}
             </button>
           </DialogFooter>
         </DialogContent>

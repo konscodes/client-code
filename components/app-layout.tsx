@@ -1,12 +1,12 @@
 // Main application layout with sidebar and header
 import { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   LayoutDashboard, 
   Users, 
   FileText, 
   Briefcase, 
   Layers, 
-  FileStack, 
   Settings,
   LogOut
 } from 'lucide-react';
@@ -19,18 +19,18 @@ interface AppLayoutProps {
   onNavigate: (page: string) => void;
 }
 
-const navigationItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'clients', label: 'Clients', icon: Users },
-  { id: 'orders', label: 'Orders', icon: FileText },
-  { id: 'job-catalog', label: 'Job Catalog', icon: Briefcase },
-  { id: 'presets', label: 'Presets', icon: Layers },
-  { id: 'templates', label: 'Templates', icon: FileStack },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
-
 export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps) {
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
+  
+  const navigationItems = [
+    { id: 'dashboard', label: t('navigation.dashboard'), icon: LayoutDashboard },
+    { id: 'clients', label: t('navigation.clients'), icon: Users },
+    { id: 'orders', label: t('navigation.orders'), icon: FileText },
+    { id: 'job-catalog', label: t('navigation.jobCatalog'), icon: Briefcase },
+    { id: 'presets', label: t('navigation.presets'), icon: Layers },
+    { id: 'settings', label: t('navigation.settings'), icon: Settings },
+  ];
   
   const handleLogout = async () => {
     await signOut();
@@ -53,7 +53,7 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
         {/* Logo/Brand */}
         <div className="p-6 border-b border-[#E4E7E7]">
           <h1 className="text-[#1E2025]">
-            Premium Welding
+            {t('common.logo')}
           </h1>
         </div>
         
@@ -68,7 +68,7 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
                 <li key={item.id}>
                   <button
                     onClick={() => onNavigate(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                       isActive 
                         ? 'bg-[#E8F5E9] text-[#1F744F]' 
                         : 'text-[#555A60] hover:bg-[#F2F4F4]'
@@ -102,7 +102,7 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
             className="w-full justify-start text-[#555A60] hover:text-[#1E2025] hover:bg-[#F2F4F4]"
           >
             <LogOut size={16} className="mr-2" />
-            Sign Out
+            {t('common.signOut')}
           </Button>
         </div>
       </aside>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "./utils";
 
@@ -17,6 +18,7 @@ export function PaginationWithLinks({
   onPageChange,
   className,
 }: PaginationWithLinksProps) {
+  const { t } = useTranslation();
   const totalPages = Math.ceil(totalCount / pageSize);
   
   if (totalPages <= 1) {
@@ -79,15 +81,16 @@ export function PaginationWithLinks({
         onClick={() => handlePageChange(page - 1)}
         disabled={page <= 1}
         className={cn(
+          "cursor-pointer",
           "flex items-center gap-1 px-3 py-2 text-sm text-[#555A60] rounded-md transition-colors",
           "hover:bg-[#F7F8F8] hover:text-[#1E2025]",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent",
           page <= 1 && "opacity-50 cursor-not-allowed"
         )}
-        aria-label="Go to previous page"
+        aria-label={t('common.goToPreviousPage')}
       >
         <ChevronLeft size={16} />
-        <span>Previous</span>
+        <span>{t('common.previous')}</span>
       </button>
 
       {/* Page Numbers */}
@@ -112,12 +115,12 @@ export function PaginationWithLinks({
               key={pageNum}
               onClick={() => handlePageChange(pageNum)}
               className={cn(
-                "flex items-center justify-center min-w-[36px] h-9 px-3 text-sm rounded-md transition-colors",
+                "flex items-center justify-center min-w-[36px] h-9 px-3 text-sm rounded-md transition-colors cursor-pointer",
                 isActive
                   ? "bg-[#E4E7E7] text-[#1E2025] font-medium"
                   : "text-[#555A60] hover:bg-[#F7F8F8] hover:text-[#1E2025]"
               )}
-              aria-label={`Go to page ${pageNum}`}
+              aria-label={t('common.goToPage', { page: pageNum })}
               aria-current={isActive ? "page" : undefined}
             >
               {pageNum}
@@ -131,14 +134,15 @@ export function PaginationWithLinks({
         onClick={() => handlePageChange(page + 1)}
         disabled={page >= totalPages}
         className={cn(
+          "cursor-pointer",
           "flex items-center gap-1 px-3 py-2 text-sm text-[#555A60] rounded-md transition-colors",
           "hover:bg-[#F7F8F8] hover:text-[#1E2025]",
           "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent",
           page >= totalPages && "opacity-50 cursor-not-allowed"
         )}
-        aria-label="Go to next page"
+        aria-label={t('common.goToNextPage')}
       >
-        <span>Next</span>
+        <span>{t('common.next')}</span>
         <ChevronRight size={16} />
       </button>
     </nav>

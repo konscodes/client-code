@@ -1,10 +1,10 @@
 // Order detail page - create and manage orders with job line items
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
+import { useFormatting } from '../lib/use-formatting';
 import { StatusPill } from '../components/status-pill';
 import { 
-  formatCurrency, 
-  formatDate,
   calculateLineTotal,
   getOrderTotals,
   generateOrderId,
@@ -45,7 +45,9 @@ interface OrderDetailProps {
 }
 
 export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
+  const { t } = useTranslation();
   const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder } = useApp();
+  const { formatCurrency, formatDate } = useFormatting();
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [generatingPO, setGeneratingPO] = useState(false);
   
@@ -268,7 +270,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         <p className="text-[#7C8085] mb-4">Order not found</p>
         <button
           onClick={() => onNavigate('orders')}
-          className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
         >
           Back to Orders
         </button>
@@ -283,7 +285,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         <div className="flex items-center gap-4">
           <button
             onClick={() => onNavigate('orders')}
-            className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors"
+            className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
             aria-label="Back to orders"
           >
             <ArrowLeft size={20} />
@@ -332,10 +334,10 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
         >
           <Save size={20} aria-hidden="true" />
-          {isNewOrder ? 'Create Order' : 'Save Changes'}
+          {isNewOrder ? t('orderDetail.createOrder') : t('common.saveChanges')}
         </button>
       </div>
       
@@ -344,16 +346,16 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         <div className="lg:col-span-2 space-y-6">
           {/* Order Info Card */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-4">Order Information</h2>
+            <h2 className="text-[#1E2025] mb-4">{t('orderDetail.orderInformation')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="client">Client *</Label>
+                <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
                 <Select
                   value={formData.clientId || ''}
                   onValueChange={(value) => setFormData({ ...formData, clientId: value })}
                 >
                   <SelectTrigger id="client">
-                    <SelectValue placeholder="Select a client" />
+                    <SelectValue placeholder={t('orderDetail.selectClient')} />
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map(client => (
@@ -366,7 +368,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
+                <Label htmlFor="status">{t('orderDetail.status')}</Label>
                 <Select
                   value={formData.status || 'draft'}
                   onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
@@ -375,34 +377,34 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="billed">Billed</SelectItem>
+                    <SelectItem value="draft">{t('orders.draft')}</SelectItem>
+                    <SelectItem value="approved">{t('orders.approved')}</SelectItem>
+                    <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                    <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                    <SelectItem value="billed">{t('orders.billed')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notesInternal">Internal Notes</Label>
+                <Label htmlFor="notesInternal">{t('orderDetail.notesInternal')}</Label>
                 <Textarea
                   id="notesInternal"
                   value={formData.notesInternal || ''}
                   onChange={(e) => setFormData({ ...formData, notesInternal: e.target.value })}
                   rows={2}
-                  placeholder="Notes for internal use only..."
+                  placeholder={t('orderDetail.notesInternalPlaceholder')}
                 />
               </div>
               
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notesPublic">Client-Visible Notes</Label>
+                <Label htmlFor="notesPublic">{t('orderDetail.notesPublic')}</Label>
                 <Textarea
                   id="notesPublic"
                   value={formData.notesPublic || ''}
                   onChange={(e) => setFormData({ ...formData, notesPublic: e.target.value })}
                   rows={2}
-                  placeholder="Notes that will appear on invoices..."
+                  placeholder={t('orderDetail.notesPublicPlaceholder')}
                 />
               </div>
             </div>
@@ -411,7 +413,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
           {/* Line Items */}
           <div className="bg-white rounded-xl border border-[#E4E7E7]">
             <div className="px-6 py-4 border-b border-[#E4E7E7] flex items-center justify-between">
-              <h2 className="text-[#1E2025]">Line Items</h2>
+              <h2 className="text-[#1E2025]">{t('orderDetail.lineItems')}</h2>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -427,7 +429,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                   className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
                 >
                   <Layers size={18} aria-hidden="true" />
-                  Add Preset
+                  {t('orderDetail.addPreset')}
                 </button>
                 <button
                   onClick={() => {
@@ -443,7 +445,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                   className="flex items-center gap-2 px-3 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                 >
                   <Plus size={18} aria-hidden="true" />
-                  Add Job
+                  {t('orderDetail.addJob')}
                 </button>
               </div>
             </div>
@@ -451,7 +453,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             {/* Job Picker */}
             {showJobPicker && (
               <div className="px-6 py-4 border-b border-[#E4E7E7] bg-[#F7F8F8]">
-                <h3 className="text-[#555A60] mb-3">Select a job to add:</h3>
+                <h3 className="text-[#555A60] mb-3">{t('orderDetail.selectJobToAdd')}</h3>
                 <div className="relative mb-3">
                   <Search 
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
@@ -460,17 +462,17 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                   />
                   <Input
                     type="search"
-                    placeholder="Search jobs by name, description, or category..."
+                    placeholder={t('orderDetail.searchJobsPlaceholder')}
                     value={jobSearchQuery}
                     onChange={(e) => setJobSearchQuery(e.target.value)}
                     className="pl-10"
-                    aria-label="Search jobs"
+                    aria-label={t('orderDetail.searchJobsLabel')}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                   {filteredJobs.length === 0 ? (
                     <div className="col-span-2 text-center py-4 text-[#7C8085]">
-                      {jobSearchQuery.trim() ? 'No jobs found matching your search' : 'Start typing to search for jobs'}
+                      {jobSearchQuery.trim() ? t('orderDetail.noJobsFound') : t('orderDetail.startTypingToSearch')}
                     </div>
                   ) : (
                     filteredJobs.map(job => (
@@ -481,11 +483,11 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                           setShowJobPicker(false);
                           setJobSearchQuery('');
                         }}
-                        className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left"
+                        className="p-3 bg-white rounded-lg border border-[#E4E7E7] hover:border-[#1F744F] transition-colors text-left cursor-pointer"
                       >
                         <p className="text-[#1E2025] mb-1">{job.name}</p>
                         <p className="text-[#1F744F]">
-                          {formatCurrency(job.unitPrice)} / {job.unitOfMeasure}
+                          {formatCurrency(job.unitPrice, formData.currency)} / {job.unitOfMeasure}
                         </p>
                       </button>
                     ))
@@ -497,7 +499,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             {/* Preset Picker */}
             {showPresetPicker && (
               <div className="px-6 py-4 border-b border-[#E4E7E7] bg-[#F7F8F8]">
-                <h3 className="text-[#555A60] mb-3">Select a preset to add:</h3>
+                <h3 className="text-[#555A60] mb-3">{t('orderDetail.selectPresetToAdd')}</h3>
                 <div className="relative mb-3">
                   <Search 
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
@@ -506,17 +508,17 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                   />
                   <Input
                     type="search"
-                    placeholder="Search presets by name, description, or category..."
+                    placeholder={t('orderDetail.searchPresetsPlaceholder')}
                     value={presetSearchQuery}
                     onChange={(e) => setPresetSearchQuery(e.target.value)}
                     className="pl-10"
-                    aria-label="Search presets"
+                    aria-label={t('orderDetail.searchPresetsLabel')}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
                   {filteredPresets.length === 0 ? (
                     <div className="col-span-2 text-center py-4 text-[#7C8085]">
-                      {presetSearchQuery.trim() ? 'No presets found matching your search' : 'No presets available'}
+                      {presetSearchQuery.trim() ? t('orderDetail.noPresetsFound') : t('orderDetail.noPresetsAvailable')}
                     </div>
                   ) : (
                     filteredPresets.map(preset => (
@@ -531,7 +533,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                       >
                         <p className="text-[#1E2025] mb-1">{preset.name}</p>
                         <p className="text-[#7C8085] mb-1 line-clamp-2">{preset.description}</p>
-                        <p className="text-[#555A60]">{preset.jobs.length} jobs</p>
+                        <p className="text-[#555A60]">{preset.jobs.length} {t('orderDetail.jobsCount')}</p>
                       </button>
                     ))
                   )}
@@ -542,8 +544,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             {/* Line Items Table */}
             {!formData.jobs || formData.jobs.length === 0 ? (
               <div className="px-6 py-12 text-center">
-                <p className="text-[#7C8085] mb-4">No line items yet</p>
-                <p className="text-[#7C8085]">Add jobs from the catalog or use a preset to get started</p>
+                <p className="text-[#7C8085] mb-4">{t('orderDetail.noLineItems')}</p>
+                <p className="text-[#7C8085]">{t('orderDetail.noLineItemsDescription')}</p>
               </div>
             ) : (
               <div className="overflow-x-auto relative">
@@ -599,14 +601,14 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                                 />
                                 <button
                                   onClick={() => handleSaveJobName(job.id)}
-                                  className="p-1.5 text-[#1F744F] hover:bg-[#E8F5E9] rounded transition-colors"
+                                  className="p-1.5 text-[#1F744F] hover:bg-[#E8F5E9] rounded transition-colors cursor-pointer"
                                   aria-label="Save"
                                 >
                                   <Check size={16} />
                                 </button>
                                 <button
                                   onClick={handleCancelEditJobName}
-                                  className="p-1.5 text-[#7C8085] hover:bg-[#F7F8F8] rounded transition-colors"
+                                  className="p-1.5 text-[#7C8085] hover:bg-[#F7F8F8] rounded transition-colors cursor-pointer"
                                   aria-label="Cancel"
                                 >
                                   <X size={16} />
@@ -622,8 +624,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                                 </p>
                                 <button
                                   onClick={() => handleStartEditJobName(job.id)}
-                                  className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-[#F7F8F8] rounded transition-all"
-                                  aria-label="Edit job name"
+                                  className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-[#F7F8F8] rounded transition-all cursor-pointer"
+                                  aria-label={t('orderDetail.editJobName')}
                                 >
                                   <Edit2 size={14} />
                                 </button>
@@ -670,7 +672,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                             />
                           </td>
                           <td className="px-6 py-4 text-right border-b border-[#E4E7E7]">
-                            <p className="text-[#1E2025]">{formatCurrency(lineTotal)}</p>
+                            <p className="text-[#1E2025]">{formatCurrency(lineTotal, formData.currency)}</p>
                           </td>
                           <td 
                             className="px-6 py-4 text-right border-b border-[#E4E7E7] sticky right-0 z-10 border-l border-[#E4E7E7] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]"
@@ -686,14 +688,14 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => handleDuplicateJob(job.id)}
-                                className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors"
+                                className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors cursor-pointer"
                                 aria-label={`Duplicate ${job.jobName}`}
                               >
                                 <Copy size={18} />
                               </button>
                               <button
                                 onClick={() => handleRemoveJob(job.id)}
-                                className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
+                                className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
                                 aria-label={`Remove ${job.jobName}`}
                               >
                                 <Trash2 size={18} />
@@ -714,10 +716,10 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         <div className="space-y-6">
           {/* Markup Controls */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">Markup & Tax</h3>
+            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.markupAndTax')}</h3>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="globalMarkup">Global Markup %</Label>
+                <Label htmlFor="globalMarkup">{t('orderDetail.globalMarkup')}</Label>
                 <Input
                   id="globalMarkup"
                   type="number"
@@ -736,11 +738,11 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                 className="w-full px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
                 disabled={!formData.jobs || formData.jobs.length === 0}
               >
-                Apply to All Jobs
+                {t('orderDetail.applyToAllJobs')}
               </button>
               
               <div className="space-y-2">
-                <Label htmlFor="taxRate">Tax Rate %</Label>
+                <Label htmlFor="taxRate">{t('orderDetail.taxRate')}</Label>
                 <Input
                   id="taxRate"
                   type="number"
@@ -758,20 +760,20 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
           
           {/* Pricing Summary */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">Order Summary</h3>
+            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.orderSummary')}</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[#555A60]">
-                <span>Subtotal</span>
-                <span>{formatCurrency(totals.subtotal)}</span>
+                <span>{t('orderDetail.subtotal')}</span>
+                <span>{formatCurrency(totals.subtotal, formData.currency)}</span>
               </div>
               <div className="flex items-center justify-between text-[#555A60]">
-                <span>Tax ({formData.taxRate}%)</span>
-                <span>{formatCurrency(totals.tax)}</span>
+                <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
+                <span>{formatCurrency(totals.tax, formData.currency)}</span>
               </div>
               <div className="pt-3 border-t border-[#E4E7E7]">
                 <div className="flex items-center justify-between text-[#1E2025]">
-                  <span>Total</span>
-                  <span>{formatCurrency(totals.total)}</span>
+                  <span>{t('orderDetail.total')}</span>
+                  <span>{formatCurrency(totals.total, formData.currency)}</span>
                 </div>
               </div>
             </div>
@@ -779,7 +781,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
           
           {/* Document Generation */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">Documents</h3>
+            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.documents')}</h3>
             <div className="space-y-2">
               <button
                 onClick={async () => {
@@ -822,12 +824,12 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                 {generatingInvoice ? (
                   <>
                     <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                    Generating...
+                    {t('orderDetail.generating')}
                   </>
                 ) : (
                   <>
                     <FileText size={18} aria-hidden="true" />
-                    Generate Invoice
+                    {t('orderDetail.generateInvoice')}
                   </>
                 )}
               </button>
@@ -872,12 +874,12 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                 {generatingPO ? (
                   <>
                     <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                    Generating...
+                    {t('orderDetail.generating')}
                   </>
                 ) : (
                   <>
                     <FileText size={18} aria-hidden="true" />
-                    Generate PO
+                    {t('orderDetail.generatePO')}
                   </>
                 )}
               </button>

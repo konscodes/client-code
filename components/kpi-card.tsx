@@ -38,7 +38,7 @@ export function KPICard({ title, value, icon: Icon, trend, onClick }: KPICardPro
     return (
       <button
         onClick={onClick}
-        className="bg-white rounded-xl border border-[#E4E7E7] p-6 text-left hover:shadow-sm transition-shadow w-full"
+        className="bg-white rounded-xl border border-[#E4E7E7] p-6 text-left hover:shadow-sm transition-shadow w-full cursor-pointer"
       >
         {content}
       </button>

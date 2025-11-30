@@ -25,6 +25,11 @@ servicemk3.xml
 # Supabase local files
 .supabase
 
+# Python service
+python-service/venv/
+python-service/__pycache__/
+python-service/*.pyc
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

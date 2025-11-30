@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Rea
 import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings, DocumentTemplate } from './types';
 import { supabase } from './supabase';
 import { normalizePhoneNumber } from './utils';
+import { localeToLanguage } from './i18n';
 
 interface AppContextType {
   clients: Client[];
@@ -300,7 +301,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw err;
     }
     if (data) {
-      setCompanySettings(dbRowToCompanySettings(data));
+      const settings = dbRowToCompanySettings(data);
+      setCompanySettings(settings);
+      
+      // Update i18n language when settings are loaded
+      if (typeof window !== 'undefined') {
+        const { default: i18n } = await import('./i18n');
+        i18n.changeLanguage(localeToLanguage(settings.locale));
+      }
     }
   }, []);
 
@@ -606,6 +614,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     
     if (err) throw err;
+    
+    // Update i18n language if locale changed
+    if (updates.locale && typeof window !== 'undefined') {
+      const { default: i18n } = await import('./i18n');
+      i18n.changeLanguage(localeToLanguage(updates.locale));
+    }
+    
     await refreshCompanySettings();
   }, [companySettings, refreshCompanySettings]);
 

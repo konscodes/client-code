@@ -1,23 +1,35 @@
 // Utility functions for the application
 import type { Order, OrderJob, Client } from './types';
 
-export function formatCurrency(amount: number, currency: string = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(
+  amount: number, 
+  currency?: string, 
+  locale?: string
+): string {
+  // Default to USD and en-US if not provided
+  const finalCurrency = currency || 'USD';
+  const finalLocale = locale || 'en-US';
+  
+  return new Intl.NumberFormat(finalLocale, {
     style: 'currency',
-    currency,
+    currency: finalCurrency,
   }).format(amount);
 }
 
-export function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
+export function formatDate(date: Date, locale?: string): string {
+  const finalLocale = locale || 'en-US';
+  
+  return new Intl.DateTimeFormat(finalLocale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(date);
 }
 
-export function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
+export function formatDateTime(date: Date, locale?: string): string {
+  const finalLocale = locale || 'en-US';
+  
+  return new Intl.DateTimeFormat(finalLocale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -210,4 +222,29 @@ export function isValidEmail(email: string | null | undefined): boolean {
   // RFC 5322 compliant regex (simplified version)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email.trim());
+}
+
+/**
+ * Generates a document number (invoice or PO) based on prefix, order ID, and date
+ * Format: {prefix}-{year}-{sequential}
+ * Sequential is derived from order ID to ensure consistency
+ * 
+ * @param prefix - Document prefix (e.g., "INV", "PO")
+ * @param orderId - Order ID to derive sequential number from
+ * @param createdAt - Order creation date
+ * @returns Formatted document number (e.g., "INV-2025-001")
+ */
+export function generateDocumentNumber(
+  prefix: string,
+  orderId: string,
+  createdAt: Date
+): string {
+  const year = createdAt.getFullYear();
+  
+  // Extract numeric portion from order ID for sequential number
+  // This ensures the same order always gets the same document number
+  const orderNumeric = extractIdNumbers(orderId);
+  const sequential = orderNumeric.slice(-3).padStart(3, '0');
+  
+  return `${prefix}-${year}-${sequential}`;
 }
