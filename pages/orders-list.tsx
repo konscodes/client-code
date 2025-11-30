@@ -24,7 +24,7 @@ interface OrdersListProps {
   onNavigate: (page: string, id?: string) => void;
 }
 
-type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'internalNotes' | 'visibleNotes';
+type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle';
 
 export function OrdersList({ onNavigate }: OrdersListProps) {
   const { t } = useTranslation();
@@ -54,8 +54,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     jobs: true,
     total: true,
     subtotal: false,
-    internalNotes: false,
-    visibleNotes: false,
+    orderType: false,
+    orderTitle: false,
   };
   
   const defaultColumnOrder: ColumnKey[] = [
@@ -66,8 +66,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     'jobs',
     'total',
     'subtotal',
-    'internalNotes',
-    'visibleNotes',
+    'orderType',
+    'orderTitle',
   ];
   
   // Load from localStorage on mount
@@ -200,7 +200,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
         order.id.toLowerCase().includes(query) ||
         client?.name.toLowerCase().includes(query) ||
         client?.company.toLowerCase().includes(query) ||
-        order.notesInternal.toLowerCase().includes(query);
+        order.orderType.toLowerCase().includes(query) ||
+        order.orderTitle.toLowerCase().includes(query);
       
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       
@@ -328,8 +329,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     jobs: t('orders.jobs'),
     total: t('orders.total'),
     subtotal: t('orders.subtotal'),
-    internalNotes: t('orders.internalNotes'),
-    visibleNotes: t('orders.visibleNotes'),
+    orderType: t('orders.orderType'),
+    orderTitle: t('orders.orderTitle'),
   };
   
   // Helper function to render table header
@@ -363,9 +364,12 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
         className={`px-6 py-3 border-b border-[#E4E7E7] ${
           isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : 'text-left'
         } text-[#555A60] ${
-          isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''
+          isFirstColumn ? 'sticky left-0 z-10' : ''
         }`}
-        style={Object.keys(headerStyle).length > 0 ? headerStyle : undefined}
+        style={isFirstColumn ? {
+          ...headerStyle,
+          background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+        } : (Object.keys(headerStyle).length > 0 ? headerStyle : undefined)}
       >
         {columnLabels[columnKey]}
       </th>
@@ -387,13 +391,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
             <p className="text-[#1E2025]">{extractIdNumbers(order.id)}</p>
@@ -404,13 +408,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
             <p className="text-[#1E2025]">{client?.company}</p>
@@ -424,13 +428,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : { minWidth: '150px' }}
           >
             <p className="text-[#555A60]">{formatDate(order.createdAt)}</p>
@@ -441,13 +445,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
             <StatusPill status={order.status} />
@@ -458,13 +462,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] text-center ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] text-center ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : { minWidth: '100px' }}
           >
             <p className="text-[#555A60] whitespace-nowrap">{order.jobs.length}</p>
@@ -475,13 +479,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
             <p className="text-[#1E2025]">{formatCurrency(total)}</p>
@@ -492,50 +496,50 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
             <p className="text-[#1E2025]">{formatCurrency(subtotal)}</p>
           </td>
         );
-      case 'internalNotes':
+      case 'orderType':
         return (
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
-            <p className="text-[#1E2025] line-clamp-2">{order.notesInternal || '-'}</p>
+            <p className="text-[#1E2025] line-clamp-2">{order.orderType || '-'}</p>
           </td>
         );
-      case 'visibleNotes':
+      case 'orderTitle':
         return (
           <td 
             key={columnKey}
             data-sticky={isFirstColumn ? 'true' : undefined}
-            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
             style={isFirstColumn ? { 
               position: 'sticky', 
               left: 0, 
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
-              backgroundColor: 'white'
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
-            <p className="text-[#1E2025] line-clamp-2">{order.notesPublic || '-'}</p>
+            <p className="text-[#1E2025] line-clamp-2">{order.orderTitle || '-'}</p>
           </td>
         );
       default:
@@ -645,16 +649,22 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                         jobs: 'w-16',
                         total: 'w-20',
                         subtotal: 'w-20',
-                        internalNotes: 'w-32',
-                        visibleNotes: 'w-32',
+                        orderType: 'w-32',
+                        orderTitle: 'w-32',
                       };
                       return (
                         <td 
                           key={col} 
                           className={`px-6 py-4 border-b border-[#E4E7E7] ${
                             isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : ''
-                          } ${isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''}`}
-                          style={isFirstColumn ? { position: 'sticky', left: 0, zIndex: (filtersOpen || settingsOpen) ? 0 : 10, minWidth: '150px' } : undefined}
+                          } ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
+                          style={isFirstColumn ? { 
+                            position: 'sticky', 
+                            left: 0, 
+                            zIndex: (filtersOpen || settingsOpen) ? 0 : 10, 
+                            minWidth: '150px',
+                            background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+                          } : undefined}
                         >
                           <Skeleton className={`h-4 ${skeletonWidths[col]} ${isRightAlign ? 'ml-auto' : isCenterAlign ? 'mx-auto' : ''}`} />
                         </td>
@@ -702,13 +712,13 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                       onMouseEnter={(e) => {
                         const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
                         if (stickyCell) {
-                          stickyCell.style.backgroundColor = '#F7F8F8';
+                          stickyCell.style.background = 'linear-gradient(to left, rgba(247,248,248,0) 0%, rgba(247,248,248,1) 20px, rgba(247,248,248,1) 100%)';
                         }
                       }}
                       onMouseLeave={(e) => {
                         const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
                         if (stickyCell) {
-                          stickyCell.style.backgroundColor = 'white';
+                          stickyCell.style.background = 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)';
                         }
                       }}
                     >

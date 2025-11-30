@@ -115,8 +115,8 @@ async function dbRowToOrder(row: any): Promise<Order> {
     taxRate: parseFloat(row.taxRate),
     globalMarkup: parseFloat(row.globalMarkup),
     currency: row.currency,
-    notesInternal: row.notesInternal || '',
-    notesPublic: row.notesPublic || '',
+    orderType: row.orderType || '',
+    orderTitle: row.orderTitle || '',
     jobs,
   };
 }
@@ -390,8 +390,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         taxRate: order.taxRate,
         globalMarkup: order.globalMarkup,
         currency: order.currency,
-        notesInternal: order.notesInternal,
-        notesPublic: order.notesPublic,
+        orderType: order.orderType,
+        orderTitle: order.orderTitle,
       });
     
     if (orderErr) throw orderErr;

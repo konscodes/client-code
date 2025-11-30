@@ -215,8 +215,8 @@
     "jobs": "Jobs",
     "total": "Total",
     "subtotal": "Subtotal",
-    "internalNotes": "Internal Notes",
-    "visibleNotes": "Visible Notes",
+    "orderType": "Order Type",
+    "orderTitle": "Order Title",
     "noOrders": "No orders found",
     "createFirstOrder": "Create your first order",
     "searchPlaceholder": "Search orders by ID, client name, or notes...",
@@ -272,10 +272,10 @@
     "currency": "Currency",
     "taxRate": "Tax Rate (%)",
     "globalMarkup": "Global Markup (%)",
-    "notesInternal": "Internal Notes",
-    "notesInternalPlaceholder": "Notes for internal use only...",
-    "notesPublic": "Client-Visible Notes",
-    "notesPublicPlaceholder": "Notes that will appear on invoices...",
+    "orderType": "Order Type",
+    "orderTypePlaceholder": "Select order type...",
+    "orderTitle": "Order Title",
+    "orderTitlePlaceholder": "Enter order title...",
     "lineItems": "Line Items",
     "addJob": "Add Job",
     "addPreset": "Add Preset",
@@ -405,6 +405,11 @@
     "addFirstPreset": "Add your first preset",
     "selectJob": "Select a job to add:",
     "noJobsFound": "No jobs found matching your search"
+  },
+  "orderTypes": {
+    "Поставка": "Supply/Delivery",
+    "Ремонтные работы": "Repair work",
+    "Оказание иных услуг": "Provision of other services"
   },
   "documentTemplates": {
     "title": "Document Templates",

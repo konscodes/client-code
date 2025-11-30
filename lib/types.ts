@@ -55,8 +55,8 @@ export interface Order {
   taxRate: number;
   globalMarkup: number;
   currency: string;
-  notesInternal: string;
-  notesPublic: string;
+  orderType: string;
+  orderTitle: string;
   jobs: OrderJob[];
 }
 

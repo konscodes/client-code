@@ -66,7 +66,7 @@ export function Settings({ onNavigate }: SettingsProps) {
         {hasChanges && (
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors whitespace-nowrap"
           >
             <Save size={20} aria-hidden="true" />
             {t('common.saveChanges')}

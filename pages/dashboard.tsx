@@ -27,14 +27,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     const awaitingInvoice = orders.filter(o => o.status === 'completed').length;
     const draftOrders = orders.filter(o => o.status === 'draft').length;
     
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
+    // Calculate month revenue for current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    
     const monthRevenue = orders
       .filter(o => {
-        const orderDate = new Date(o.createdAt);
+        // Ensure createdAt is a Date object
+        const orderDate = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
+        
+        // Check if order is in current month and has correct status
         return (o.status === 'completed' || o.status === 'billed') &&
-               orderDate.getMonth() === currentMonth &&
-               orderDate.getFullYear() === currentYear;
+               orderDate >= startOfMonth &&
+               orderDate < startOfNextMonth;
       })
       .reduce((sum, order) => sum + calculateOrderTotal(order), 0);
     
@@ -171,7 +177,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                       <div className="flex items-center justify-between mb-2">
                         <div>
                           <p className="text-[#1E2025] mb-1">{order.id}</p>
-                          <p className="text-[#7C8085]">{client?.name || 'Unknown Client'}</p>
+                          <p className="text-[#7C8085]">{order.orderTitle || '-'}</p>
                         </div>
                         <StatusPill status={order.status} />
                       </div>
@@ -242,8 +248,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <p className="text-[#1E2025] mb-1">{client.name}</p>
-                          <p className="text-[#7C8085]">{client.company}</p>
+                          <p className="text-[#1E2025] mb-1">{client.company}</p>
+                          {client.name && client.name !== 'Unknown' && (
+                            <p className="text-[#7C8085]">{client.name}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-[#7C8085]">

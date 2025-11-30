@@ -223,8 +223,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: 'Rush order - customer needs by end of week',
-    notesPublic: 'Standard delivery terms apply',
+    orderType: '',
+    orderTitle: 'Standard delivery terms apply',
     jobs: [
       {
         id: 'oj-1',
@@ -259,8 +259,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 25,
     currency: 'USD',
-    notesInternal: 'Standard job - no special requirements',
-    notesPublic: '',
+    orderType: '',
+    orderTitle: '',
     jobs: [
       {
         id: 'oj-3',
@@ -295,8 +295,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: '',
-    notesPublic: '',
+    orderType: '',
+    orderTitle: '',
     jobs: [
       {
         id: 'oj-5',
@@ -320,8 +320,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 22,
     currency: 'USD',
-    notesInternal: 'Waiting for client to confirm start date',
-    notesPublic: 'Work will commence upon approval',
+    orderType: '',
+    orderTitle: 'Work will commence upon approval',
     jobs: [
       {
         id: 'oj-6',
@@ -356,8 +356,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: 'Invoice sent 10/30',
-    notesPublic: 'Net 30 payment terms',
+    orderType: '',
+    orderTitle: 'Net 30 payment terms',
     jobs: [
       {
         id: 'oj-8',
@@ -382,8 +382,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: '20002 | Поставка',
-    notesPublic: 'Поставка полумесяцев для шредера',
+    orderType: 'Поставка',
+    orderTitle: 'Поставка полумесяцев для шредера',
     jobs: [
       {
         id: 'oj-xml-20002-1',
@@ -407,8 +407,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: '20003 | Ремонтные работы',
-    notesPublic: 'Капитальный ремонт грейфера № L 08. 2 производства Liebherr',
+    orderType: 'Ремонтные работы',
+    orderTitle: 'Капитальный ремонт грейфера № L 08. 2 производства Liebherr',
     jobs: [
       {
         id: 'oj-xml-20003-1',
@@ -454,8 +454,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: '20021 | Поставка',
-    notesPublic: 'Поставка полумесяцев для шредера',
+    orderType: 'Поставка',
+    orderTitle: 'Поставка полумесяцев для шредера',
     jobs: [
       {
         id: 'oj-xml-20021-1',
@@ -490,8 +490,8 @@ export const mockOrders: Order[] = [
     taxRate: 8.5,
     globalMarkup: 20,
     currency: 'USD',
-    notesInternal: '20022 | Поставка',
-    notesPublic: 'Поставка полумесяцев для шредера',
+    orderType: 'Поставка',
+    orderTitle: 'Поставка полумесяцев для шредера',
     jobs: [
       {
         id: 'oj-xml-20022-1',

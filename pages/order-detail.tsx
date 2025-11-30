@@ -39,15 +39,29 @@ import {
 import type { Order, OrderJob, OrderStatus } from '../lib/types';
 import { toast } from 'sonner';
 
+// Order type options
+const ORDER_TYPES = [
+  { value: 'Поставка', labelEn: 'Supply/Delivery', labelRu: 'Поставка' },
+  { value: 'Ремонтные работы', labelEn: 'Repair work', labelRu: 'Ремонтные работы' },
+  { value: 'Оказание иных услуг', labelEn: 'Provision of other services', labelRu: 'Оказание иных услуг' },
+];
+
 interface OrderDetailProps {
   orderId: string;
   onNavigate: (page: string, id?: string) => void;
 }
 
 export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder } = useApp();
   const { formatCurrency, formatDate } = useFormatting();
+  
+  // Get order type label based on current language
+  const getOrderTypeLabel = (value: string) => {
+    const orderType = ORDER_TYPES.find(ot => ot.value === value);
+    if (!orderType) return value;
+    return i18n.language === 'ru' ? orderType.labelRu : orderType.labelEn;
+  };
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [generatingPO, setGeneratingPO] = useState(false);
   
@@ -65,8 +79,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       taxRate: 8.5,
       globalMarkup: 20,
       currency: 'USD',
-      notesInternal: '',
-      notesPublic: '',
+      orderType: '',
+      orderTitle: '',
       jobs: [],
     }
   );
@@ -129,8 +143,8 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       taxRate: formData.taxRate || 8.5,
       globalMarkup: formData.globalMarkup || 0,
       currency: formData.currency || 'USD',
-      notesInternal: formData.notesInternal || '',
-      notesPublic: formData.notesPublic || '',
+      orderType: formData.orderType || '',
+      orderTitle: formData.orderTitle || '',
       jobs: formData.jobs || [],
     };
     
@@ -387,24 +401,32 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
               </div>
               
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notesInternal">{t('orderDetail.notesInternal')}</Label>
-                <Textarea
-                  id="notesInternal"
-                  value={formData.notesInternal || ''}
-                  onChange={(e) => setFormData({ ...formData, notesInternal: e.target.value })}
-                  rows={2}
-                  placeholder={t('orderDetail.notesInternalPlaceholder')}
-                />
+                <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
+                <Select
+                  value={formData.orderType || ''}
+                  onValueChange={(value) => setFormData({ ...formData, orderType: value })}
+                >
+                  <SelectTrigger id="orderType">
+                    <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORDER_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {getOrderTypeLabel(type.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               
               <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notesPublic">{t('orderDetail.notesPublic')}</Label>
+                <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
                 <Textarea
-                  id="notesPublic"
-                  value={formData.notesPublic || ''}
-                  onChange={(e) => setFormData({ ...formData, notesPublic: e.target.value })}
+                  id="orderTitle"
+                  value={formData.orderTitle || ''}
+                  onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
                   rows={2}
-                  placeholder={t('orderDetail.notesPublicPlaceholder')}
+                  placeholder={t('orderDetail.orderTitlePlaceholder')}
                 />
               </div>
             </div>
@@ -487,7 +509,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                       >
                         <p className="text-[#1E2025] mb-1">{job.name}</p>
                         <p className="text-[#1F744F]">
-                          {formatCurrency(job.unitPrice, formData.currency)} / {job.unitOfMeasure}
+                          {formatCurrency(job.unitPrice)} / {job.unitOfMeasure}
                         </p>
                       </button>
                     ))
@@ -558,11 +580,11 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                 <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                   <thead>
                     <tr>
-                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Job</th>
-                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Qty</th>
-                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Unit Price</th>
-                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">Markup %</th>
-                      <th className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7]">Line Total</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.job')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.qty')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.unitPrice')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.markup')}</th>
+                      <th className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.lineTotal')}</th>
                       <th 
                         className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7] sticky right-0 z-10 bg-white border-l border-[#E4E7E7] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]"
                         style={{ 
@@ -573,7 +595,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                           background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
                         }}
                       >
-                        Actions
+                        {t('orderDetail.actions')}
                       </th>
                     </tr>
                   </thead>
@@ -672,7 +694,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
                             />
                           </td>
                           <td className="px-6 py-4 text-right border-b border-[#E4E7E7]">
-                            <p className="text-[#1E2025]">{formatCurrency(lineTotal, formData.currency)}</p>
+                            <p className="text-[#1E2025]">{formatCurrency(lineTotal)}</p>
                           </td>
                           <td 
                             className="px-6 py-4 text-right border-b border-[#E4E7E7] sticky right-0 z-10 border-l border-[#E4E7E7] shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.1)]"
@@ -764,16 +786,16 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[#555A60]">
                 <span>{t('orderDetail.subtotal')}</span>
-                <span>{formatCurrency(totals.subtotal, formData.currency)}</span>
+                <span>{formatCurrency(totals.subtotal)}</span>
               </div>
               <div className="flex items-center justify-between text-[#555A60]">
                 <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
-                <span>{formatCurrency(totals.tax, formData.currency)}</span>
+                <span>{formatCurrency(totals.tax)}</span>
               </div>
               <div className="pt-3 border-t border-[#E4E7E7]">
                 <div className="flex items-center justify-between text-[#1E2025]">
                   <span>{t('orderDetail.total')}</span>
-                  <span>{formatCurrency(totals.total, formData.currency)}</span>
+                  <span>{formatCurrency(totals.total)}</span>
                 </div>
               </div>
             </div>
