@@ -119,10 +119,10 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Sorting state - load from localStorage
   const [sortBy, setSortBy] = useState<ColumnKey>(() =>
-    loadFromStorage(STORAGE_KEYS.sortBy, 'client')
+    loadFromStorage(STORAGE_KEYS.sortBy, 'lastOrder')
   );
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() =>
-    loadFromStorage(STORAGE_KEYS.sortDirection, 'asc')
+    loadFromStorage(STORAGE_KEYS.sortDirection, 'desc')
   );
   
   // Save filters to localStorage when they change
@@ -161,7 +161,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     const hasCustomColumns = JSON.stringify(visibleColumns) !== JSON.stringify(defaultVisibleColumns);
     const hasCustomOrder = JSON.stringify(columnOrder) !== JSON.stringify(defaultColumnOrder);
     const hasCustomItemsPerPage = itemsPerPage !== 10;
-    const hasCustomSort = sortBy !== 'client' || sortDirection !== 'asc';
+    const hasCustomSort = sortBy !== 'lastOrder' || sortDirection !== 'desc';
     return hasCustomColumns || hasCustomOrder || hasCustomItemsPerPage || hasCustomSort;
   }, [visibleColumns, columnOrder, itemsPerPage, sortBy, sortDirection]);
   
@@ -177,8 +177,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     setVisibleColumns(defaultVisibleColumns);
     setColumnOrder(defaultColumnOrder);
     setItemsPerPage(10);
-    setSortBy('client');
-    setSortDirection('asc');
+    setSortBy('lastOrder');
+    setSortDirection('desc');
     setCurrentPage(1);
   };
   

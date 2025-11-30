@@ -12,6 +12,19 @@ export function localeToLanguage(locale: string): string {
   return 'en';
 }
 
+// Get initial language from localStorage if available
+function getInitialLanguage(): string {
+  if (typeof window === 'undefined') return 'en';
+  
+  // Try to get saved locale from localStorage
+  const savedLocale = localStorage.getItem('company_locale');
+  if (savedLocale) {
+    return localeToLanguage(savedLocale);
+  }
+  
+  return 'en';
+}
+
 // Initialize i18n
 i18n
   .use(LanguageDetector)
@@ -25,6 +38,7 @@ i18n
         translation: ruTranslations,
       },
     },
+    lng: getInitialLanguage(), // Set initial language from localStorage
     fallbackLng: 'en',
     defaultNS: 'translation',
     interpolation: {

@@ -48,18 +48,19 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   // Default values
   const defaultVisibleColumns: Record<ColumnKey, boolean> = {
     orderId: true,
-    client: true,
+    client: false,
     date: true,
     status: true,
     jobs: true,
     total: true,
     subtotal: false,
     orderType: false,
-    orderTitle: false,
+    orderTitle: true,
   };
   
   const defaultColumnOrder: ColumnKey[] = [
     'orderId',
+    'orderTitle',
     'client',
     'date',
     'status',
@@ -67,7 +68,6 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     'total',
     'subtotal',
     'orderType',
-    'orderTitle',
   ];
   
   // Load from localStorage on mount

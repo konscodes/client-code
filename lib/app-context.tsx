@@ -1,5 +1,6 @@
 // Global application context for state management
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings, DocumentTemplate } from './types';
 import { supabase } from './supabase';
 import { normalizePhoneNumber } from './utils';
@@ -79,7 +80,6 @@ function dbRowToClient(row: any): Client {
 function dbRowToOrderJob(row: any): OrderJob {
   return {
     id: row.id,
-    orderId: row.orderId,
     jobId: row.jobId || '',
     jobName: row.jobName,
     description: row.description,
@@ -91,20 +91,9 @@ function dbRowToOrderJob(row: any): OrderJob {
   };
 }
 
-// Helper function to convert database row to Order
-async function dbRowToOrder(row: any): Promise<Order> {
-  // Fetch order jobs
-  const { data: jobsData, error: jobsError } = await supabase
-    .from('order_jobs')
-    .select('*')
-    .eq('orderId', row.id)
-    .order('position');
-  
-  if (jobsError) {
-    console.error('Error fetching order jobs:', jobsError);
-  }
-  
-  const jobs: OrderJob[] = (jobsData || []).map(dbRowToOrderJob);
+// Helper function to convert database row to Order (with pre-fetched jobs)
+function dbRowToOrder(row: any, jobsByOrderId: Map<string, OrderJob[]>): Order {
+  const jobs: OrderJob[] = (jobsByOrderId.get(row.id) || []).sort((a, b) => a.position - b.position);
   
   return {
     id: row.id,
@@ -119,6 +108,42 @@ async function dbRowToOrder(row: any): Promise<Order> {
     orderTitle: row.orderTitle || '',
     jobs,
   };
+}
+
+// Helper function to batch fetch order_jobs for multiple orders
+async function fetchOrderJobsBatch(orderIds: string[]): Promise<Map<string, OrderJob[]>> {
+  if (orderIds.length === 0) {
+    return new Map();
+  }
+
+  // Supabase .in() has a limit, so we need to batch if there are too many
+  const batchSize = 1000;
+  const jobsMap = new Map<string, OrderJob[]>();
+
+  for (let i = 0; i < orderIds.length; i += batchSize) {
+    const batch = orderIds.slice(i, i + batchSize);
+    const { data: jobsData, error: jobsError } = await supabase
+      .from('order_jobs')
+      .select('*')
+      .in('orderId', batch)
+      .order('position');
+    
+    if (jobsError) {
+      console.error('Error fetching order jobs batch:', jobsError);
+      continue;
+    }
+    
+    // Group jobs by orderId
+    (jobsData || []).forEach((jobRow: any) => {
+      const orderId = jobRow.orderId;
+      if (!jobsMap.has(orderId)) {
+        jobsMap.set(orderId, []);
+      }
+      jobsMap.get(orderId)!.push(dbRowToOrderJob(jobRow));
+    });
+  }
+
+  return jobsMap;
 }
 
 // Helper function to convert database row to JobTemplate
@@ -196,9 +221,8 @@ function dbRowToDocumentTemplate(row: any): DocumentTemplate {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [clients, setClients] = useState<Client[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [jobTemplates, setJobTemplates] = useState<JobTemplate[]>([]);
   const [jobPresets, setJobPresets] = useState<JobPreset[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
     name: 'Premium Welding & Fabrication',
@@ -218,21 +242,142 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load all data on mount
+  // Fetch a page of orders with batch job fetching
+  const fetchOrdersPage = useCallback(async (from: number, to: number): Promise<Order[]> => {
+    const { data, error: err } = await supabase
+      .from('orders')
+      .select('*')
+      .order('createdAt', { ascending: false })
+      .range(from, to);
+    
+    if (err) throw err;
+    
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
+    // Batch fetch all order_jobs for these orders
+    const orderIds = data.map(row => row.id);
+    const jobsByOrderId = await fetchOrderJobsBatch(orderIds);
+    
+    // Convert rows to Order objects with pre-fetched jobs
+    return data.map(row => dbRowToOrder(row, jobsByOrderId));
+  }, []);
+
+  // Progressive loading: fetch first page immediately, then load remaining in background
+  const fetchAllOrdersProgressive = useCallback(async (): Promise<Order[]> => {
+    // First, get total count
+    const { count, error: countErr } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true });
+    
+    if (countErr) throw countErr;
+    const totalCount = count || 0;
+    
+    // Load first page immediately (100 orders)
+    const initialPageSize = 100;
+    const initialOrders = await fetchOrdersPage(0, initialPageSize - 1);
+    
+    // If there are more orders, load them in background batches
+    if (totalCount > initialPageSize) {
+      const batchSize = 1000;
+      const batches: Promise<Order[]>[] = [];
+      
+      for (let from = initialPageSize; from < totalCount; from += batchSize) {
+        const to = Math.min(from + batchSize - 1, totalCount - 1);
+        batches.push(fetchOrdersPage(from, to));
+      }
+      
+      // Load all batches in parallel
+      const remainingBatches = await Promise.all(batches);
+      const remainingOrders = remainingBatches.flat();
+      
+      return [...initialOrders, ...remainingOrders];
+    }
+    
+    return initialOrders;
+  }, [fetchOrdersPage]);
+
+  // Fetch a page of job templates
+  const fetchJobTemplatesPage = useCallback(async (from: number, to: number): Promise<JobTemplate[]> => {
+    const { data, error: err } = await supabase
+      .from('job_templates')
+      .select('*')
+      .order('name')
+      .range(from, to);
+    
+    if (err) throw err;
+    
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
+    return data.map(dbRowToJobTemplate);
+  }, []);
+
+  // Progressive loading: fetch first page immediately, then load remaining in background
+  const fetchAllJobTemplatesProgressive = useCallback(async (): Promise<JobTemplate[]> => {
+    // First, get total count
+    const { count, error: countErr } = await supabase
+      .from('job_templates')
+      .select('*', { count: 'exact', head: true });
+    
+    if (countErr) throw countErr;
+    const totalCount = count || 0;
+    
+    // Load first page immediately (200 jobs)
+    const initialPageSize = 200;
+    const initialJobs = await fetchJobTemplatesPage(0, initialPageSize - 1);
+    
+    // If there are more jobs, load them in background batches
+    if (totalCount > initialPageSize) {
+      const batchSize = 1000;
+      const batches: Promise<JobTemplate[]>[] = [];
+      
+      for (let from = initialPageSize; from < totalCount; from += batchSize) {
+        const to = Math.min(from + batchSize - 1, totalCount - 1);
+        batches.push(fetchJobTemplatesPage(from, to));
+      }
+      
+      // Load all batches in parallel
+      const remainingBatches = await Promise.all(batches);
+      const remainingJobs = remainingBatches.flat();
+      
+      return [...initialJobs, ...remainingJobs];
+    }
+    
+    return initialJobs;
+  }, [fetchJobTemplatesPage]);
+
+  // React Query for orders
+  const { data: orders = [], isLoading: ordersLoading } = useQuery({
+    queryKey: ['orders'],
+    queryFn: fetchAllOrdersProgressive,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  // React Query for job templates
+  const { data: jobTemplates = [], isLoading: jobTemplatesLoading } = useQuery({
+    queryKey: ['jobTemplates'],
+    queryFn: fetchAllJobTemplatesProgressive,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  // Load all data on mount (except orders and jobTemplates which are handled by React Query)
   useEffect(() => {
     loadAllData();
   }, []);
 
   const loadAllData = async () => {
-    setLoading(true);
+    setOtherDataLoading(true);
     setError(null);
     try {
       // Add minimum delay to ensure loading state is visible
       await Promise.all([
         Promise.all([
           refreshClients(),
-          refreshOrders(),
-          refreshJobTemplates(),
           refreshJobPresets(),
           refreshCompanySettings(),
           refreshDocumentTemplates(),
@@ -243,9 +388,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
       console.error('Error loading data:', err);
     } finally {
-      setLoading(false);
+      setOtherDataLoading(false);
     }
   };
+
+  // Update loading state based on React Query loading states and other data loading
+  const [otherDataLoading, setOtherDataLoading] = useState(true);
+  
+  useEffect(() => {
+    setLoading(ordersLoading || jobTemplatesLoading || otherDataLoading);
+  }, [ordersLoading, jobTemplatesLoading, otherDataLoading]);
 
   // Refresh methods
   const refreshClients = useCallback(async () => {
@@ -258,26 +410,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setClients((data || []).map(dbRowToClient));
   }, []);
 
+  // refreshOrders is now handled by React Query, but we keep it for compatibility
   const refreshOrders = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('orders')
-      .select('*')
-      .order('createdAt', { ascending: false });
-    
-    if (err) throw err;
-    const ordersData = await Promise.all((data || []).map(dbRowToOrder));
-    setOrders(ordersData);
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: ['orders'] });
+  }, [queryClient]);
 
+  // refreshJobTemplates is now handled by React Query, but we keep it for compatibility
   const refreshJobTemplates = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('job_templates')
-      .select('*')
-      .order('name');
-    
-    if (err) throw err;
-    setJobTemplates((data || []).map(dbRowToJobTemplate));
-  }, []);
+    await queryClient.invalidateQueries({ queryKey: ['jobTemplates'] });
+  }, [queryClient]);
 
   const refreshJobPresets = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -307,7 +448,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Update i18n language when settings are loaded
       if (typeof window !== 'undefined') {
         const { default: i18n } = await import('./i18n');
-        i18n.changeLanguage(localeToLanguage(settings.locale));
+        const language = localeToLanguage(settings.locale);
+        i18n.changeLanguage(language);
+        // Save to localStorage for next page load
+        localStorage.setItem('company_locale', settings.locale);
       }
     }
   }, []);
@@ -376,78 +520,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return clients.find(c => c.id === id);
   }, [clients]);
 
-  // Order methods
-  const addOrder = useCallback(async (order: Order) => {
-    // Insert order
-    const { error: orderErr } = await supabase
-      .from('orders')
-      .insert({
-        id: order.id,
-        clientId: order.clientId,
-        status: order.status,
-        createdAt: order.createdAt.toISOString(),
-        updatedAt: order.updatedAt.toISOString(),
-        taxRate: order.taxRate,
-        globalMarkup: order.globalMarkup,
-        currency: order.currency,
-        orderType: order.orderType,
-        orderTitle: order.orderTitle,
-      });
-    
-    if (orderErr) throw orderErr;
-    
-    // Insert order jobs
-    if (order.jobs.length > 0) {
-      const { error: jobsErr } = await supabase
-        .from('order_jobs')
-        .insert(order.jobs.map(job => ({
-          id: job.id,
-          orderId: order.id,
-          jobId: job.jobId,
-          jobName: job.jobName,
-          description: job.description,
-          quantity: job.quantity,
-          unitPrice: job.unitPrice,
-          lineMarkup: job.lineMarkup,
-          taxApplicable: job.taxApplicable,
-          position: job.position,
-        })));
+  // Order methods with React Query mutations
+  const addOrderMutation = useMutation({
+    mutationFn: async (order: Order) => {
+      // Insert order
+      const { error: orderErr } = await supabase
+        .from('orders')
+        .insert({
+          id: order.id,
+          clientId: order.clientId,
+          status: order.status,
+          createdAt: order.createdAt.toISOString(),
+          updatedAt: order.updatedAt.toISOString(),
+          taxRate: order.taxRate,
+          globalMarkup: order.globalMarkup,
+          currency: order.currency,
+          orderType: order.orderType,
+          orderTitle: order.orderTitle,
+        });
       
-      if (jobsErr) throw jobsErr;
-    }
-    
-    await refreshOrders();
-  }, [refreshOrders]);
-
-  const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
-    const updateData: any = { ...updates };
-    if (updates.createdAt) updateData.createdAt = updates.createdAt.toISOString();
-    if (updates.updatedAt) updateData.updatedAt = updates.updatedAt.toISOString();
-    updateData.updatedAt = new Date().toISOString();
-    
-    // Remove jobs from updateData if present (handled separately)
-    const jobs = updateData.jobs;
-    delete updateData.jobs;
-    
-    const { error: err } = await supabase
-      .from('orders')
-      .update(updateData)
-      .eq('id', id);
-    
-    if (err) throw err;
-    
-    // Update jobs if provided
-    if (jobs) {
-      // Delete existing jobs
-      await supabase.from('order_jobs').delete().eq('orderId', id);
+      if (orderErr) throw orderErr;
       
-      // Insert new jobs
-      if (jobs.length > 0) {
+      // Insert order jobs
+      if (order.jobs.length > 0) {
         const { error: jobsErr } = await supabase
           .from('order_jobs')
-          .insert(jobs.map((job: OrderJob) => ({
+          .insert(order.jobs.map(job => ({
             id: job.id,
-            orderId: id,
+            orderId: order.id,
             jobId: job.jobId,
             jobName: job.jobName,
             description: job.description,
@@ -460,67 +560,157 @@ export function AppProvider({ children }: { children: ReactNode }) {
         
         if (jobsErr) throw jobsErr;
       }
-    }
-    
-    await refreshOrders();
-  }, [refreshOrders]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
+  const addOrder = useCallback(async (order: Order) => {
+    await addOrderMutation.mutateAsync(order);
+  }, [addOrderMutation]);
+
+  const updateOrderMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Order> }) => {
+      const updateData: any = { ...updates };
+      if (updates.createdAt) updateData.createdAt = updates.createdAt.toISOString();
+      if (updates.updatedAt) updateData.updatedAt = updates.updatedAt.toISOString();
+      updateData.updatedAt = new Date().toISOString();
+      
+      // Remove jobs from updateData if present (handled separately)
+      const jobs = updateData.jobs;
+      delete updateData.jobs;
+      
+      const { error: err } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', id);
+      
+      if (err) throw err;
+      
+      // Update jobs if provided
+      if (jobs) {
+        // Delete existing jobs
+        await supabase.from('order_jobs').delete().eq('orderId', id);
+        
+        // Insert new jobs
+        if (jobs.length > 0) {
+          const { error: jobsErr } = await supabase
+            .from('order_jobs')
+            .insert(jobs.map((job: OrderJob) => ({
+              id: job.id,
+              orderId: id,
+              jobId: job.jobId,
+              jobName: job.jobName,
+              description: job.description,
+              quantity: job.quantity,
+              unitPrice: job.unitPrice,
+              lineMarkup: job.lineMarkup,
+              taxApplicable: job.taxApplicable,
+              position: job.position,
+            })));
+          
+          if (jobsErr) throw jobsErr;
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
+  const updateOrder = useCallback(async (id: string, updates: Partial<Order>) => {
+    await updateOrderMutation.mutateAsync({ id, updates });
+  }, [updateOrderMutation]);
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: err } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', id);
+      
+      if (err) throw err;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
 
   const deleteOrder = useCallback(async (id: string) => {
-    const { error: err } = await supabase
-      .from('orders')
-      .delete()
-      .eq('id', id);
-    
-    if (err) throw err;
-    await refreshOrders();
-  }, [refreshOrders]);
+    await deleteOrderMutation.mutateAsync(id);
+  }, [deleteOrderMutation]);
 
   const getOrder = useCallback((id: string) => {
     return orders.find(o => o.id === id);
   }, [orders]);
 
-  // Job template methods
+  // Job template methods with React Query mutations
+  const addJobTemplateMutation = useMutation({
+    mutationFn: async (job: JobTemplate) => {
+      const { error: err } = await supabase
+        .from('job_templates')
+        .insert({
+          id: job.id,
+          name: job.name,
+          description: job.description,
+          category: job.category,
+          unitPrice: job.unitPrice,
+          unitOfMeasure: job.unitOfMeasure,
+          defaultTax: job.defaultTax,
+          lastUpdated: job.lastUpdated.toISOString(),
+        });
+      
+      if (err) throw err;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobTemplates'] });
+    },
+  });
+
   const addJobTemplate = useCallback(async (job: JobTemplate) => {
-    const { error: err } = await supabase
-      .from('job_templates')
-      .insert({
-        id: job.id,
-        name: job.name,
-        description: job.description,
-        category: job.category,
-        unitPrice: job.unitPrice,
-        unitOfMeasure: job.unitOfMeasure,
-        defaultTax: job.defaultTax,
-        lastUpdated: job.lastUpdated.toISOString(),
-      });
-    
-    if (err) throw err;
-    await refreshJobTemplates();
-  }, [refreshJobTemplates]);
+    await addJobTemplateMutation.mutateAsync(job);
+  }, [addJobTemplateMutation]);
+
+  const updateJobTemplateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<JobTemplate> }) => {
+      const updateData: any = { ...updates };
+      if (updates.lastUpdated) updateData.lastUpdated = updates.lastUpdated.toISOString();
+      updateData.lastUpdated = new Date().toISOString();
+      
+      const { error: err } = await supabase
+        .from('job_templates')
+        .update(updateData)
+        .eq('id', id);
+      
+      if (err) throw err;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobTemplates'] });
+    },
+  });
 
   const updateJobTemplate = useCallback(async (id: string, updates: Partial<JobTemplate>) => {
-    const updateData: any = { ...updates };
-    if (updates.lastUpdated) updateData.lastUpdated = updates.lastUpdated.toISOString();
-    updateData.lastUpdated = new Date().toISOString();
-    
-    const { error: err } = await supabase
-      .from('job_templates')
-      .update(updateData)
-      .eq('id', id);
-    
-    if (err) throw err;
-    await refreshJobTemplates();
-  }, [refreshJobTemplates]);
+    await updateJobTemplateMutation.mutateAsync({ id, updates });
+  }, [updateJobTemplateMutation]);
+
+  const deleteJobTemplateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: err } = await supabase
+        .from('job_templates')
+        .delete()
+        .eq('id', id);
+      
+      if (err) throw err;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobTemplates'] });
+    },
+  });
 
   const deleteJobTemplate = useCallback(async (id: string) => {
-    const { error: err } = await supabase
-      .from('job_templates')
-      .delete()
-      .eq('id', id);
-    
-    if (err) throw err;
-    await refreshJobTemplates();
-  }, [refreshJobTemplates]);
+    await deleteJobTemplateMutation.mutateAsync(id);
+  }, [deleteJobTemplateMutation]);
 
   // Job preset methods
   const addJobPreset = useCallback(async (preset: JobPreset) => {
@@ -618,7 +808,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Update i18n language if locale changed
     if (updates.locale && typeof window !== 'undefined') {
       const { default: i18n } = await import('./i18n');
-      i18n.changeLanguage(localeToLanguage(updates.locale));
+      const language = localeToLanguage(updates.locale);
+      i18n.changeLanguage(language);
+      // Save to localStorage for next page load
+      localStorage.setItem('company_locale', updates.locale);
     }
     
     await refreshCompanySettings();

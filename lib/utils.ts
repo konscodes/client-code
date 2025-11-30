@@ -19,23 +19,37 @@ export function formatCurrency(
 export function formatDate(date: Date, locale?: string): string {
   const finalLocale = locale || 'en-US';
   
-  return new Intl.DateTimeFormat(finalLocale, {
+  let formatted = new Intl.DateTimeFormat(finalLocale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(date);
+  
+  // Remove "г." (year abbreviation) from Russian dates
+  if (finalLocale.startsWith('ru')) {
+    formatted = formatted.replace(/\s*г\.\s*/g, '');
+  }
+  
+  return formatted;
 }
 
 export function formatDateTime(date: Date, locale?: string): string {
   const finalLocale = locale || 'en-US';
   
-  return new Intl.DateTimeFormat(finalLocale, {
+  let formatted = new Intl.DateTimeFormat(finalLocale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
+  
+  // Remove "г." (year abbreviation) from Russian dates
+  if (finalLocale.startsWith('ru')) {
+    formatted = formatted.replace(/\s*г\.\s*/g, '');
+  }
+  
+  return formatted;
 }
 
 export function calculateLineTotal(job: OrderJob): number {

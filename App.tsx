@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppProvider } from './lib/app-context';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { AppLayout } from './components/app-layout';
@@ -13,6 +14,17 @@ import { JobPresets } from './pages/job-presets';
 import { Settings } from './pages/settings';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
+
+// Create a QueryClient instance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 type Page = 
   | 'dashboard'
@@ -97,8 +109,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

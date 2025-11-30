@@ -91,30 +91,66 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       {/* KPI Cards */}
       <section aria-labelledby="kpi-heading">
         <h2 id="kpi-heading" className="sr-only">Key Performance Indicators</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <KPICard
-            title={t('dashboard.openOrders')}
-            value={kpiData.openOrders}
-            icon={FileText}
-            onClick={() => onNavigate('orders')}
-          />
-          <KPICard
-            title={t('dashboard.awaitingInvoice')}
-            value={kpiData.awaitingInvoice}
-            icon={Clock}
-            onClick={() => onNavigate('orders')}
-          />
-          <KPICard
-            title={t('dashboard.draftOrders')}
-            value={kpiData.draftOrders}
-            icon={FileText}
-            onClick={() => onNavigate('orders')}
-          />
-          <KPICard
-            title={t('dashboard.thisMonthRevenue')}
-            value={formatCurrency(kpiData.monthRevenue)}
-            icon={DollarSign}
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 min-w-0">
+          {isLoading ? (
+            // Loading state with skeleton cards matching exact dimensions
+            <>
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
+                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-24 flex-1 min-w-0" />
+                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                </div>
+                <Skeleton className="h-6 w-16 mb-2 min-h-[1.5rem]" />
+              </div>
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
+                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-28 flex-1 min-w-0" />
+                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                </div>
+                <Skeleton className="h-6 w-20 mb-2 min-h-[1.5rem]" />
+              </div>
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
+                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-32 flex-1 min-w-0" />
+                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                </div>
+                <Skeleton className="h-6 w-16 mb-2 min-h-[1.5rem]" />
+              </div>
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
+                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-28 flex-1 min-w-0" />
+                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                </div>
+                <Skeleton className="h-6 w-24 mb-2 min-h-[1.5rem]" />
+              </div>
+            </>
+          ) : (
+            <>
+              <KPICard
+                title={t('dashboard.openOrders')}
+                value={kpiData.openOrders}
+                icon={FileText}
+                onClick={() => onNavigate('orders')}
+              />
+              <KPICard
+                title={t('dashboard.awaitingInvoice')}
+                value={kpiData.awaitingInvoice}
+                icon={Clock}
+                onClick={() => onNavigate('orders')}
+              />
+              <KPICard
+                title={t('dashboard.draftOrders')}
+                value={kpiData.draftOrders}
+                icon={FileText}
+                onClick={() => onNavigate('orders')}
+              />
+              <KPICard
+                title={t('dashboard.thisMonthRevenue')}
+                value={formatCurrency(kpiData.monthRevenue)}
+                icon={DollarSign}
+              />
+            </>
+          )}
         </div>
       </section>
       
