@@ -195,28 +195,6 @@ export function JobPresets({ onNavigate }: JobPresetsProps) {
               
               <p className="text-[#555A60] mb-4 line-clamp-2">{preset.description}</p>
               
-              <div className="space-y-2 mb-4">
-                <p className="text-[#7C8085]">Included Jobs:</p>
-                <ul className="space-y-1">
-                  {preset.jobs.slice(0, 3).map(presetJob => {
-                    const job = jobTemplates.find(j => j.id === presetJob.jobId);
-                    return job ? (
-                      <li key={presetJob.jobId} className="text-[#555A60] flex items-center gap-2">
-                        <span className="w-6 h-6 flex items-center justify-center bg-[#F2F4F4] rounded text-xs">
-                          {presetJob.defaultQty}
-                        </span>
-                        <span className="truncate">{job.name}</span>
-                      </li>
-                    ) : null;
-                  })}
-                  {preset.jobs.length > 3 && (
-                    <li className="text-[#7C8085]">
-                      +{preset.jobs.length - 3} more
-                    </li>
-                  )}
-                </ul>
-              </div>
-              
               <div className="pt-4 border-t border-[#E4E7E7]">
                 <div className="flex items-center justify-between">
                   <div>

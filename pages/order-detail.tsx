@@ -217,7 +217,40 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
               {isNewOrder ? 'New Order' : formData.id}
             </h1>
             {selectedClient && (
-              <p className="text-[#555A60]">{selectedClient.name} • {selectedClient.company}</p>
+              <button
+                onClick={() => onNavigate('client-detail', selectedClient.id)}
+                className="text-left cursor-pointer"
+                onMouseEnter={(e) => {
+                  const p = e.currentTarget.querySelector('p');
+                  const spans = e.currentTarget.querySelectorAll('span');
+                  if (p) p.style.textDecoration = 'underline';
+                  spans.forEach(span => {
+                    span.style.color = '#1F744F';
+                  });
+                }}
+                onMouseLeave={(e) => {
+                  const p = e.currentTarget.querySelector('p');
+                  const spans = e.currentTarget.querySelectorAll('span');
+                  if (p) p.style.textDecoration = 'none';
+                  spans.forEach(span => {
+                    span.style.color = '';
+                  });
+                  // Reset company-only case
+                  if (spans.length === 0 && p) {
+                    p.style.color = '';
+                  }
+                }}
+              >
+                {selectedClient.name && selectedClient.name !== 'Unknown' ? (
+                  <p className="text-[#555A60]">
+                    <span className="transition-colors">{selectedClient.name}</span>
+                    {' · '}
+                    <span className="transition-colors">{selectedClient.company}</span>
+                  </p>
+                ) : (
+                  <p className="text-[#555A60] transition-all">{selectedClient.company}</p>
+                )}
+              </button>
             )}
           </div>
         </div>

@@ -8,12 +8,16 @@ import {
   getClientOrders, 
   getClientLifetimeValue,
   calculateOrderTotal,
-  generateId
+  generateId,
+  formatPhoneNumber,
+  normalizePhoneNumber,
+  isValidEmail
 } from '../lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { PhoneInput } from '../components/ui/phone-input';
 import type { Client } from '../lib/types';
 
 interface ClientDetailProps {
@@ -25,6 +29,8 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
   const { clients, orders, addClient, updateClient } = useApp();
   const [isEditing, setIsEditing] = useState(clientId === 'new');
   const [activeTab, setActiveTab] = useState<'overview' | 'orders'>('overview');
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   
   const isNewClient = clientId === 'new';
   const client = useMemo(() => 
@@ -62,7 +68,46 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
     [orders, client]
   );
   
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    // Validate required fields
+    if (!formData.name || formData.name.trim() === '') {
+      errors.name = 'Name is required';
+    }
+    
+    // Validate email format if provided
+    if (formData.email && formData.email.trim() !== '') {
+      if (!isValidEmail(formData.email)) {
+        errors.email = 'Please enter a valid email address';
+      }
+    }
+    
+    // Validate phone format if provided
+    const hasPhone = formData.phone && formData.phone.trim() !== '';
+    const hasEmail = formData.email && formData.email.trim() !== '';
+    
+    // At least one of email or phone is required
+    if (!hasEmail && !hasPhone) {
+      errors.email = 'Either email or phone is required';
+      errors.phone = 'Either email or phone is required';
+    }
+    
+    setValidationErrors(errors);
+    setTouched({
+      name: true,
+      email: true,
+      phone: true,
+    });
+    
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSave = () => {
+    if (!validateForm()) {
+      return;
+    }
+    
     if (isNewClient) {
       const newClient: Client = {
         id: generateId('client'),
@@ -84,6 +129,8 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
     } else if (client) {
       updateClient(client.id, formData);
       setIsEditing(false);
+      setValidationErrors({});
+      setTouched({});
     }
   };
   
@@ -93,6 +140,66 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
     } else {
       setFormData(client || {});
       setIsEditing(false);
+      setValidationErrors({});
+      setTouched({});
+    }
+  };
+
+  const handleFieldChange = (field: keyof Client, value: string) => {
+    setFormData({ ...formData, [field]: value });
+    // Clear error when user starts typing
+    if (validationErrors[field]) {
+      // If clearing email/phone error, check if requirement is now met
+      if (field === 'email' || field === 'phone') {
+        const hasPhone = field === 'phone' ? (value && value.trim() !== '') : (formData.phone && formData.phone.trim() !== '');
+        const hasEmail = field === 'email' ? (value && value.trim() !== '') : (formData.email && formData.email.trim() !== '');
+        if (hasPhone || hasEmail) {
+          setValidationErrors({ ...validationErrors, email: '', phone: '' });
+        } else {
+          setValidationErrors({ ...validationErrors, [field]: '' });
+        }
+      } else {
+        setValidationErrors({ ...validationErrors, [field]: '' });
+      }
+    }
+  };
+
+  const handleFieldBlur = (field: string) => {
+    setTouched({ ...touched, [field]: true });
+    
+    // Validate on blur
+    if (field === 'email') {
+      if (formData.email && formData.email.trim() !== '') {
+        if (!isValidEmail(formData.email)) {
+          setValidationErrors({ ...validationErrors, email: 'Please enter a valid email address' });
+        } else {
+          // Clear email error, but check if phone/email requirement is met
+          const hasPhone = formData.phone && formData.phone.trim() !== '';
+          const hasEmail = formData.email && formData.email.trim() !== '';
+          if (hasEmail || hasPhone) {
+            setValidationErrors({ ...validationErrors, email: '', phone: '' });
+          }
+        }
+      } else {
+        // Email is empty, check if phone is provided
+        const hasPhone = formData.phone && formData.phone.trim() !== '';
+        if (!hasPhone) {
+          setValidationErrors({ ...validationErrors, email: 'Either email or phone is required', phone: 'Either email or phone is required' });
+        } else {
+          setValidationErrors({ ...validationErrors, email: '', phone: '' });
+        }
+      }
+    } else if (field === 'phone') {
+      // Phone field blurred, check if email/phone requirement is met
+      const hasPhone = formData.phone && formData.phone.trim() !== '';
+      const hasEmail = formData.email && formData.email.trim() !== '';
+      if (!hasEmail && !hasPhone) {
+        setValidationErrors({ ...validationErrors, email: 'Either email or phone is required', phone: 'Either email or phone is required' });
+      } else {
+        setValidationErrors({ ...validationErrors, email: '', phone: '' });
+      }
+    } else if (field === 'name' && !formData.name?.trim()) {
+      setValidationErrors({ ...validationErrors, name: 'Name is required' });
     }
   };
   
@@ -124,11 +231,8 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
           </button>
           <div>
             <h1 className="text-[#1E2025] mb-1">
-              {isNewClient ? 'New Client' : (isEditing ? 'Edit Client' : client?.name)}
+              {isNewClient ? 'New Client' : (isEditing ? 'Edit Client' : client?.company)}
             </h1>
-            {!isNewClient && !isEditing && (
-              <p className="text-[#555A60]">{client?.company}</p>
-            )}
           </div>
         </div>
         <div className="flex gap-3">
@@ -142,8 +246,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-                disabled={!formData.name || !formData.email}
+                className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isNewClient ? 'Create Client' : 'Save Changes'}
               </button>
@@ -178,9 +281,15 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
               <Input
                 id="name"
                 value={formData.name || ''}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
+                onBlur={() => handleFieldBlur('name')}
                 required
+                aria-invalid={touched.name && !!validationErrors.name}
+                className={touched.name && validationErrors.name ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
               />
+              {touched.name && validationErrors.name && (
+                <p className="text-sm text-red-600">{validationErrors.name}</p>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -198,19 +307,29 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                 id="email"
                 type="email"
                 value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
+                onChange={(e) => handleFieldChange('email', e.target.value)}
+                onBlur={() => handleFieldBlur('email')}
+                aria-invalid={touched.email && !!validationErrors.email}
+                className={touched.email && validationErrors.email ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
               />
+              {touched.email && validationErrors.email && (
+                <p className="text-sm text-red-600">{validationErrors.email}</p>
+              )}
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
+              <Label htmlFor="phone">Phone *</Label>
+              <PhoneInput
                 id="phone"
-                type="tel"
                 value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(value) => handleFieldChange('phone', value)}
+                onBlur={() => handleFieldBlur('phone')}
+                aria-invalid={touched.phone && !!validationErrors.phone}
+                className={touched.phone && validationErrors.phone ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
               />
+              {touched.phone && validationErrors.phone && (
+                <p className="text-sm text-red-600">{validationErrors.phone}</p>
+              )}
             </div>
             
             <div className="space-y-2 md:col-span-2">
@@ -319,6 +438,15 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
               <div>
                 <h3 className="text-[#555A60] mb-4">Contact Information</h3>
                 <div className="space-y-3">
+                  {client?.name && client.name !== 'Unknown' && (
+                    <div className="flex items-start gap-3">
+                      <User size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
+                      <div>
+                        <p className="text-[#7C8085]">Name</p>
+                        <p className="text-[#1E2025]">{client.name}</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     <Mail size={20} className="text-[#7C8085] mt-0.5" aria-hidden="true" />
                     <div>
@@ -336,10 +464,10 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
                     <div>
                       <p className="text-[#7C8085]">Phone</p>
                       <a 
-                        href={`tel:${client?.phone}`}
+                        href={`tel:${client?.phone ? '7' + normalizePhoneNumber(client.phone).substring(1) : ''}`}
                         className="text-[#1E2025]"
                       >
-                        {client?.phone}
+                        {formatPhoneNumber(client?.phone)}
                       </a>
                     </div>
                   </div>

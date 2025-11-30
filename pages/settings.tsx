@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useApp } from '../lib/app-context';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { PhoneInput } from '../components/ui/phone-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -91,11 +92,10 @@ export function Settings({ onNavigate }: SettingsProps) {
               
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone</Label>
-                <Input
+                <PhoneInput
                   id="phone"
-                  type="tel"
                   value={formData.phone}
-                  onChange={(e) => handleChange('phone', e.target.value)}
+                  onChange={(value) => handleChange('phone', value)}
                 />
               </div>
               

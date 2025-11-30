@@ -1,11 +1,12 @@
 // Job catalog page - manage job templates
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../lib/app-context';
 import { formatCurrency, formatDate, generateId } from '../lib/utils';
 import { Search, Plus, Edit, Trash2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { PaginationWithLinks } from '../components/ui/pagination-with-links';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,10 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [editingJob, setEditingJob] = useState<JobTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
   const [formData, setFormData] = useState<Partial<JobTemplate>>({
     name: '',
     description: '',
@@ -53,6 +58,17 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
       return matchesSearch && matchesCategory;
     });
   }, [jobTemplates, searchQuery, categoryFilter]);
+  
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedJobs = filteredJobs.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter]);
   
   const handleOpenCreate = () => {
     setFormData({
@@ -193,11 +209,13 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredJobs.map(job => (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedJobs.map(job => (
             <div
               key={job.id}
-              className="bg-white rounded-xl border border-[#E4E7E7] p-6 hover:border-[#1F744F] transition-colors"
+              onClick={() => handleOpenEdit(job)}
+              className="bg-white rounded-xl border border-[#E4E7E7] p-6 hover:border-[#1F744F] transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
@@ -208,14 +226,20 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
                 </div>
                 <div className="flex gap-1">
                   <button
-                    onClick={() => handleOpenEdit(job)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEdit(job);
+                    }}
                     className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors"
                     aria-label={`Edit ${job.name}`}
                   >
                     <Edit size={16} />
                   </button>
                   <button
-                    onClick={() => handleDelete(job)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(job);
+                    }}
                     className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors"
                     aria-label={`Delete ${job.name}`}
                   >
@@ -223,8 +247,6 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
                   </button>
                 </div>
               </div>
-              
-              <p className="text-[#555A60] mb-4 line-clamp-2">{job.description}</p>
               
               <div className="flex items-center justify-between pt-4 border-t border-[#E4E7E7]">
                 <div>
@@ -240,7 +262,23 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+          
+          {filteredJobs.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-[#555A60] text-sm">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredJobs.length)} of {filteredJobs.length} jobs
+                {filteredJobs.length !== jobTemplates.length && ` (filtered from ${jobTemplates.length} total)`}
+              </p>
+              <PaginationWithLinks
+                page={currentPage}
+                pageSize={itemsPerPage}
+                totalCount={filteredJobs.length}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          )}
+        </>
       )}
       
       {/* Edit/Create Dialog */}

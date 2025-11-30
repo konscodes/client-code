@@ -2,9 +2,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
-import { formatDate, getClientOrders } from '../lib/utils';
+import { formatDate, getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, CalendarIcon } from 'lucide-react';
 import { Input } from '../components/ui/input';
+import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
@@ -17,35 +18,84 @@ interface ClientsListProps {
   onNavigate: (page: string, id?: string) => void;
 }
 
-type ColumnKey = 'name' | 'company' | 'email' | 'phone' | 'orders' | 'lastOrder';
+type ColumnKey = 'clientId' | 'client' | 'email' | 'phone' | 'orders' | 'lastOrder';
 
 export function ClientsList({ onNavigate }: ClientsListProps) {
-  const { clients, orders } = useApp();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { clients, orders, loading } = useApp();
   
-  // Filter states
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
-  const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>({});
+  // Show loading if explicitly loading OR if we have no data yet (initial load)
+  const isLoading = loading || (clients.length === 0 && orders.length === 0);
   
-  // Column visibility state - Name is default, checked, and disabled
-  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>({
-    name: true, // default, cannot be unchecked
-    company: true,
+  // localStorage keys
+  const STORAGE_KEY_PREFIX = 'clients-table-';
+  const STORAGE_KEYS = {
+    filters: `${STORAGE_KEY_PREFIX}filters`,
+    visibleColumns: `${STORAGE_KEY_PREFIX}visibleColumns`,
+    columnOrder: `${STORAGE_KEY_PREFIX}columnOrder`,
+    itemsPerPage: `${STORAGE_KEY_PREFIX}itemsPerPage`,
+    sortBy: `${STORAGE_KEY_PREFIX}sortBy`,
+    sortDirection: `${STORAGE_KEY_PREFIX}sortDirection`,
+  };
+  
+  // Default values
+  const defaultVisibleColumns: Record<ColumnKey, boolean> = {
+    clientId: true,
+    client: true,
     email: true,
     phone: true,
     orders: true,
     lastOrder: true,
-  });
+  };
   
-  // Column order state
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([
-    'name',
-    'company',
+  const defaultColumnOrder: ColumnKey[] = [
+    'clientId',
+    'client',
     'email',
     'phone',
     'orders',
     'lastOrder',
-  ]);
+  ];
+  
+  // Load from localStorage on mount
+  const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+  
+  // Save to localStorage
+  const saveToStorage = (key: string, value: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error('Failed to save to localStorage:', error);
+    }
+  };
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Filter states - load from localStorage
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => 
+    loadFromStorage(STORAGE_KEYS.filters, {}).dateFilter || {}
+  );
+  const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>(() => 
+    loadFromStorage(STORAGE_KEYS.filters, {}).ordersCountFilter || {}
+  );
+  
+  // Column visibility state - load from localStorage
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
+    loadFromStorage(STORAGE_KEYS.visibleColumns, defaultVisibleColumns)
+  );
+  
+  // Column order state - load from localStorage
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() =>
+    loadFromStorage(STORAGE_KEYS.columnOrder, defaultColumnOrder)
+  );
   
   // Panel states
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -55,13 +105,76 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
   
-  // Pagination state
+  // Pagination state - load from localStorage
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(() =>
+    loadFromStorage(STORAGE_KEYS.itemsPerPage, 10)
+  );
   
-  // Sorting state
-  const [sortBy, setSortBy] = useState<ColumnKey>('name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Sorting state - load from localStorage
+  const [sortBy, setSortBy] = useState<ColumnKey>(() =>
+    loadFromStorage(STORAGE_KEYS.sortBy, 'client')
+  );
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() =>
+    loadFromStorage(STORAGE_KEYS.sortDirection, 'asc')
+  );
+  
+  // Save filters to localStorage when they change
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.filters, { dateFilter, ordersCountFilter });
+  }, [dateFilter, ordersCountFilter]);
+  
+  // Save column settings to localStorage when they change
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.visibleColumns, visibleColumns);
+  }, [visibleColumns]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.columnOrder, columnOrder);
+  }, [columnOrder]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.itemsPerPage, itemsPerPage);
+  }, [itemsPerPage]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.sortBy, sortBy);
+  }, [sortBy]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.sortDirection, sortDirection);
+  }, [sortDirection]);
+  
+  // Check if filters are active
+  const hasActiveFilters = useMemo(() => {
+    return !!(dateFilter.from || dateFilter.to || ordersCountFilter.min !== undefined || ordersCountFilter.max !== undefined);
+  }, [dateFilter, ordersCountFilter]);
+  
+  // Check if customizations are active (different from defaults)
+  const hasActiveCustomizations = useMemo(() => {
+    const hasCustomColumns = JSON.stringify(visibleColumns) !== JSON.stringify(defaultVisibleColumns);
+    const hasCustomOrder = JSON.stringify(columnOrder) !== JSON.stringify(defaultColumnOrder);
+    const hasCustomItemsPerPage = itemsPerPage !== 10;
+    const hasCustomSort = sortBy !== 'client' || sortDirection !== 'asc';
+    return hasCustomColumns || hasCustomOrder || hasCustomItemsPerPage || hasCustomSort;
+  }, [visibleColumns, columnOrder, itemsPerPage, sortBy, sortDirection]);
+  
+  // Reset filters function
+  const resetFilters = () => {
+    setDateFilter({});
+    setOrdersCountFilter({});
+    setCurrentPage(1);
+  };
+  
+  // Reset customizations function
+  const resetCustomizations = () => {
+    setVisibleColumns(defaultVisibleColumns);
+    setColumnOrder(defaultColumnOrder);
+    setItemsPerPage(10);
+    setSortBy('client');
+    setSortDirection('asc');
+    setCurrentPage(1);
+  };
   
   const filteredClients = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -131,11 +244,11 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
         : null;
       
       switch (sortBy) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
+        case 'clientId':
+          comparison = a.id.localeCompare(b.id);
           break;
-        case 'company':
-          comparison = a.company.localeCompare(b.company);
+        case 'client':
+          comparison = a.name.localeCompare(b.name);
           break;
         case 'email':
           comparison = a.email.localeCompare(b.email);
@@ -147,13 +260,35 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           comparison = clientOrdersA.length - clientOrdersB.length;
           break;
         case 'lastOrder':
-          if (!lastOrderA && !lastOrderB) comparison = 0;
-          else if (!lastOrderA) comparison = 1;
-          else if (!lastOrderB) comparison = -1;
-          else comparison = new Date(lastOrderA.createdAt).getTime() - new Date(lastOrderB.createdAt).getTime();
+          if (!lastOrderA && !lastOrderB) {
+            comparison = 0;
+          } else if (!lastOrderA) {
+            // Client A has no orders - always put at bottom
+            // comparison = 1 means A comes after B (at bottom)
+            comparison = 1;
+          } else if (!lastOrderB) {
+            // Client B has no orders - always put at bottom
+            // comparison = -1 means A comes before B (B at bottom)
+            comparison = -1;
+          } else {
+            // Both have orders - compare by date
+            comparison = new Date(lastOrderA.createdAt).getTime() - new Date(lastOrderB.createdAt).getTime();
+          }
           break;
         default:
           comparison = 0;
+      }
+      
+      // For lastOrder, clients with no orders should always be at bottom
+      // So we need to handle the reversal carefully
+      if (sortBy === 'lastOrder') {
+        const aHasNoOrders = !lastOrderA;
+        const bHasNoOrders = !lastOrderB;
+        
+        if (aHasNoOrders || bHasNoOrders) {
+          // One has no orders - don't reverse, keep no-orders at bottom
+          return comparison;
+        }
       }
       
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -219,8 +354,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Column label mapping
   const columnLabels: Record<ColumnKey, string> = {
-    name: 'Name',
-    company: 'Company',
+    clientId: 'Client ID',
+    client: 'Client',
     email: 'Email',
     phone: 'Phone',
     orders: 'Orders',
@@ -228,13 +363,36 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   };
   
   // Helper function to render table header
-  const renderTableHeader = (columnKey: ColumnKey) => {
+  const renderTableHeader = (columnKey: ColumnKey, index: number) => {
     if (!visibleColumns[columnKey]) return null;
+    
+    const isFirstColumn = index === 0;
+    const isDateColumn = columnKey === 'lastOrder';
+    const isPhoneColumn = columnKey === 'phone';
+    
+    const headerStyle: React.CSSProperties = {};
+    if (isFirstColumn) {
+      headerStyle.position = 'sticky';
+      headerStyle.left = 0;
+      headerStyle.zIndex = 10;
+      headerStyle.minWidth = '150px';
+    }
+    if (isDateColumn) {
+      headerStyle.minWidth = '150px';
+    }
+    if (isPhoneColumn) {
+      headerStyle.minWidth = '140px';
+    }
+    
+    const isCenterAlign = columnKey === 'orders';
     
     return (
       <th 
         key={columnKey}
-        className="px-6 py-3 text-left text-[#555A60]"
+        className={`px-6 py-3 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : 'text-left'} text-[#555A60] ${
+          isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''
+        }`}
+        style={Object.keys(headerStyle).length > 0 ? headerStyle : undefined}
       >
         {columnLabels[columnKey]}
       </th>
@@ -242,7 +400,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   };
   
   // Helper function to render table cell
-  const renderTableCell = (columnKey: ColumnKey, client: typeof clients[0], clientOrders: typeof orders) => {
+  const renderTableCell = (columnKey: ColumnKey, client: typeof clients[0], clientOrders: typeof orders, index: number) => {
     if (!visibleColumns[columnKey]) return null;
     
     const lastOrder = clientOrders.length > 0 
@@ -251,40 +409,112 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
         )
       : null;
     
+    const isFirstColumn = index === 0;
+    const hasOpenPanel = filtersOpen || settingsOpen;
+    
     switch (columnKey) {
-      case 'name':
+      case 'clientId':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#1E2025]">{client.name}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#1E2025]">{extractIdNumbers(client.id)}</p>
           </td>
         );
-      case 'company':
+      case 'client':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60]">{client.company}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#1E2025] whitespace-nowrap">{client.company}</p>
+            {client.name && client.name !== 'Unknown' && (
+              <p className="text-[#7C8085] whitespace-nowrap">{client.name}</p>
+            )}
           </td>
         );
       case 'email':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60]">{client.email}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#555A60] whitespace-nowrap">{client.email}</p>
           </td>
         );
       case 'phone':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60]">{client.phone}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : { minWidth: '140px' }}
+          >
+            <p className="text-[#555A60] whitespace-nowrap">{formatPhoneNumber(client.phone)}</p>
           </td>
         );
       case 'orders':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#1E2025]">{clientOrders.length}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] text-center ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#555A60]">{clientOrders.length}</p>
           </td>
         );
       case 'lastOrder':
         return (
-          <td key={columnKey} className="px-6 py-4">
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : { minWidth: '150px' }}
+          >
             <p className="text-[#555A60]">
               {lastOrder ? formatDate(lastOrder.createdAt) : 'No orders'}
             </p>
@@ -338,6 +568,9 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           >
             <Filter size={16} />
             Filters
+            {hasActiveFilters && (
+              <span className="text-[#1F744F] font-semibold" aria-label="Active filters">*</span>
+            )}
           </Button>
           <Button
             variant="outline"
@@ -346,55 +579,109 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           >
             <Columns size={16} />
             Customize
+            {hasActiveCustomizations && (
+              <span className="text-[#1F744F] font-semibold" aria-label="Active customizations">*</span>
+            )}
           </Button>
         </div>
       </div>
       
       {/* Clients table */}
-      <div className="bg-white rounded-xl border border-[#E4E7E7] overflow-hidden">
-        {filteredClients.length === 0 ? (
-          <div className="px-6 py-12 text-center">
-            {searchQuery ? (
-              <>
-                <p className="text-[#7C8085] mb-2">No clients found</p>
-                <p className="text-[#7C8085]">Try adjusting your search query</p>
-              </>
-            ) : (
-              <>
-                <p className="text-[#7C8085] mb-4">No clients yet</p>
-                <button
-                  onClick={() => onNavigate('client-detail', 'new')}
-                  className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-                >
-                  Add your first client
-                </button>
-              </>
-            )}
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#E4E7E7]">
-                {orderedVisibleColumns.map(renderTableHeader)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E4E7E7]">
-              {paginatedClients.map(client => {
-                const clientOrders = getClientOrders(orders, client.id);
-                
-                return (
-                  <tr 
-                    key={client.id}
-                    onClick={() => onNavigate('client-detail', client.id)}
-                    className="hover:bg-[#F7F8F8] cursor-pointer transition-colors"
-                  >
-                    {orderedVisibleColumns.map(columnKey => renderTableCell(columnKey, client, clientOrders))}
+      <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
+        <div className="overflow-x-auto" style={{ position: 'relative' }}>
+          {isLoading ? (
+            // Loading state with skeleton rows
+            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
+                  <tr key={i}>
+                    {orderedVisibleColumns.map((col, colIndex) => {
+                      if (!visibleColumns[col]) return null;
+                      const isFirstColumn = colIndex === 0;
+                      const isCenterAlign = col === 'orders';
+                      const skeletonWidths: Record<ColumnKey, string> = {
+                        clientId: 'w-24',
+                        client: 'w-24',
+                        email: 'w-24',
+                        phone: 'w-20',
+                        orders: 'w-16',
+                        lastOrder: 'w-24',
+                      };
+                      return (
+                        <td 
+                          key={col} 
+                          className={`px-6 py-4 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : ''} ${isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''}`}
+                          style={isFirstColumn ? { position: 'sticky', left: 0, zIndex: (filtersOpen || settingsOpen) ? 0 : 10, minWidth: '150px' } : undefined}
+                        >
+                          <Skeleton className={`h-4 ${skeletonWidths[col]} ${isCenterAlign ? 'mx-auto' : ''}`} />
+                        </td>
+                      );
+                    })}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                ))}
+              </tbody>
+            </table>
+          ) : filteredClients.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              {searchQuery ? (
+                <>
+                  <p className="text-[#7C8085] mb-2">No clients found</p>
+                  <p className="text-[#7C8085]">Try adjusting your search query</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[#7C8085] mb-4">No clients yet</p>
+                  <button
+                    onClick={() => onNavigate('client-detail', 'new')}
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                  >
+                    Add your first client
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedClients.map(client => {
+                  const clientOrders = getClientOrders(orders, client.id);
+                  
+                  return (
+                    <tr 
+                      key={client.id}
+                      onClick={() => onNavigate('client-detail', client.id)}
+                      className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                      onMouseEnter={(e) => {
+                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                        if (stickyCell) {
+                          stickyCell.style.backgroundColor = '#F7F8F8';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                        if (stickyCell) {
+                          stickyCell.style.backgroundColor = 'white';
+                        }
+                      }}
+                    >
+                      {orderedVisibleColumns.map((columnKey, index) => renderTableCell(columnKey, client, clientOrders, index))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
       
       {filteredClients.length > 0 && (
@@ -415,7 +702,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       
       {/* Filters Panel - Portal to body */}
       {filtersOpen && createPortal(
-        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, isolation: 'isolate' }}>
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setFiltersOpen(false)}
@@ -573,6 +860,19 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     )}
                   </div>
                 </div>
+                
+                {/* Reset Filters Button */}
+                {hasActiveFilters && (
+                  <div className="pt-4 border-t border-[#E4E7E7]">
+                    <Button
+                      variant="outline"
+                      onClick={resetFilters}
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                    >
+                      Reset All Filters
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -582,7 +882,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       
       {/* Customize Panel - Portal to body */}
       {settingsOpen && createPortal(
-        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, isolation: 'isolate' }}>
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setSettingsOpen(false)}
@@ -615,7 +915,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                   <p className="text-xs text-[#555A60]">Drag columns to reorder them</p>
                   <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
                     {columnOrder.map((columnKey) => {
-                      const isRequired = columnKey === 'name';
+                      const isRequired = columnKey === 'clientId';
                       const isVisible = visibleColumns[columnKey];
                       
                       return (
@@ -684,12 +984,11 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="name">Name</SelectItem>
-                          <SelectItem value="company">Company</SelectItem>
-                          <SelectItem value="email">Email</SelectItem>
-                          <SelectItem value="phone">Phone</SelectItem>
-                          <SelectItem value="orders">Orders</SelectItem>
-                          <SelectItem value="lastOrder">Last Order</SelectItem>
+                          {columnOrder.filter(key => visibleColumns[key]).map(key => (
+                            <SelectItem key={key} value={key}>
+                              {columnLabels[key]}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -728,6 +1027,19 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                     ))}
                   </div>
                 </div>
+                
+                {/* Reset Custom Settings Button */}
+                {hasActiveCustomizations && (
+                  <div className="pt-4 border-t border-[#E4E7E7]">
+                    <Button
+                      variant="outline"
+                      onClick={resetCustomizations}
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                    >
+                      Reset All Custom Settings
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

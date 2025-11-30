@@ -1,7 +1,7 @@
 // Document templates page - manage invoice and PO templates
 import { useState } from 'react';
 import { useApp } from '../lib/app-context';
-import { formatDate } from '../lib/utils';
+import { formatDate, formatPhoneNumber } from '../lib/utils';
 import { FileText, Eye, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
@@ -64,7 +64,7 @@ export function DocumentTemplates({ onNavigate }: DocumentTemplatesProps) {
                     <h4 className="text-[#555A60] mb-2">From:</h4>
                     <p className="text-[#1E2025]">{companySettings.name}</p>
                     <p className="text-[#555A60]">{companySettings.address}</p>
-                    <p className="text-[#555A60]">{companySettings.phone}</p>
+                    <p className="text-[#555A60]">{formatPhoneNumber(companySettings.phone)}</p>
                     <p className="text-[#555A60]">{companySettings.email}</p>
                   </div>
                   
@@ -190,7 +190,7 @@ export function DocumentTemplates({ onNavigate }: DocumentTemplatesProps) {
                     <h4 className="text-[#555A60] mb-2">Vendor:</h4>
                     <p className="text-[#1E2025]">{companySettings.name}</p>
                     <p className="text-[#555A60]">{companySettings.address}</p>
-                    <p className="text-[#555A60]">{companySettings.phone}</p>
+                    <p className="text-[#555A60]">{formatPhoneNumber(companySettings.phone)}</p>
                   </div>
                   
                   <div>

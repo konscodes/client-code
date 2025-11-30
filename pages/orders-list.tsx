@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
 import { StatusPill } from '../components/status-pill';
-import { formatCurrency, formatDate, calculateOrderTotal, getOrderTotals } from '../lib/utils';
+import { formatCurrency, formatDate, calculateOrderTotal, getOrderTotals, extractIdNumbers } from '../lib/utils';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
@@ -29,25 +29,32 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
   const isLoading = loading || (orders.length === 0 && clients.length === 0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
   
-  // Column visibility state - Order ID and Status are default, checked, and disabled
-  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>({
-    orderId: true, // default, cannot be unchecked
+  // localStorage keys
+  const STORAGE_KEY_PREFIX = 'orders-table-';
+  const STORAGE_KEYS = {
+    filters: `${STORAGE_KEY_PREFIX}filters`,
+    visibleColumns: `${STORAGE_KEY_PREFIX}visibleColumns`,
+    columnOrder: `${STORAGE_KEY_PREFIX}columnOrder`,
+    itemsPerPage: `${STORAGE_KEY_PREFIX}itemsPerPage`,
+    sortBy: `${STORAGE_KEY_PREFIX}sortBy`,
+    sortDirection: `${STORAGE_KEY_PREFIX}sortDirection`,
+  };
+  
+  // Default values
+  const defaultVisibleColumns: Record<ColumnKey, boolean> = {
+    orderId: true,
     client: true,
     date: true,
-    status: true, // default, cannot be unchecked
+    status: true,
     jobs: true,
     total: true,
     subtotal: false,
     internalNotes: false,
     visibleNotes: false,
-  });
+  };
   
-  // Column order state - defines the order of columns
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([
+  const defaultColumnOrder: ColumnKey[] = [
     'orderId',
     'client',
     'date',
@@ -57,7 +64,50 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     'subtotal',
     'internalNotes',
     'visibleNotes',
-  ]);
+  ];
+  
+  // Load from localStorage on mount
+  const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+  
+  // Save to localStorage
+  const saveToStorage = (key: string, value: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error('Failed to save to localStorage:', error);
+    }
+  };
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Filter states - load from localStorage
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>(() => {
+    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
+    return stored.statusFilter || 'all';
+  });
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => {
+    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
+    return stored.dateFilter || {};
+  });
+  
+  // Column visibility state - load from localStorage
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
+    loadFromStorage(STORAGE_KEYS.visibleColumns, defaultVisibleColumns)
+  );
+  
+  // Column order state - load from localStorage
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() =>
+    loadFromStorage(STORAGE_KEYS.columnOrder, defaultColumnOrder)
+  );
   
   // Panel states
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -67,13 +117,76 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
   
-  // Pagination state
+  // Pagination state - load from localStorage
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(() =>
+    loadFromStorage(STORAGE_KEYS.itemsPerPage, 10)
+  );
   
-  // Sorting state
-  const [sortBy, setSortBy] = useState<ColumnKey | 'createdAt'>('createdAt');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  // Sorting state - load from localStorage
+  const [sortBy, setSortBy] = useState<ColumnKey | 'createdAt'>(() =>
+    loadFromStorage(STORAGE_KEYS.sortBy, 'createdAt')
+  );
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() =>
+    loadFromStorage(STORAGE_KEYS.sortDirection, 'desc')
+  );
+  
+  // Save filters to localStorage when they change
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.filters, { statusFilter, dateFilter });
+  }, [statusFilter, dateFilter]);
+  
+  // Save column settings to localStorage when they change
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.visibleColumns, visibleColumns);
+  }, [visibleColumns]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.columnOrder, columnOrder);
+  }, [columnOrder]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.itemsPerPage, itemsPerPage);
+  }, [itemsPerPage]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.sortBy, sortBy);
+  }, [sortBy]);
+  
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.sortDirection, sortDirection);
+  }, [sortDirection]);
+  
+  // Check if filters are active
+  const hasActiveFilters = useMemo(() => {
+    return !!(statusFilter !== 'all' || dateFilter.from || dateFilter.to);
+  }, [statusFilter, dateFilter]);
+  
+  // Check if customizations are active (different from defaults)
+  const hasActiveCustomizations = useMemo(() => {
+    const hasCustomColumns = JSON.stringify(visibleColumns) !== JSON.stringify(defaultVisibleColumns);
+    const hasCustomOrder = JSON.stringify(columnOrder) !== JSON.stringify(defaultColumnOrder);
+    const hasCustomItemsPerPage = itemsPerPage !== 10;
+    const hasCustomSort = sortBy !== 'createdAt' || sortDirection !== 'desc';
+    return hasCustomColumns || hasCustomOrder || hasCustomItemsPerPage || hasCustomSort;
+  }, [visibleColumns, columnOrder, itemsPerPage, sortBy, sortDirection]);
+  
+  // Reset filters function
+  const resetFilters = () => {
+    setStatusFilter('all');
+    setDateFilter({});
+    setCurrentPage(1);
+  };
+  
+  // Reset customizations function
+  const resetCustomizations = () => {
+    setVisibleColumns(defaultVisibleColumns);
+    setColumnOrder(defaultColumnOrder);
+    setItemsPerPage(10);
+    setSortBy('createdAt');
+    setSortDirection('desc');
+    setCurrentPage(1);
+  };
   
   const filteredOrders = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -216,15 +329,39 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   };
   
   // Helper function to render table header
-  const renderTableHeader = (columnKey: ColumnKey) => {
+  const renderTableHeader = (columnKey: ColumnKey, index: number) => {
     if (!visibleColumns[columnKey]) return null;
     
     const isRightAlign = columnKey === 'total' || columnKey === 'subtotal';
+    const isCenterAlign = columnKey === 'jobs';
+    const isFirstColumn = index === 0;
+    const isDateColumn = columnKey === 'date';
+    const isJobsColumn = columnKey === 'jobs';
+    const hasOpenPanel = filtersOpen || settingsOpen;
+    
+    const headerStyle: React.CSSProperties = {};
+    if (isFirstColumn) {
+      headerStyle.position = 'sticky';
+      headerStyle.left = 0;
+      headerStyle.zIndex = hasOpenPanel ? 0 : 10;
+      headerStyle.minWidth = '150px';
+    }
+    if (isDateColumn) {
+      headerStyle.minWidth = '150px';
+    }
+    if (isJobsColumn) {
+      headerStyle.minWidth = '100px';
+    }
     
     return (
       <th 
         key={columnKey}
-        className={`px-6 py-3 ${isRightAlign ? 'text-right' : 'text-left'} text-[#555A60]`}
+        className={`px-6 py-3 border-b border-[#E4E7E7] ${
+          isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : 'text-left'
+        } text-[#555A60] ${
+          isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''
+        }`}
+        style={Object.keys(headerStyle).length > 0 ? headerStyle : undefined}
       >
         {columnLabels[columnKey]}
       </th>
@@ -232,66 +369,169 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   };
   
   // Helper function to render table cell
-  const renderTableCell = (columnKey: ColumnKey, order: typeof orders[0], client: typeof clients[0] | undefined) => {
+  const renderTableCell = (columnKey: ColumnKey, order: typeof orders[0], client: typeof clients[0] | undefined, index: number) => {
     if (!visibleColumns[columnKey]) return null;
     
     const { subtotal, total } = getOrderTotals(order);
     const isRightAlign = columnKey === 'total' || columnKey === 'subtotal';
+    const isFirstColumn = index === 0;
+    const hasOpenPanel = filtersOpen || settingsOpen;
     
     switch (columnKey) {
       case 'orderId':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#1E2025]">{order.id}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#1E2025]">{extractIdNumbers(order.id)}</p>
           </td>
         );
       case 'client':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#1E2025]">{client?.name || 'Unknown'}</p>
-            <p className="text-[#7C8085]">{client?.company}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#1E2025]">{client?.company}</p>
+            {client?.name && client.name !== 'Unknown' && (
+              <p className="text-[#7C8085]">{client.name}</p>
+            )}
           </td>
         );
       case 'date':
         return (
-          <td key={columnKey} className="px-6 py-4">
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : { minWidth: '150px' }}
+          >
             <p className="text-[#555A60]">{formatDate(order.createdAt)}</p>
           </td>
         );
       case 'status':
         return (
-          <td key={columnKey} className="px-6 py-4">
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
             <StatusPill status={order.status} />
           </td>
         );
       case 'jobs':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60]">{order.jobs.length} jobs</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] text-center ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : { minWidth: '100px' }}
+          >
+            <p className="text-[#555A60] whitespace-nowrap">{order.jobs.length}</p>
           </td>
         );
       case 'total':
         return (
-          <td key={columnKey} className={`px-6 py-4 ${isRightAlign ? 'text-right' : ''}`}>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
             <p className="text-[#1E2025]">{formatCurrency(total)}</p>
           </td>
         );
       case 'subtotal':
         return (
-          <td key={columnKey} className={`px-6 py-4 ${isRightAlign ? 'text-right' : ''}`}>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isRightAlign ? 'text-right' : ''} ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
             <p className="text-[#1E2025]">{formatCurrency(subtotal)}</p>
           </td>
         );
       case 'internalNotes':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60] text-sm line-clamp-2">{order.notesInternal || '-'}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#7C8085] line-clamp-2">{order.notesInternal || '-'}</p>
           </td>
         );
       case 'visibleNotes':
         return (
-          <td key={columnKey} className="px-6 py-4">
-            <p className="text-[#555A60] text-sm line-clamp-2">{order.notesPublic || '-'}</p>
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10 border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] transition-colors' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              backgroundColor: 'white'
+            } : undefined}
+          >
+            <p className="text-[#7C8085] line-clamp-2">{order.notesPublic || '-'}</p>
           </td>
         );
       default:
@@ -299,29 +539,6 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     }
   };
   
-  // Helper function to render skeleton cell
-  const renderSkeletonCell = (columnKey: ColumnKey) => {
-    if (!visibleColumns[columnKey]) return null;
-    
-    const isRightAlign = columnKey === 'total' || columnKey === 'subtotal';
-    const skeletonWidths: Record<ColumnKey, string> = {
-      orderId: 'w-24',
-      client: 'w-20',
-      date: 'w-24',
-      status: 'w-16',
-      jobs: 'w-16',
-      total: 'w-20',
-      subtotal: 'w-20',
-      internalNotes: 'w-32',
-      visibleNotes: 'w-32',
-    };
-    
-    return (
-      <td key={columnKey} className={`px-6 py-4 ${isRightAlign ? 'text-right' : ''}`}>
-        <Skeleton className={`h-4 ${skeletonWidths[columnKey]} ${isRightAlign ? 'ml-auto' : ''}`} />
-      </td>
-    );
-  };
   
   const statusCounts = useMemo(() => {
     return {
@@ -377,6 +594,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           >
             <Filter size={16} />
             Filters
+            {hasActiveFilters && (
+              <span className="text-[#1F744F] font-semibold" aria-label="Active filters">*</span>
+            )}
           </Button>
           <Button
             variant="outline"
@@ -385,29 +605,60 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           >
             <Columns size={16} />
             Customize
+            {hasActiveCustomizations && (
+              <span className="text-[#1F744F] font-semibold" aria-label="Active customizations">*</span>
+            )}
           </Button>
         </div>
       </div>
       
       {/* Orders table */}
-      <div className="bg-white rounded-xl border border-[#E4E7E7] overflow-hidden">
-        {isLoading ? (
-          // Loading state with skeleton rows
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#E4E7E7]">
-                {orderedVisibleColumns.map(renderTableHeader)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E4E7E7]">
-              {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
-                <tr key={i}>
-                  {orderedVisibleColumns.map(renderSkeletonCell)}
+      <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
+        <div className="overflow-x-auto" style={{ position: 'relative' }}>
+          {isLoading ? (
+            // Loading state with skeleton rows
+            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : filteredOrders.length === 0 ? (
+              </thead>
+              <tbody>
+                {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
+                  <tr key={i}>
+                    {orderedVisibleColumns.map((col, colIndex) => {
+                      if (!visibleColumns[col]) return null;
+                      const isFirstColumn = colIndex === 0;
+                      const isRightAlign = col === 'total' || col === 'subtotal';
+                      const isCenterAlign = col === 'jobs';
+                      const skeletonWidths: Record<ColumnKey, string> = {
+                        orderId: 'w-24',
+                        client: 'w-20',
+                        date: 'w-24',
+                        status: 'w-16',
+                        jobs: 'w-16',
+                        total: 'w-20',
+                        subtotal: 'w-20',
+                        internalNotes: 'w-32',
+                        visibleNotes: 'w-32',
+                      };
+                      return (
+                        <td 
+                          key={col} 
+                          className={`px-6 py-4 border-b border-[#E4E7E7] ${
+                            isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : ''
+                          } ${isFirstColumn ? 'sticky left-0 z-10 bg-white border-r border-[#E4E7E7] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]' : ''}`}
+                          style={isFirstColumn ? { position: 'sticky', left: 0, zIndex: (filtersOpen || settingsOpen) ? 0 : 10, minWidth: '150px' } : undefined}
+                        >
+                          <Skeleton className={`h-4 ${skeletonWidths[col]} ${isRightAlign ? 'ml-auto' : isCenterAlign ? 'mx-auto' : ''}`} />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : filteredOrders.length === 0 ? (
           <div className="px-6 py-12 text-center">
             {searchQuery || statusFilter !== 'all' || dateFilter.from || dateFilter.to ? (
               <>
@@ -427,29 +678,42 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
             )}
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#E4E7E7]">
-                {orderedVisibleColumns.map(renderTableHeader)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E4E7E7]">
-              {paginatedOrders.map(order => {
-                const client = clients.find(c => c.id === order.clientId);
-                
-                return (
-                  <tr 
-                    key={order.id}
-                    onClick={() => onNavigate('order-detail', order.id)}
-                    className="hover:bg-[#F7F8F8] cursor-pointer transition-colors"
-                  >
-                    {orderedVisibleColumns.map(columnKey => renderTableCell(columnKey, order, client))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedOrders.map(order => {
+                  const client = clients.find(c => c.id === order.clientId);
+                  
+                  return (
+                    <tr 
+                      key={order.id}
+                      onClick={() => onNavigate('order-detail', order.id)}
+                      className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                      onMouseEnter={(e) => {
+                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                        if (stickyCell) {
+                          stickyCell.style.backgroundColor = '#F7F8F8';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                        if (stickyCell) {
+                          stickyCell.style.backgroundColor = 'white';
+                        }
+                      }}
+                    >
+                      {orderedVisibleColumns.map((colKey, index) => renderTableCell(colKey, order, client, index))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
       
       {filteredOrders.length > 0 && (
@@ -470,7 +734,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       {/* Settings Panel - Portal to body */}
       {settingsOpen && createPortal(
-        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, isolation: 'isolate' }}>
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setSettingsOpen(false)}
@@ -617,6 +881,19 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                     ))}
                   </div>
                 </div>
+                
+                {/* Reset Custom Settings Button */}
+                {hasActiveCustomizations && (
+                  <div className="pt-4 border-t border-[#E4E7E7]">
+                    <Button
+                      variant="outline"
+                      onClick={resetCustomizations}
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                    >
+                      Reset All Custom Settings
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -626,7 +903,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       {/* Filters Panel - Portal to body */}
       {filtersOpen && createPortal(
-        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <div className="fixed inset-0 z-[9999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, isolation: 'isolate' }}>
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setFiltersOpen(false)}
@@ -770,6 +1047,19 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                     )}
                   </div>
                 </div>
+                
+                {/* Reset Filters Button */}
+                {hasActiveFilters && (
+                  <div className="pt-4 border-t border-[#E4E7E7]">
+                    <Button
+                      variant="outline"
+                      onClick={resetFilters}
+                      className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F]"
+                    >
+                      Reset All Filters
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

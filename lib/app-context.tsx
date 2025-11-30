@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings, DocumentTemplate } from './types';
 import { supabase } from './supabase';
+import { normalizePhoneNumber } from './utils';
 
 interface AppContextType {
   clients: Client[];
@@ -321,7 +322,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: client.id,
         name: client.name,
         company: client.company,
-        phone: client.phone,
+        phone: normalizePhoneNumber(client.phone),
         email: client.email,
         address: client.address,
         inn: client.inn,
@@ -341,6 +342,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updateData: any = { ...updates };
     if (updates.createdAt) updateData.createdAt = updates.createdAt.toISOString();
     if (updates.updatedAt) updateData.updatedAt = updates.updatedAt.toISOString();
+    if (updates.phone) updateData.phone = normalizePhoneNumber(updates.phone);
     updateData.updatedAt = new Date().toISOString();
     
     const { error: err } = await supabase
