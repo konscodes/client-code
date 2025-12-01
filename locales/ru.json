@@ -26,6 +26,7 @@
   },
   "navigation": {
     "dashboard": "Панель управления",
+    "analytics": "Аналитика",
     "clients": "Клиенты",
     "orders": "Заказы",
     "jobCatalog": "Каталог работ",
@@ -62,6 +63,36 @@
     "noClients": "Клиентов пока нет",
     "addFirstClient": "Добавьте вашего первого клиента",
     "orders": "заказов"
+  },
+  "analytics": {
+    "title": "Аналитика",
+    "subtitle": "Просмотр аналитики и метрик для вашего бизнеса.",
+    "kpi": {
+      "numberOfClients": "Количество клиентов",
+      "numberOfOrders": "Количество заказов",
+      "ordersInProgress": "Заказов в работе",
+      "totalRevenue": "Общая выручка"
+    },
+    "charts": {
+      "revenuePerClient": "Выручка по клиентам",
+      "ordersOverTime": "Заказы по времени",
+      "revenueOverTime": "Выручка по времени",
+      "jobsByCategory": "Работы по категориям",
+      "ordersByCategory": "Заказы по категориям",
+      "revenue": "Выручка",
+      "count": "Количество"
+    },
+    "timePresets": {
+      "thisMonth": "Этот месяц",
+      "lastMonth": "Прошлый месяц",
+      "lastQuarter": "Прошлый квартал",
+      "ytd": "С начала года",
+      "lastYear": "Прошлый год",
+      "last3Years": "Последние 3 года",
+      "last5Years": "Последние 5 лет",
+      "custom": "Произвольный",
+      "selectDateRange": "Выберите диапазон дат"
+    }
   },
   "settings": {
     "title": "Настройки",
@@ -127,6 +158,7 @@
     "toDate": "До даты",
     "pickDate": "Выберите дату",
     "clearDateFilter": "Очистить фильтр по дате",
+    "changeDateRange": "Изменить диапазон дат",
     "ordersCount": "Количество заказов",
     "numberOfOrders": "Количество заказов",
     "minimum": "Минимум",
@@ -238,6 +270,7 @@
     "toDate": "До даты",
     "pickDate": "Выберите дату",
     "clearDateFilter": "Очистить фильтр по дате",
+    "changeDateRange": "Изменить диапазон дат",
     "resetAllFilters": "Сбросить все фильтры",
     "columnSettings": "Настройки столбцов",
     "columnSettingsDescription": "Выберите, какие столбцы отображать в таблице",

@@ -26,6 +26,7 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "analytics": "Analytics",
     "clients": "Clients",
     "orders": "Orders",
     "jobCatalog": "Job Catalog",
@@ -62,6 +63,36 @@
     "noClients": "No clients yet",
     "addFirstClient": "Add your first client",
     "orders": "orders"
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "View insights and metrics for your business.",
+    "kpi": {
+      "numberOfClients": "Number of Clients",
+      "numberOfOrders": "Number of Orders",
+      "ordersInProgress": "Orders in Progress",
+      "totalRevenue": "Total Revenue"
+    },
+    "charts": {
+      "revenuePerClient": "Revenue per Client",
+      "ordersOverTime": "Orders Over Time",
+      "revenueOverTime": "Revenue Over Time",
+      "jobsByCategory": "Jobs by Category",
+      "ordersByCategory": "Orders by Category",
+      "revenue": "Revenue",
+      "count": "Count"
+    },
+    "timePresets": {
+      "thisMonth": "This Month",
+      "lastMonth": "Last Month",
+      "lastQuarter": "Last Quarter",
+      "ytd": "Year to Date",
+      "lastYear": "Last Year",
+      "last3Years": "Last 3 Years",
+      "last5Years": "Last 5 Years",
+      "custom": "Custom",
+      "selectDateRange": "Select Date Range"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -127,6 +158,7 @@
     "toDate": "To Date",
     "pickDate": "Pick a date",
     "clearDateFilter": "Clear date filter",
+    "changeDateRange": "Change Date Range",
     "ordersCount": "Orders Count",
     "numberOfOrders": "Number of Orders",
     "minimum": "Minimum",
@@ -237,6 +269,7 @@
     "toDate": "To Date",
     "pickDate": "Pick a date",
     "clearDateFilter": "Clear date filter",
+    "changeDateRange": "Change Date Range",
     "resetAllFilters": "Reset All Filters",
     "columnSettings": "Column Settings",
     "columnSettingsDescription": "Select which columns to display in the table",

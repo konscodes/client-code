@@ -13,11 +13,9 @@ import { Button } from '../components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../components/ui/sheet';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
-import { Calendar } from '../components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { PaginationWithLinks } from '../components/ui/pagination-with-links';
-import { CalendarIcon } from 'lucide-react';
+import { DateRangePicker } from '../components/date-range-picker';
 import type { OrderStatus } from '../lib/types';
 
 interface OrdersListProps {
@@ -95,12 +93,16 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   
   // Filter states - load from localStorage
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>(() => {
-    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
+    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateStart?: string; dateEnd?: string }>(STORAGE_KEYS.filters, {});
     return stored.statusFilter || 'all';
   });
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => {
-    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
-    return stored.dateFilter || {};
+  const [dateStart, setDateStart] = useState<Date | null>(() => {
+    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateStart?: string; dateEnd?: string }>(STORAGE_KEYS.filters, {});
+    return stored.dateStart ? new Date(stored.dateStart) : null;
+  });
+  const [dateEnd, setDateEnd] = useState<Date | null>(() => {
+    const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateStart?: string; dateEnd?: string }>(STORAGE_KEYS.filters, {});
+    return stored.dateEnd ? new Date(stored.dateEnd) : null;
   });
   
   // Column visibility state - load from localStorage
@@ -137,8 +139,12 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   
   // Save filters to localStorage when they change
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.filters, { statusFilter, dateFilter });
-  }, [statusFilter, dateFilter]);
+    saveToStorage(STORAGE_KEYS.filters, { 
+      statusFilter, 
+      dateStart: dateStart?.toISOString() || undefined,
+      dateEnd: dateEnd?.toISOString() || undefined
+    });
+  }, [statusFilter, dateStart, dateEnd]);
   
   // Save column settings to localStorage when they change
   useEffect(() => {
@@ -163,8 +169,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   
   // Check if filters are active
   const hasActiveFilters = useMemo(() => {
-    return !!(statusFilter !== 'all' || dateFilter.from || dateFilter.to);
-  }, [statusFilter, dateFilter]);
+    return !!(statusFilter !== 'all' || dateStart || dateEnd);
+  }, [statusFilter, dateStart, dateEnd]);
   
   // Check if customizations are active (different from defaults)
   const hasActiveCustomizations = useMemo(() => {
@@ -178,7 +184,8 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   // Reset filters function
   const resetFilters = () => {
     setStatusFilter('all');
-    setDateFilter({});
+    setDateStart(null);
+    setDateEnd(null);
     setCurrentPage(1);
   };
   
@@ -207,15 +214,15 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       // Date filter
       let matchesDate = true;
-      if (dateFilter.from || dateFilter.to) {
+      if (dateStart || dateEnd) {
         const orderDate = new Date(order.createdAt);
-        if (dateFilter.from) {
-          const fromDate = new Date(dateFilter.from);
+        if (dateStart) {
+          const fromDate = new Date(dateStart);
           fromDate.setHours(0, 0, 0, 0);
           if (orderDate < fromDate) matchesDate = false;
         }
-        if (dateFilter.to) {
-          const toDate = new Date(dateFilter.to);
+        if (dateEnd) {
+          const toDate = new Date(dateEnd);
           toDate.setHours(23, 59, 59, 999);
           if (orderDate > toDate) matchesDate = false;
         }
@@ -260,7 +267,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [orders, clients, searchQuery, statusFilter, dateFilter, sortBy, sortDirection]);
+  }, [orders, clients, searchQuery, statusFilter, dateStart, dateEnd, sortBy, sortDirection]);
   
   // Pagination calculations
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -271,7 +278,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   // Reset to page 1 when filters, itemsPerPage, or sorting change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, dateFilter.from, dateFilter.to, itemsPerPage, sortBy, sortDirection]);
+  }, [searchQuery, statusFilter, dateStart, dateEnd, itemsPerPage, sortBy, sortDirection]);
   
   // Get ordered visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -676,7 +683,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
             </table>
           ) : filteredOrders.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            {searchQuery || statusFilter !== 'all' || dateFilter.from || dateFilter.to ? (
+            {searchQuery || statusFilter !== 'all' || dateStart || dateEnd ? (
               <>
                 <p className="text-[#7C8085] mb-2">{t('orders.noOrders')}</p>
                 <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
@@ -986,82 +993,53 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                 {/* Date Filter */}
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.orderDateRange')}</Label>
-                  <div className="space-y-4">
+                  
+                  {/* Show selected range when both dates are selected */}
+                  {dateStart && dateEnd ? (
                     <div className="space-y-2">
-                      <Label htmlFor="date-from" className="text-xs font-medium text-[#555A60]">
-                        {t('orders.fromDate')}
-                      </Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal h-9"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
-                            {dateFilter.from ? (
-                              formatDate(new Date(dateFilter.from))
-                            ) : (
-                              <span className="text-[#7C8085]">{t('orders.pickDate')}</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dateFilter.from ? new Date(dateFilter.from) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                setDateFilter({ ...dateFilter, from: date.toISOString().split('T')[0] });
-                              }
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="date-to" className="text-xs font-medium text-[#555A60]">
-                        {t('orders.toDate')}
-                      </Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal h-9"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
-                            {dateFilter.to ? (
-                              formatDate(new Date(dateFilter.to))
-                            ) : (
-                              <span className="text-[#7C8085]">{t('orders.pickDate')}</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dateFilter.to ? new Date(dateFilter.to) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                setDateFilter({ ...dateFilter, to: date.toISOString().split('T')[0] });
-                              }
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {(dateFilter.from || dateFilter.to) && (
+                      <div className="px-3 py-2 bg-[#F7F8F8] rounded-lg border border-[#E4E7E7]">
+                        <p className="text-sm text-[#1E2025] font-medium">
+                          {formatDate(dateStart)} - {formatDate(dateEnd)}
+                        </p>
+                      </div>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => setDateFilter({})}
-                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
+                        onClick={() => {
+                          setDateStart(null);
+                          setDateEnd(null);
+                        }}
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F] cursor-pointer"
                       >
                         {t('orders.clearDateFilter')}
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <>
+                      <DateRangePicker
+                        startDate={dateStart}
+                        endDate={dateEnd}
+                        onRangeChange={(start, end) => {
+                          setDateStart(start);
+                          setDateEnd(end);
+                        }}
+                        singleMonth={true}
+                      />
+                      {(dateStart || dateEnd) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDateStart(null);
+                            setDateEnd(null);
+                          }}
+                          className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
+                        >
+                          {t('orders.clearDateFilter')}
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </div>
                 
                 {/* Reset Filters Button */}

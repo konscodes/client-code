@@ -5,16 +5,15 @@ import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
-import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, CalendarIcon } from 'lucide-react';
+import { Search, Plus, Filter, Columns, X as XIcon, GripVertical } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
-import { Calendar } from '../components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { PaginationWithLinks } from '../components/ui/pagination-with-links';
+import { DateRangePicker } from '../components/date-range-picker';
 
 interface ClientsListProps {
   onNavigate: (page: string, id?: string) => void;
@@ -84,9 +83,13 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter states - load from localStorage
-  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>(() => {
-    const stored = loadFromStorage<{ dateFilter?: { from?: string; to?: string } }>(STORAGE_KEYS.filters, {});
-    return stored.dateFilter || {};
+  const [dateStart, setDateStart] = useState<Date | null>(() => {
+    const stored = loadFromStorage<{ dateStart?: string; dateEnd?: string; ordersCountFilter?: { min?: number; max?: number } }>(STORAGE_KEYS.filters, {});
+    return stored.dateStart ? new Date(stored.dateStart) : null;
+  });
+  const [dateEnd, setDateEnd] = useState<Date | null>(() => {
+    const stored = loadFromStorage<{ dateStart?: string; dateEnd?: string; ordersCountFilter?: { min?: number; max?: number } }>(STORAGE_KEYS.filters, {});
+    return stored.dateEnd ? new Date(stored.dateEnd) : null;
   });
   const [ordersCountFilter, setOrdersCountFilter] = useState<{ min?: number; max?: number }>(() => {
     const stored = loadFromStorage<{ ordersCountFilter?: { min?: number; max?: number } }>(STORAGE_KEYS.filters, {});
@@ -127,8 +130,12 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Save filters to localStorage when they change
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.filters, { dateFilter, ordersCountFilter });
-  }, [dateFilter, ordersCountFilter]);
+    saveToStorage(STORAGE_KEYS.filters, { 
+      dateStart: dateStart?.toISOString() || undefined,
+      dateEnd: dateEnd?.toISOString() || undefined,
+      ordersCountFilter 
+    });
+  }, [dateStart, dateEnd, ordersCountFilter]);
   
   // Save column settings to localStorage when they change
   useEffect(() => {
@@ -153,8 +160,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Check if filters are active
   const hasActiveFilters = useMemo(() => {
-    return !!(dateFilter.from || dateFilter.to || ordersCountFilter.min !== undefined || ordersCountFilter.max !== undefined);
-  }, [dateFilter, ordersCountFilter]);
+    return !!(dateStart || dateEnd || ordersCountFilter.min !== undefined || ordersCountFilter.max !== undefined);
+  }, [dateStart, dateEnd, ordersCountFilter]);
   
   // Check if customizations are active (different from defaults)
   const hasActiveCustomizations = useMemo(() => {
@@ -167,7 +174,8 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   
   // Reset filters function
   const resetFilters = () => {
-    setDateFilter({});
+    setDateStart(null);
+    setDateEnd(null);
     setOrdersCountFilter({});
     setCurrentPage(1);
   };
@@ -203,18 +211,18 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
         : null;
       
       let matchesDate = true;
-      if (dateFilter.from || dateFilter.to) {
+      if (dateStart || dateEnd) {
         if (!lastOrder) {
           matchesDate = false; // No orders means no date match
         } else {
           const lastOrderDate = new Date(lastOrder.createdAt);
-          if (dateFilter.from) {
-            const fromDate = new Date(dateFilter.from);
+          if (dateStart) {
+            const fromDate = new Date(dateStart);
             fromDate.setHours(0, 0, 0, 0);
             if (lastOrderDate < fromDate) matchesDate = false;
           }
-          if (dateFilter.to) {
-            const toDate = new Date(dateFilter.to);
+          if (dateEnd) {
+            const toDate = new Date(dateEnd);
             toDate.setHours(23, 59, 59, 999);
             if (lastOrderDate > toDate) matchesDate = false;
           }
@@ -299,7 +307,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [clients, orders, searchQuery, dateFilter, ordersCountFilter, sortBy, sortDirection]);
+  }, [clients, orders, searchQuery, dateStart, dateEnd, ordersCountFilter, sortBy, sortDirection]);
   
   // Pagination calculations
   const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
@@ -310,7 +318,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   // Reset to page 1 when filters, itemsPerPage, or sorting change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, dateFilter.from, dateFilter.to, ordersCountFilter.min, ordersCountFilter.max, itemsPerPage, sortBy, sortDirection]);
+  }, [searchQuery, dateStart, dateEnd, ordersCountFilter.min, ordersCountFilter.max, itemsPerPage, sortBy, sortDirection]);
   
   // Get ordered visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -749,82 +757,53 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
                 {/* Date Filter */}
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold text-[#1E2025]">{t('clients.lastOrderDateRange')}</Label>
-                  <div className="space-y-4">
+                  
+                  {/* Show selected range when both dates are selected */}
+                  {dateStart && dateEnd ? (
                     <div className="space-y-2">
-                      <Label htmlFor="date-from" className="text-xs font-medium text-[#555A60]">
-                        {t('clients.fromDate')}
-                      </Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal h-9"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
-                            {dateFilter.from ? (
-                              formatDate(new Date(dateFilter.from))
-                            ) : (
-                              <span className="text-[#7C8085]">{t('clients.pickDate')}</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dateFilter.from ? new Date(dateFilter.from) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                setDateFilter({ ...dateFilter, from: date.toISOString().split('T')[0] });
-                              }
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="date-to" className="text-xs font-medium text-[#555A60]">
-                        {t('clients.toDate')}
-                      </Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full justify-start text-left font-normal h-9"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4 text-[#7C8085]" />
-                            {dateFilter.to ? (
-                              formatDate(new Date(dateFilter.to))
-                            ) : (
-                              <span className="text-[#7C8085]">{t('clients.pickDate')}</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dateFilter.to ? new Date(dateFilter.to) : undefined}
-                            onSelect={(date) => {
-                              if (date) {
-                                setDateFilter({ ...dateFilter, to: date.toISOString().split('T')[0] });
-                              }
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {(dateFilter.from || dateFilter.to) && (
+                      <div className="px-3 py-2 bg-[#F7F8F8] rounded-lg border border-[#E4E7E7]">
+                        <p className="text-sm text-[#1E2025] font-medium">
+                          {formatDate(dateStart)} - {formatDate(dateEnd)}
+                        </p>
+                      </div>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => setDateFilter({})}
-                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
+                        onClick={() => {
+                          setDateStart(null);
+                          setDateEnd(null);
+                        }}
+                        className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] border-[#1F744F] cursor-pointer"
                       >
                         {t('clients.clearDateFilter')}
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <>
+                      <DateRangePicker
+                        startDate={dateStart}
+                        endDate={dateEnd}
+                        onRangeChange={(start, end) => {
+                          setDateStart(start);
+                          setDateEnd(end);
+                        }}
+                        singleMonth={true}
+                      />
+                      {(dateStart || dateEnd) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDateStart(null);
+                            setDateEnd(null);
+                          }}
+                          className="w-full text-[#1F744F] hover:text-[#165B3C] hover:bg-[#E8F5E9] cursor-pointer"
+                        >
+                          {t('clients.clearDateFilter')}
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </div>
                 
                 {/* Orders Count Filter */}
