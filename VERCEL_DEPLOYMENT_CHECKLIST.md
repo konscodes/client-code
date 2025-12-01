@@ -143,3 +143,4 @@ Vercel should auto-detect from `vercel.json`, but verify:
 - All environment variables must be prefixed with `VITE_` to be accessible in the frontend
 - Service role keys should NEVER be exposed in frontend code
 
+

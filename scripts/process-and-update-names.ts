@@ -114,3 +114,4 @@ function extractNameFromText(text: string): string | null {
 // Sample processing - this will be used to generate SQL
 export { extractNameFromNotes, extractNameFromText };
 
+

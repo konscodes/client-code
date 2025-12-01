@@ -109,3 +109,4 @@ function extractNameFromText(text: string): string | null {
 // This will be used to generate SQL updates
 console.log('Script ready. Use MCP Supabase tools to execute.');
 
+

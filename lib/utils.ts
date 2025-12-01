@@ -16,6 +16,24 @@ export function formatCurrency(
   }).format(amount);
 }
 
+/**
+ * Formats a number with shortened notation (e.g., 1M, 100K, 1.5B)
+ * @param value - The number to format
+ * @returns Formatted string (e.g., "1.2M", "500K", "1.5B")
+ */
+export function formatShortNumber(value: number): string {
+  if (value >= 1000000000) {
+    return (value / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (value >= 1000000) {
+    return (value / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (value >= 1000) {
+    return (value / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return value.toString();
+}
+
 export function formatDate(date: Date, locale?: string): string {
   const finalLocale = locale || 'en-US';
   

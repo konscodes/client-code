@@ -8,7 +8,8 @@ import {
   Briefcase, 
   Layers, 
   Settings,
-  LogOut
+  LogOut,
+  BarChart
 } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { Button } from './ui/button';
@@ -25,6 +26,7 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
   
   const navigationItems = [
     { id: 'dashboard', label: t('navigation.dashboard'), icon: LayoutDashboard },
+    { id: 'analytics', label: t('navigation.analytics'), icon: BarChart },
     { id: 'clients', label: t('navigation.clients'), icon: Users },
     { id: 'orders', label: t('navigation.orders'), icon: FileText },
     { id: 'job-catalog', label: t('navigation.jobCatalog'), icon: Briefcase },

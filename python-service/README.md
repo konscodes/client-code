@@ -174,3 +174,4 @@ VITE_DOCX_SERVICE_URL=https://your-python-service.railway.app/generate
 - ✅ **Easier to debug and maintain**
 - ✅ **No complex template parsing issues**
 
+

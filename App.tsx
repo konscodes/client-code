@@ -12,6 +12,7 @@ import { OrderDetail } from './pages/order-detail';
 import { JobCatalog } from './pages/job-catalog';
 import { JobPresets } from './pages/job-presets';
 import { Settings } from './pages/settings';
+import { Analytics } from './pages/analytics';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -28,6 +29,7 @@ const queryClient = new QueryClient({
 
 type Page = 
   | 'dashboard'
+  | 'analytics'
   | 'clients'
   | 'client-detail'
   | 'orders'
@@ -70,6 +72,9 @@ function AppContent() {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard onNavigate={handleNavigate} />;
+      
+      case 'analytics':
+        return <Analytics onNavigate={handleNavigate} />;
       
       case 'clients':
         return <ClientsList onNavigate={handleNavigate} />;
