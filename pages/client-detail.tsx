@@ -11,7 +11,8 @@ import {
   generateId,
   formatPhoneNumber,
   normalizePhoneNumber,
-  isValidEmail
+  isValidEmail,
+  extractIdNumbers
 } from '../lib/utils';
 import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User, Save, Building2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
@@ -253,8 +254,11 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
           </button>
           <div>
             <h1 className="text-[#1E2025] mb-1">
-              {isNewClient ? t('clientDetail.newClient') : (isEditing ? t('clientDetail.editClient') : client?.company)}
+              {isNewClient ? t('clientDetail.newClient') : (isEditing ? t('clientDetail.editClient') : (client?.company && client.company.trim() !== '' ? client.company : (client?.name && client.name !== 'Unknown' && client.name.trim() !== '' ? client.name : t('clientDetail.newClient'))))}
             </h1>
+            {!isNewClient && !isEditing && client && (
+              <p className="text-[#555A60]">Client #{extractIdNumbers(client.id)}</p>
+            )}
           </div>
         </div>
         <div className="flex gap-3">

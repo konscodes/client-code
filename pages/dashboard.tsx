@@ -5,7 +5,7 @@ import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { KPICard } from '../components/kpi-card';
 import { StatusPill } from '../components/status-pill';
-import { calculateOrderTotal } from '../lib/utils';
+import { calculateOrderTotal, extractIdNumbers } from '../lib/utils';
 import { FileText, Users, DollarSign, CheckCircle2 } from 'lucide-react';
 import { Skeleton } from '../components/ui/skeleton';
 import type { Order } from '../lib/types';
@@ -208,7 +208,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <p className="text-[#1E2025] mb-1">{order.id}</p>
+                          <p className="text-[#1E2025] mb-1">Order #{extractIdNumbers(order.id)}</p>
                           <p className="text-[#7C8085]">{order.orderTitle || '-'}</p>
                         </div>
                         <StatusPill status={order.status} />
@@ -280,9 +280,17 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <p className="text-[#1E2025] mb-1">{client.company}</p>
-                          {client.name && client.name !== 'Unknown' && (
-                            <p className="text-[#7C8085]">{client.name}</p>
+                          {client.company && client.company.trim() !== '' ? (
+                            <>
+                              <p className="text-[#1E2025] mb-1">{client.company}</p>
+                              {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                <p className="text-[#7C8085]">{client.name}</p>
+                              )}
+                            </>
+                          ) : (
+                            client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                              <p className="text-[#1E2025] mb-1">{client.name}</p>
+                            )
                           )}
                         </div>
                       </div>
