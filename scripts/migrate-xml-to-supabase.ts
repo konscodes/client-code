@@ -34,14 +34,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // Status mapping (Russian → English)
 const STATUS_MAP: Record<string, string> = {
   'Выполнен': 'completed',
-  'В работе': 'in-progress',
-  'Ожидает': 'approved',
-  'Черновик': 'draft',
-  'Оплачен': 'billed',
+  'Принят': 'in-progress',
+  'Отменен': 'canceled',
+  'Предложение': 'proposal',
 };
 
 function mapStatus(russianStatus: string): string {
-  return STATUS_MAP[russianStatus] || 'completed';
+  // Default to 'proposal' for unknown statuses instead of 'completed'
+  return STATUS_MAP[russianStatus] || 'proposal';
 }
 
 // Helper function to parse date

@@ -7,11 +7,8 @@ interface StatusPillProps {
 }
 
 const statusConfig: Record<OrderStatus, { className: string }> = {
-  'draft': {
+  'proposal': {
     className: 'bg-[#F2F4F4] text-[#7C8085]',
-  },
-  'approved': {
-    className: 'bg-[#E8F5E9] text-[#2E7D32]',
   },
   'in-progress': {
     className: 'bg-[#E3F2FD] text-[#1976D2]',
@@ -19,8 +16,8 @@ const statusConfig: Record<OrderStatus, { className: string }> = {
   'completed': {
     className: 'bg-[#E8F5E9] text-[#1F744F]',
   },
-  'billed': {
-    className: 'bg-[#E8F5E9] text-[#388E3C]',
+  'canceled': {
+    className: 'bg-[#FFEBEE] text-[#C62828]',
   },
 };
 

@@ -1,6 +1,6 @@
 // Core data types for the CRM application
 
-export type OrderStatus = 'draft' | 'approved' | 'in-progress' | 'completed' | 'billed';
+export type OrderStatus = 'in-progress' | 'completed' | 'canceled' | 'proposal';
 
 export interface Client {
   id: string;

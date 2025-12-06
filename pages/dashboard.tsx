@@ -23,9 +23,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const isLoading = loading || (orders.length === 0 && clients.length === 0);
   
   const kpiData = useMemo(() => {
-    const openOrders = orders.filter(o => o.status === 'in-progress' || o.status === 'approved').length;
+    const openOrders = orders.filter(o => o.status === 'in-progress').length;
     const awaitingInvoice = orders.filter(o => o.status === 'completed').length;
-    const draftOrders = orders.filter(o => o.status === 'draft').length;
+    const proposalOrders = orders.filter(o => o.status === 'proposal').length;
     
     // Calculate month revenue for current month
     const now = new Date();
@@ -38,7 +38,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         const orderDate = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
         
         // Check if order is in current month and has correct status
-        return (o.status === 'completed' || o.status === 'billed') &&
+        return o.status === 'completed' &&
                orderDate >= startOfMonth &&
                orderDate < startOfNextMonth;
       })
@@ -47,7 +47,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     return {
       openOrders,
       awaitingInvoice,
-      draftOrders,
+      proposalOrders,
       monthRevenue,
     };
   }, [orders]);
@@ -139,8 +139,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 onClick={() => onNavigate('orders')}
               />
               <KPICard
-                title={t('dashboard.draftOrders')}
-                value={kpiData.draftOrders}
+                title={t('dashboard.proposalOrders')}
+                value={kpiData.proposalOrders}
                 icon={FileText}
                 onClick={() => onNavigate('orders')}
               />

@@ -558,11 +558,10 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   const statusCounts = useMemo(() => {
     return {
       all: orders.length,
-      draft: orders.filter(o => o.status === 'draft').length,
-      approved: orders.filter(o => o.status === 'approved').length,
       'in-progress': orders.filter(o => o.status === 'in-progress').length,
       completed: orders.filter(o => o.status === 'completed').length,
-      billed: orders.filter(o => o.status === 'billed').length,
+      canceled: orders.filter(o => o.status === 'canceled').length,
+      proposal: orders.filter(o => o.status === 'proposal').length,
     };
   }, [orders]);
   
@@ -957,7 +956,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
                 <div className="space-y-3">
                   <Label className="text-sm font-semibold text-[#1E2025]">{t('orders.statusFilter')}</Label>
                   <div className="space-y-1 rounded-lg border border-[#E4E7E7] p-1 bg-[#F7F8F8]">
-                    {(['all', 'draft', 'approved', 'in-progress', 'completed', 'billed'] as const).map((status) => (
+                    {(['all', 'in-progress', 'completed', 'canceled', 'proposal'] as const).map((status) => (
                       <div
                         key={status}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer group ${

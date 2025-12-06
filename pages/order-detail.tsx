@@ -75,7 +75,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     existingOrder || {
       id: generateOrderId(),
       clientId: '',
-      status: 'draft',
+      status: 'proposal',
       taxRate: 8.5,
       globalMarkup: 20,
       currency: 'USD',
@@ -137,7 +137,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     const orderData: Order = {
       id: formData.id || generateOrderId(),
       clientId: formData.clientId,
-      status: formData.status as OrderStatus || 'draft',
+      status: formData.status as OrderStatus || 'proposal',
       createdAt: existingOrder?.createdAt || new Date(),
       updatedAt: new Date(),
       taxRate: formData.taxRate || 8.5,
@@ -384,18 +384,17 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
               <div className="space-y-2">
                 <Label htmlFor="status">{t('orderDetail.status')}</Label>
                 <Select
-                  value={formData.status || 'draft'}
+                  value={formData.status || 'proposal'}
                   onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
                 >
                   <SelectTrigger id="status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">{t('orders.draft')}</SelectItem>
-                    <SelectItem value="approved">{t('orders.approved')}</SelectItem>
+                    <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
                     <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
                     <SelectItem value="completed">{t('orders.completed')}</SelectItem>
-                    <SelectItem value="billed">{t('orders.billed')}</SelectItem>
+                    <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

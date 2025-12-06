@@ -6,6 +6,32 @@ This document contains the complete data mapping and conversion rules for migrat
 
 The XML database contains 15 tables with Russian-language data from a ServiceMK3 system. This guide documents how to map and convert this data to the application's data structure.
 
+## Quick Start
+
+1. **Prepare Environment**:
+   ```bash
+   # Ensure .env.local has SUPABASE_SERVICE_ROLE_KEY
+   cp .env.example .env.local
+   # Add your SUPABASE_SERVICE_ROLE_KEY
+   ```
+
+2. **Run Migration**:
+   ```bash
+   npm run migrate
+   # or
+   npx tsx scripts/migrate-xml-to-supabase.ts
+   ```
+
+3. **Verify Migration**:
+   ```bash
+   npx tsx scripts/compare-order-statuses.ts
+   ```
+
+4. **Fix Statuses if Needed**:
+   ```bash
+   npx tsx scripts/fix-order-statuses.ts
+   ```
+
 ## Tables to Migrate
 
 ### ✅ Migrate These Tables:
@@ -137,8 +163,11 @@ LEFT JOIN LATERAL (
 | `WorksRatio` | `tblWorks` | `lineMarkup` | **See Markup Conversion below** |
 | `WorksCWorksID` | `tblWorks` | `jobId` | Link to catalog if exists, otherwise empty string |
 | `WorksOrderID` | `tblWorks` | - | Used for joining to parent order |
+| `ID` | `tblWorks` | - | Used for sorting jobs within an order |
 | - | - | `taxApplicable` | Default: true |
-| - | - | `position` | Sequential index (0, 1, 2, ...) |
+| - | - | `position` | Sequential index (0, 1, 2, ...) based on `ID` field |
+
+**Important**: Order jobs are sorted by their `ID` field within each order to maintain the correct sequence.
 
 ### Markup Conversion Formula
 
@@ -166,14 +195,31 @@ const lineMarkup = (xmlRatio - 100) / 10;
 
 ### Status Mapping (Russian → English)
 
-| XML Status (Russian) | Application Status |
-|---------------------|-------------------|
-| `Выполнен` | `completed` |
-| `В работе` | `in-progress` |
-| `Ожидает` | `approved` |
-| `Черновик` | `draft` |
-| `Оплачен` | `billed` |
-| (other/unknown) | `completed` (default) |
+**IMPORTANT**: This mapping has been updated to match the actual XML data and application requirements.
+
+| XML Status (Russian) | Application Status | Count in XML | Notes |
+|---------------------|-------------------|-------------|-------|
+| `Выполнен` | `completed` | ~1,779 | "Completed" - Finished orders |
+| `Принят` | `in-progress` | ~352 | "Accepted" - Orders in progress |
+| `Отменен` | `canceled` | ~271 | "Cancelled" - Cancelled orders |
+| `Предложение` | `proposal` | ~231 | "Proposal" - Proposal/offer orders |
+| (other/unknown) | `proposal` (default) | - | Unknown statuses default to proposal |
+
+**Status Mapping Implementation**:
+```typescript
+const STATUS_MAP: Record<string, string> = {
+  'Выполнен': 'completed',
+  'Принят': 'in-progress',
+  'Отменен': 'canceled',
+  'Предложение': 'proposal',
+};
+
+function mapStatus(russianStatus: string): string {
+  return STATUS_MAP[russianStatus] || 'proposal'; // Default to 'proposal' for unknown
+}
+```
+
+**Note**: The old statuses (`draft`, `approved`, `billed`) are no longer used. All orders should map to one of the four statuses above.
 
 ### Date Parsing
 
@@ -196,11 +242,10 @@ SELECT
   CONCAT('client-xml-', o.OrderClientID) as "clientId",
   CASE o.OrderStatus
     WHEN 'Выполнен' THEN 'completed'
-    WHEN 'В работе' THEN 'in-progress'
-    WHEN 'Ожидает' THEN 'approved'
-    WHEN 'Черновик' THEN 'draft'
-    WHEN 'Оплачен' THEN 'billed'
-    ELSE 'completed'
+    WHEN 'Принят' THEN 'in-progress'
+    WHEN 'Отменен' THEN 'canceled'
+    WHEN 'Предложение' THEN 'proposal'
+    ELSE 'proposal'
   END as status,
   o.OrderDate::timestamp as "createdAt",
   COALESCE(o.OrderAddTime::timestamp, o.OrderDate::timestamp) as "updatedAt",
@@ -269,8 +314,8 @@ WHERE w.WorksOrderID IN (SELECT OrderID FROM tblOrders WHERE OrderClientID IN (.
 
 4. **Insert into Supabase**:
    - Insert clients first (for foreign key constraints)
-   - Insert orders
-   - Insert order jobs
+   - Insert orders in batches (100 per batch)
+   - Insert order jobs in batches (100 per batch)
    - Handle conflicts (update vs. skip)
 
 5. **Verify Migration**:
@@ -278,6 +323,7 @@ WHERE w.WorksOrderID IN (SELECT OrderID FROM tblOrders WHERE OrderClientID IN (.
    - Spot check sample records
    - Verify relationships
    - Check calculated fields
+   - Run status comparison script to verify all statuses match XML
 
 ## Notes
 
@@ -287,6 +333,50 @@ WHERE w.WorksOrderID IN (SELECT OrderID FROM tblOrders WHERE OrderClientID IN (.
 - Markup values are stored as numeric percentages (0-100+)
 - Order jobs are linked to orders via `orderId` foreign key
 - Client IDs from XML should be preserved in a mapping table for reference
+- **Status Mapping**: Only 4 statuses are used: `completed`, `in-progress`, `canceled`, `proposal`
+- **Batch Processing**: Order jobs are fetched in batches to avoid N+1 query problems
+- **Default Status**: Unknown statuses default to `proposal` (not `completed`)
+
+## Migration Script Features
+
+The migration script (`scripts/migrate-xml-to-supabase.ts`) includes:
+
+1. **Batch Job Fetching**: Fetches all `order_jobs` in batches instead of per-order queries (avoids N+1 problem)
+2. **Progressive Loading Support**: Designed to work with progressive loading in the application
+3. **Status Mapping**: Correctly maps all XML statuses to application statuses (see Status Mapping section)
+4. **Error Handling**: Logs errors and continues processing
+5. **Upsert Support**: Uses upsert to handle duplicate IDs gracefully
+6. **XML Pre-processing**: Handles invalid XML tags (e.g., email addresses as tag names)
+7. **Fallback Parsing**: If `tblWorks` not found in main parse, uses regex fallback to extract works section
+
+### Batch Processing Details
+
+- **Clients**: Inserted in batches of 100
+- **Orders**: Inserted in batches of 100
+- **Order Jobs**: Inserted in batches of 100
+- **Job Fetching**: All order_jobs for a batch of orders are fetched in a single query using `.in()` operator
+
+## Troubleshooting
+
+### Status Mismatches
+
+If statuses don't match after migration:
+1. Run `npx tsx scripts/compare-order-statuses.ts` to identify discrepancies
+2. Run `npx tsx scripts/fix-order-statuses.ts` to correct them
+
+### Missing Orders
+
+If some orders are missing:
+1. Check XML file for parsing errors
+2. Verify client IDs exist in the database
+3. Check migration script logs for skipped orders
+
+### Performance Issues
+
+For large datasets (2000+ orders):
+- The script uses batch processing
+- Consider running during off-peak hours
+- Monitor Supabase rate limits
 
 ## Testing
 
@@ -297,4 +387,33 @@ Before full migration:
 4. Validate date parsing
 5. Test contact handling with multiple contacts
 6. Verify status mappings
+
+## Post-Migration Verification
+
+After running the migration script, verify the data:
+
+1. **Status Distribution Check**:
+   ```bash
+   # Run the comparison script to verify all statuses match XML
+   npx tsx scripts/compare-order-statuses.ts
+   ```
+
+2. **Expected Status Counts** (from XML):
+   - `completed`: ~1,779 orders (Выполнен)
+   - `in-progress`: ~352 orders (Принят)
+   - `canceled`: ~271 orders (Отменен)
+   - `proposal`: ~231 orders (Предложение)
+
+3. **Fix Statuses if Needed**:
+   ```bash
+   # If statuses don't match, run the fix script
+   npx tsx scripts/fix-order-statuses.ts
+   ```
+
+## Important Notes
+
+- **Status Mapping**: The status mapping has been updated. Old statuses (`draft`, `approved`, `billed`) are no longer used.
+- **Default Status**: Unknown statuses default to `proposal` (not `completed`).
+- **Batch Job Fetching**: The migration script now uses batch fetching for `order_jobs` to avoid N+1 query problems.
+- **Progressive Loading**: For large datasets, consider using progressive loading when fetching orders in the application.
 

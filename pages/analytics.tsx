@@ -110,14 +110,14 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     // Number of orders: Total count of orders updated in time range
     const numberOfOrders = filteredOrders.length;
 
-    // Orders in progress: Orders with status 'in-progress' or 'approved' updated in time range
+    // Orders in progress: Orders with status 'in-progress' updated in time range
     const ordersInProgress = filteredOrders.filter(
-      o => o.status === 'in-progress' || o.status === 'approved'
+      o => o.status === 'in-progress'
     ).length;
 
-    // Revenue total: Sum of completed/billed orders (status filter only, but order must be in filtered set)
+    // Revenue total: Sum of completed orders (status filter only, but order must be in filtered set)
     const revenueTotal = filteredOrders
-      .filter(o => o.status === 'completed' || o.status === 'billed')
+      .filter(o => o.status === 'completed')
       .reduce((sum, order) => sum + calculateOrderTotal(order), 0);
 
     return {
@@ -133,7 +133,7 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     const clientRevenueMap = new Map<string, number>();
 
     filteredOrders
-      .filter(o => o.status === 'completed' || o.status === 'billed')
+      .filter(o => o.status === 'completed')
       .forEach(order => {
         const client = clients.find(c => c.id === order.clientId);
         if (client) {
@@ -182,7 +182,7 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     const monthMap = new Map<string, number>();
 
     filteredOrders
-      .filter(o => o.status === 'completed' || o.status === 'billed')
+      .filter(o => o.status === 'completed')
       .forEach(order => {
         const orderDate = order.updatedAt instanceof Date ? order.updatedAt : new Date(order.updatedAt);
         const monthKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
