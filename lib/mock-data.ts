@@ -61,7 +61,7 @@ export const mockClients: Client[] = [
   },
   // Clients imported from XML database
   {
-    id: 'client-xml-10001',
+    id: 'client-10001',
     name: 'Куковякин Дмитрий Николаевич',
     company: 'ООО "Вторчермет НЛМК Центр"',
     phone: '',
@@ -80,7 +80,7 @@ export const mockClients: Client[] = [
     createdAt: new Date('2016-01-18T22:45:00'),
   },
   {
-    id: 'client-xml-10004',
+    id: 'client-10004',
     name: 'Тестов Тест Тестович',
     company: '"Заинтересованным лицам"',
     phone: '+7(999)9999999',
@@ -91,7 +91,7 @@ export const mockClients: Client[] = [
     createdAt: new Date('2016-02-01T19:59:00'),
   },
   {
-    id: 'client-xml-10008',
+    id: 'client-10008',
     name: 'Меркулов Евгений Сергеевич',
     company: 'ООО "Промтехносеть"',
     phone: '',
@@ -374,8 +374,8 @@ export const mockOrders: Order[] = [
   },
   // Orders imported from XML database
   {
-    id: 'ORD-XML-20002',
-    clientId: 'client-xml-10001',
+    id: 'order-20002',
+    clientId: 'client-10001',
     status: 'completed',
     createdAt: new Date('2015-11-10T00:00:00'),
     updatedAt: new Date('2015-11-10T23:07:00'),
@@ -399,8 +399,8 @@ export const mockOrders: Order[] = [
     ],
   },
   {
-    id: 'ORD-XML-20003',
-    clientId: 'client-xml-10001',
+    id: 'order-20003',
+    clientId: 'client-10001',
     status: 'completed',
     createdAt: new Date('2015-10-14T00:00:00'),
     updatedAt: new Date('2015-11-17T14:22:00'),
@@ -446,8 +446,8 @@ export const mockOrders: Order[] = [
     ],
   },
   {
-    id: 'ORD-XML-20021',
-    clientId: 'client-xml-10004',
+    id: 'order-20021',
+    clientId: 'client-10004',
     status: 'completed',
     createdAt: new Date('2015-11-10T00:00:00'),
     updatedAt: new Date('2015-11-10T23:07:00'),
@@ -482,8 +482,8 @@ export const mockOrders: Order[] = [
     ],
   },
   {
-    id: 'ORD-XML-20022',
-    clientId: 'client-xml-10008',
+    id: 'order-20022',
+    clientId: 'client-10008',
     status: 'completed',
     createdAt: new Date('2015-11-10T00:00:00'),
     updatedAt: new Date('2015-11-10T23:07:00'),

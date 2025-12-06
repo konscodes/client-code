@@ -125,7 +125,7 @@ async function compareOrderStatuses() {
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
       .select('id, status')
-      .like('id', 'ORD-XML-%')
+      .or('id.like.ORD-XML-%,id.like.order-%')
       .range(offset, offset + limit - 1);
 
     if (ordersError) {
@@ -163,8 +163,8 @@ async function compareOrderStatuses() {
   matches.set('proposal', 0);
 
   for (const order of allOrders) {
-    // Extract XML OrderID from Supabase ID (format: ORD-XML-22637)
-    const match = order.id.match(/ORD-XML-(\d+)/);
+    // Extract XML OrderID from Supabase ID (format: order-22637 or ORD-XML-22637)
+    const match = order.id.match(/(?:order-|ORD-XML-)(\d+)/);
     if (match) {
       const xmlOrderId = match[1];
       const xmlData = xmlStatusMap.get(xmlOrderId);
@@ -196,14 +196,14 @@ async function compareOrderStatuses() {
 
   // Check for orders in XML but not in DB
   const dbOrderIds = new Set(allOrders.map(o => {
-    const match = o.id.match(/ORD-XML-(\d+)/);
+    const match = o.id.match(/(?:order-|ORD-XML-)(\d+)/);
     return match ? match[1] : null;
   }).filter(Boolean));
 
   for (const [xmlOrderId, xmlData] of xmlStatusMap.entries()) {
     if (!dbOrderIds.has(xmlOrderId)) {
       discrepancies.push({
-        orderId: `ORD-XML-${xmlOrderId} (MISSING)`,
+        orderId: `order-${xmlOrderId} (MISSING)`,
         xmlOrderId,
         xmlStatus: xmlData.xmlStatus,
         expectedDbStatus: xmlData.expectedDbStatus,

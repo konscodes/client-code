@@ -120,13 +120,23 @@ export function getOrderTotals(order: Order) {
   };
 }
 
+// Note: These functions are deprecated. Use the database functions instead:
+// - next_client_id() for clients
+// - next_order_id() for orders  
+// - next_job_id() for jobs
+// These are called via RPC in app-context.tsx
+
 export function generateOrderId(prefix: string = 'ORD'): string {
+  // Legacy function - should use next_order_id() from database
+  // Keeping for backward compatibility but will be replaced
   const year = new Date().getFullYear();
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
   return `${prefix}-${year}-${random}`;
 }
 
 export function generateId(prefix: string = 'item'): string {
+  // Legacy function - should use next_client_id() or next_job_id() from database
+  // Keeping for backward compatibility but will be replaced
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
@@ -254,7 +264,7 @@ export function formatPhoneNumber(phone: string | null | undefined): string {
 
 /**
  * Extracts only numeric digits from an ID string
- * @param id - The ID string (e.g., "ORD-XML-22638" or "CLI-123")
+ * @param id - The ID string (e.g., "order-22638" or "client-123")
  * @returns Only the numeric portion (e.g., "22638" or "123")
  */
 export function extractIdNumbers(id: string): string {

@@ -197,3 +197,8 @@ html {
     opacity: 0.6;
   }
 }
+
+/* Override Radix UI popper min-width for client selector popover */
+[data-radix-popper-content-wrapper] {
+  min-width: auto !important;
+}

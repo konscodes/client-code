@@ -77,7 +77,17 @@ function convertMarkup(ratio: string | undefined): number {
 // Helper function to trim and clean string
 function cleanString(value: string | undefined): string {
   if (!value) return '';
-  return value.toString().trim();
+  // If value is already a string, use it directly
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  // If it's an object, return empty string (don't convert to [object Object])
+  if (typeof value === 'object') {
+    console.warn('Warning: Attempted to clean an object as string, returning empty string');
+    return '';
+  }
+  // For other types, convert to string
+  return String(value).trim();
 }
 
 interface XMLClient {
@@ -169,7 +179,7 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
   
   for (const client of tblMain) {
     const xmlClientId = client.ClientID;
-    const supabaseClientId = `client-xml-${xmlClientId}`;
+    const supabaseClientId = `client-${xmlClientId}`;
     clientIdMap.set(xmlClientId, supabaseClientId);
     
     // Get most recent contact
@@ -182,7 +192,17 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
     // Build name, phone, email from primary contact or fallback
     const name = cleanString(primaryContact?.ContactName) || '';
     const phone = cleanString(primaryContact?.ContactMobilePhone) || cleanString(client.ClientPhone) || '';
-    const email = cleanString(primaryContact?.ContactEmail) || cleanString(client.ClientEmail) || '';
+    
+    // Extract email more carefully - ensure it's a string
+    let email = '';
+    if (primaryContact?.ContactEmail) {
+      const contactEmail = primaryContact.ContactEmail;
+      email = typeof contactEmail === 'string' ? contactEmail.trim() : '';
+    }
+    if (!email && client.ClientEmail) {
+      const clientEmail = client.ClientEmail;
+      email = typeof clientEmail === 'string' ? clientEmail.trim() : '';
+    }
     const createdAt = primaryContact?.ContactAddTime 
       ? parseDate(primaryContact.ContactAddTime)
       : new Date();
@@ -324,7 +344,7 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       continue;
     }
     
-    const supabaseOrderId = `ORD-XML-${order.OrderID}`;
+    const supabaseOrderId = `order-${order.OrderID}`;
     const createdAt = parseDate(order.OrderDate);
     const updatedAt = parseDate(order.OrderAddTime || order.OrderDate);
     
@@ -402,7 +422,7 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
     // Create mapping: XML OrderID -> Supabase order ID
     const orderIdMap = new Map<string, string>();
     for (const order of allOrders) {
-      const match = order.id.match(/ORD-XML-(\d+)/);
+      const match = order.id.match(/order-(\d+)/);
       if (match) {
         const xmlOrderId = match[1];
         orderIdMap.set(xmlOrderId, order.id);
@@ -444,7 +464,7 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       
       for (let i = 0; i < works.length; i++) {
         const work = works[i];
-        const jobId = `oj-xml-${xmlOrderId}-${i + 1}`;
+        const jobId = `oj-${xmlOrderId}-${i + 1}`;
         
         // Handle WorksRatio - if it's 1 or very small, it might be a different format
         let lineMarkup = convertMarkup(work.WorksRatio);

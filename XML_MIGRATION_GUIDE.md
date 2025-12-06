@@ -141,8 +141,8 @@ LEFT JOIN LATERAL (
 
 | XML Field | Source Table | Target Field | Notes |
 |-----------|-------------|--------------|-------|
-| `OrderID` | `tblOrders` | `id` | Prefix with 'ORD-XML-' for imported orders |
-| `OrderClientID` | `tblOrders` | `clientId` | Map to client ID (e.g., 'client-xml-10001') |
+| `OrderID` | `tblOrders` | `id` | Prefix with 'order-' for imported orders |
+| `OrderClientID` | `tblOrders` | `clientId` | Map to client ID (e.g., 'client-10001') |
 | `OrderDate` | `tblOrders` | `createdAt` | Parse as Date object |
 | `OrderAddTime` | `tblOrders` | `updatedAt` | Parse as Date object, fallback to `OrderDate` if empty |
 | `OrderID` + `OrderType` + `OrderComments` | `tblOrders` | `notesInternal` | Concatenate with ' \| ' separator |
@@ -238,8 +238,8 @@ function mapStatus(russianStatus: string): string {
 ```sql
 -- Pseudocode for order migration
 SELECT 
-  CONCAT('ORD-XML-', o.OrderID) as id,
-  CONCAT('client-xml-', o.OrderClientID) as "clientId",
+  CONCAT('order-', o.OrderID) as id,
+  CONCAT('client-', o.OrderClientID) as "clientId",
   CASE o.OrderStatus
     WHEN 'Выполнен' THEN 'completed'
     WHEN 'Принят' THEN 'in-progress'
@@ -259,8 +259,8 @@ WHERE o.OrderClientID IN ('10001', '10004', '10008', ...) -- Filter by client ID
 
 -- Order jobs query
 SELECT 
-  CONCAT('oj-xml-', w.WorksOrderID, '-', ROW_NUMBER() OVER (PARTITION BY w.WorksOrderID ORDER BY w.ID)) as id,
-  CONCAT('ORD-XML-', w.WorksOrderID) as "orderId",
+  CONCAT('oj-', w.WorksOrderID, '-', ROW_NUMBER() OVER (PARTITION BY w.WorksOrderID ORDER BY w.ID)) as id,
+  CONCAT('order-', w.WorksOrderID) as "orderId",
   COALESCE(w.WorksCWorksID, '') as "jobId",
   w.WorksName as "jobName",
   w.WorksName as description,

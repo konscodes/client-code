@@ -6,7 +6,7 @@ import { useFormatting } from '../lib/use-formatting';
 import { KPICard } from '../components/kpi-card';
 import { StatusPill } from '../components/status-pill';
 import { calculateOrderTotal } from '../lib/utils';
-import { FileText, Users, DollarSign, Clock } from 'lucide-react';
+import { FileText, Users, DollarSign, CheckCircle2 } from 'lucide-react';
 import { Skeleton } from '../components/ui/skeleton';
 import type { Order } from '../lib/types';
 
@@ -24,7 +24,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   
   const kpiData = useMemo(() => {
     const openOrders = orders.filter(o => o.status === 'in-progress').length;
-    const awaitingInvoice = orders.filter(o => o.status === 'completed').length;
+    const completedOrders = orders.filter(o => o.status === 'completed').length;
     const proposalOrders = orders.filter(o => o.status === 'proposal').length;
     
     // Calculate month revenue for current month
@@ -46,7 +46,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     
     return {
       openOrders,
-      awaitingInvoice,
+      completedOrders,
       proposalOrders,
       monthRevenue,
     };
@@ -96,32 +96,28 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             // Loading state with skeleton cards matching exact dimensions
             <>
               <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
-                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
-                  <Skeleton className="h-4 w-24 flex-1 min-w-0" />
-                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
-                </div>
-                <Skeleton className="h-6 w-16 mb-2 min-h-[1.5rem]" />
-              </div>
-              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
-                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
-                  <Skeleton className="h-4 w-28 flex-1 min-w-0" />
-                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                <div className="mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-32" />
                 </div>
                 <Skeleton className="h-6 w-20 mb-2 min-h-[1.5rem]" />
               </div>
               <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
-                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
-                  <Skeleton className="h-4 w-32 flex-1 min-w-0" />
-                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                <div className="mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-32" />
                 </div>
-                <Skeleton className="h-6 w-16 mb-2 min-h-[1.5rem]" />
+                <Skeleton className="h-6 w-20 mb-2 min-h-[1.5rem]" />
               </div>
               <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
-                <div className="flex items-start justify-between mb-2 min-h-[1.5rem]">
-                  <Skeleton className="h-4 w-28 flex-1 min-w-0" />
-                  <Skeleton className="h-5 w-5 rounded flex-shrink-0 ml-2" />
+                <div className="mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-32" />
                 </div>
-                <Skeleton className="h-6 w-24 mb-2 min-h-[1.5rem]" />
+                <Skeleton className="h-6 w-20 mb-2 min-h-[1.5rem]" />
+              </div>
+              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 min-w-0 h-full">
+                <div className="mb-2 min-h-[1.5rem]">
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <Skeleton className="h-6 w-20 mb-2 min-h-[1.5rem]" />
               </div>
             </>
           ) : (
@@ -133,9 +129,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 onClick={() => onNavigate('orders')}
               />
               <KPICard
-                title={t('dashboard.awaitingInvoice')}
-                value={kpiData.awaitingInvoice}
-                icon={Clock}
+                title={t('dashboard.completedOrders')}
+                value={kpiData.completedOrders}
+                icon={CheckCircle2}
                 onClick={() => onNavigate('orders')}
               />
               <KPICard

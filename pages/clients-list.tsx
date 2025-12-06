@@ -114,6 +114,9 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
   
+  // Hover state for sort indicators
+  const [hoveredHeader, setHoveredHeader] = useState<ColumnKey | null>(null);
+  
   // Pagination state - load from localStorage
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(() =>
@@ -413,11 +416,15 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
       }
     };
     
+    const isHovered = hoveredHeader === columnKey;
+    
     return (
       <th 
         key={columnKey}
         onClick={handleSortClick}
-        className={`px-6 py-3 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : 'text-left'} text-[#555A60] group cursor-pointer hover:bg-[#F7F8F8] transition-colors ${
+        onMouseEnter={() => setHoveredHeader(columnKey)}
+        onMouseLeave={() => setHoveredHeader(null)}
+        className={`px-6 py-3 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : 'text-left'} text-[#555A60] cursor-pointer hover:bg-[#F7F8F8] transition-colors ${
           isFirstColumn ? 'sticky left-0 z-10' : ''
         }`}
         style={isFirstColumn ? {
@@ -428,7 +435,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
         <div className={`flex items-center gap-2 ${isCenterAlign ? 'justify-center' : ''}`}>
           <span>{columnLabels[columnKey]}</span>
           {isSorted ? (
-            <span className="opacity-100">
+            <span>
               {sortDirection === 'asc' ? (
                 <ArrowUp className="h-4 w-4" />
               ) : (
@@ -436,9 +443,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
               )}
             </span>
           ) : (
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-              <ArrowUpDown className="h-4 w-4" />
-            </span>
+            isHovered && <ArrowUpDown className="h-4 w-4" />
           )}
         </div>
       </th>
@@ -490,9 +495,17 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
               background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
-            <p className="text-[#1E2025] whitespace-nowrap">{client.company}</p>
-            {client.name && client.name !== 'Unknown' && (
-              <p className="text-[#7C8085] whitespace-nowrap">{client.name}</p>
+            {client.company && client.company.trim() !== '' ? (
+              <>
+                <p className="text-[#1E2025] whitespace-nowrap">{client.company}</p>
+                {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                  <p className="text-[#7C8085] whitespace-nowrap">{client.name}</p>
+                )}
+              </>
+            ) : (
+              client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                <p className="text-[#1E2025] whitespace-nowrap">{client.name}</p>
+              )
             )}
           </td>
         );

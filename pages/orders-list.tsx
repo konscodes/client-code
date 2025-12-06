@@ -123,6 +123,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
   const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
   
+  // Hover state for sort indicators
+  const [hoveredHeader, setHoveredHeader] = useState<ColumnKey | 'createdAt' | null>(null);
+  
   // Pagination state - load from localStorage
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(() =>
@@ -355,6 +358,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     const isFirstColumn = index === 0;
     const isDateColumn = columnKey === 'date';
     const isJobsColumn = columnKey === 'jobs';
+    const isStatusColumn = columnKey === 'status';
     const hasOpenPanel = filtersOpen || settingsOpen;
     
     // Handle special case: sortBy can be 'createdAt' but columnKey is 'date'
@@ -373,6 +377,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
     if (isJobsColumn) {
       headerStyle.minWidth = '100px';
     }
+    if (isStatusColumn) {
+      headerStyle.minWidth = '120px';
+    }
     
     const handleSortClick = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -389,13 +396,19 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       }
     };
     
+    // Handle special case: hover state for 'date' column should match 'createdAt'
+    const hoverKey = columnKey === 'date' ? 'createdAt' : columnKey;
+    const isHovered = hoveredHeader === hoverKey;
+    
     return (
       <th 
         key={columnKey}
         onClick={handleSortClick}
+        onMouseEnter={() => setHoveredHeader(hoverKey as ColumnKey | 'createdAt')}
+        onMouseLeave={() => setHoveredHeader(null)}
         className={`px-6 py-3 border-b border-[#E4E7E7] ${
           isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : 'text-left'
-        } text-[#555A60] group cursor-pointer hover:bg-[#F7F8F8] transition-colors ${
+        } text-[#555A60] cursor-pointer hover:bg-[#F7F8F8] transition-colors ${
           isFirstColumn ? 'sticky left-0 z-10' : ''
         }`}
         style={isFirstColumn ? {
@@ -408,7 +421,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
         }`}>
           <span>{columnLabels[columnKey]}</span>
           {isSorted ? (
-            <span className="opacity-100">
+            <span>
               {sortDirection === 'asc' ? (
                 <ArrowUp className="h-4 w-4" />
               ) : (
@@ -416,9 +429,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               )}
             </span>
           ) : (
-            <span className="opacity-0 group-hover:opacity-100 transition-opacity">
-              <ArrowUpDown className="h-4 w-4" />
-            </span>
+            isHovered && <ArrowUpDown className="h-4 w-4" />
           )}
         </div>
       </th>
@@ -501,7 +512,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
               zIndex: hasOpenPanel ? 0 : 10, 
               minWidth: '150px',
               background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
-            } : undefined}
+            } : { minWidth: '120px' }}
           >
             <StatusPill status={order.status} />
           </td>

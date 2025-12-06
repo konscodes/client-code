@@ -125,7 +125,7 @@ async function fixOrderStatuses() {
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
       .select('id, status')
-      .like('id', 'ORD-XML-%')
+      .or('id.like.ORD-XML-%,id.like.order-%')
       .range(offset, offset + limit - 1);
 
     if (ordersError) {
@@ -153,8 +153,8 @@ async function fixOrderStatuses() {
   let changed = 0;
 
   for (const order of allOrders) {
-    // Extract XML OrderID from Supabase ID (format: ORD-XML-22637)
-    const match = order.id.match(/ORD-XML-(\d+)/);
+    // Extract XML OrderID from Supabase ID (format: order-22637 or ORD-XML-22637)
+    const match = order.id.match(/(?:order-|ORD-XML-)(\d+)/);
     if (match) {
       const xmlOrderId = match[1];
       const correctStatus = orderStatusMap.get(xmlOrderId);
@@ -279,7 +279,7 @@ async function fixOrderStatuses() {
   const { data: statusCounts } = await supabase
     .from('orders')
     .select('status')
-    .like('id', 'ORD-XML-%');
+    .or('id.like.ORD-XML-%,id.like.order-%');
 
   if (statusCounts) {
     const counts: Record<string, number> = {};

@@ -44,7 +44,7 @@ export function StatusPill({ status }: StatusPillProps) {
   
   return (
     <span
-      className={`inline-flex items-center px-3 py-1 rounded-md ${config.className}`}
+      className={`inline-flex items-center px-3 py-1 rounded-md whitespace-nowrap ${config.className}`}
       style={config.style}
       role="status"
       aria-label={`${t('orders.status')}: ${label}`}

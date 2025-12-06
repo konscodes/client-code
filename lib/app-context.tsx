@@ -17,7 +17,7 @@ interface AppContextType {
   error: string | null;
   
   // Client methods
-  addClient: (client: Client) => Promise<void>;
+  addClient: (client: Client) => Promise<string>;
   updateClient: (id: string, client: Partial<Client>) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
   getClient: (id: string) => Client | undefined;
@@ -59,12 +59,21 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Helper function to convert database row to Client
 function dbRowToClient(row: any): Client {
+  // Safely extract email - handle [object Object] and other edge cases
+  let email = '';
+  if (row.email) {
+    if (typeof row.email === 'string' && row.email !== '[object Object]') {
+      email = row.email.trim();
+    }
+    // If email is an object or [object Object], leave it as empty string
+  }
+  
   return {
     id: row.id,
     name: row.name,
     company: row.company,
     phone: row.phone || '',
-    email: row.email || '',
+    email,
     address: row.address || '',
     inn: row.inn,
     kpp: row.kpp,
@@ -467,11 +476,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Client methods
-  const addClient = useCallback(async (client: Client) => {
+  const addClient = useCallback(async (client: Client): Promise<string> => {
+    // Generate ID from database sequence if not provided
+    let clientId = client.id;
+    if (!clientId || clientId === 'new') {
+      const { data: idData, error: idError } = await supabase.rpc('next_client_id');
+      if (idError) {
+        console.error('Error generating client ID:', idError);
+        throw idError;
+      }
+      clientId = idData;
+    }
+    
     const { error: err } = await supabase
       .from('clients')
       .insert({
-        id: client.id,
+        id: clientId,
         name: client.name,
         company: client.company,
         phone: normalizePhoneNumber(client.phone),
@@ -488,6 +508,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     if (err) throw err;
     await refreshClients();
+    return clientId;
   }, [refreshClients]);
 
   const updateClient = useCallback(async (id: string, updates: Partial<Client>) => {
@@ -523,11 +544,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Order methods with React Query mutations
   const addOrderMutation = useMutation({
     mutationFn: async (order: Order) => {
+      // Generate ID from database sequence if not provided
+      let orderId = order.id;
+      if (!orderId || orderId === 'new') {
+        const { data: idData, error: idError } = await supabase.rpc('next_order_id');
+        if (idError) {
+          console.error('Error generating order ID:', idError);
+          throw idError;
+        }
+        orderId = idData;
+      }
+      
       // Insert order
       const { error: orderErr } = await supabase
         .from('orders')
         .insert({
-          id: order.id,
+          id: orderId,
           clientId: order.clientId,
           status: order.status,
           createdAt: order.createdAt.toISOString(),
@@ -547,7 +579,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .from('order_jobs')
           .insert(order.jobs.map(job => ({
             id: job.id,
-            orderId: order.id,
+            orderId: orderId, // Use the generated orderId
             jobId: job.jobId,
             jobName: job.jobName,
             description: job.description,
@@ -648,10 +680,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Job template methods with React Query mutations
   const addJobTemplateMutation = useMutation({
     mutationFn: async (job: JobTemplate) => {
+      // Generate ID from database sequence if not provided
+      let jobId = job.id;
+      if (!jobId || jobId === 'new') {
+        const { data: idData, error: idError } = await supabase.rpc('next_job_id');
+        if (idError) {
+          console.error('Error generating job ID:', idError);
+          throw idError;
+        }
+        jobId = idData;
+      }
+      
       const { error: err } = await supabase
         .from('job_templates')
         .insert({
-          id: job.id,
+          id: jobId,
           name: job.name,
           description: job.description,
           category: job.category,
