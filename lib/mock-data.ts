@@ -289,7 +289,7 @@ export const mockOrders: Order[] = [
   {
     id: 'ORD-2025-003',
     clientId: 'client-3',
-    status: 'draft',
+    status: 'proposal',
     createdAt: new Date('2025-11-05'),
     updatedAt: new Date('2025-11-05'),
     taxRate: 8.5,
@@ -314,7 +314,7 @@ export const mockOrders: Order[] = [
   {
     id: 'ORD-2025-004',
     clientId: 'client-4',
-    status: 'approved',
+    status: 'in-progress',
     createdAt: new Date('2025-11-03'),
     updatedAt: new Date('2025-11-04'),
     taxRate: 8.5,
@@ -350,7 +350,7 @@ export const mockOrders: Order[] = [
   {
     id: 'ORD-2025-005',
     clientId: 'client-1',
-    status: 'billed',
+    status: 'completed',
     createdAt: new Date('2025-10-15'),
     updatedAt: new Date('2025-10-30'),
     taxRate: 8.5,

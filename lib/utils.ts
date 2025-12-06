@@ -37,15 +37,23 @@ export function formatShortNumber(value: number): string {
 export function formatDate(date: Date, locale?: string): string {
   const finalLocale = locale || 'en-US';
   
-  let formatted = new Intl.DateTimeFormat(finalLocale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(date);
+  // Russian month abbreviations (proper 3-4 letter abbreviations)
+  const russianMonths = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   
-  // Remove "г." (year abbreviation) from Russian dates
+  let formatted: string;
+  
   if (finalLocale.startsWith('ru')) {
-    formatted = formatted.replace(/\s*г\.\s*/g, '');
+    // For Russian, format manually to ensure correct month abbreviations
+    const day = date.getDate();
+    const month = russianMonths[date.getMonth()];
+    const year = date.getFullYear();
+    formatted = `${day} ${month} ${year}`;
+  } else {
+    formatted = new Intl.DateTimeFormat(finalLocale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
   }
   
   return formatted;
@@ -54,17 +62,27 @@ export function formatDate(date: Date, locale?: string): string {
 export function formatDateTime(date: Date, locale?: string): string {
   const finalLocale = locale || 'en-US';
   
-  let formatted = new Intl.DateTimeFormat(finalLocale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
+  // Russian month abbreviations (proper 3-4 letter abbreviations)
+  const russianMonths = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   
-  // Remove "г." (year abbreviation) from Russian dates
+  let formatted: string;
+  
   if (finalLocale.startsWith('ru')) {
-    formatted = formatted.replace(/\s*г\.\s*/g, '');
+    // For Russian, format manually to ensure correct month abbreviations
+    const day = date.getDate();
+    const month = russianMonths[date.getMonth()];
+    const year = date.getFullYear();
+    const hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    formatted = `${day} ${month} ${year}, ${hours}:${minutes}`;
+  } else {
+    formatted = new Intl.DateTimeFormat(finalLocale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date);
   }
   
   return formatted;
@@ -119,7 +137,7 @@ export function getClientOrders(orders: Order[], clientId: string): Order[] {
 export function getClientLifetimeValue(orders: Order[], clientId: string): number {
   const clientOrders = getClientOrders(orders, clientId);
   return clientOrders.reduce((sum, order) => {
-    if (order.status === 'completed' || order.status === 'billed') {
+    if (order.status === 'completed') {
       return sum + calculateOrderTotal(order);
     }
     return sum;

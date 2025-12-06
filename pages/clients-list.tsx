@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
-import { Search, Plus, Filter, Columns, X as XIcon, GripVertical } from 'lucide-react';
+import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -399,11 +399,25 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     }
     
     const isCenterAlign = columnKey === 'orders';
+    const isSorted = sortBy === columnKey;
+    
+    const handleSortClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isSorted) {
+        // Toggle direction if already sorted by this column
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        // Set new sort column with default direction
+        setSortBy(columnKey);
+        setSortDirection('asc');
+      }
+    };
     
     return (
       <th 
         key={columnKey}
-        className={`px-6 py-3 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : 'text-left'} text-[#555A60] ${
+        onClick={handleSortClick}
+        className={`px-6 py-3 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : 'text-left'} text-[#555A60] group cursor-pointer hover:bg-[#F7F8F8] transition-colors ${
           isFirstColumn ? 'sticky left-0 z-10' : ''
         }`}
         style={isFirstColumn ? {
@@ -411,7 +425,22 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
         } : (Object.keys(headerStyle).length > 0 ? headerStyle : undefined)}
       >
-        {columnLabels[columnKey]}
+        <div className={`flex items-center gap-2 ${isCenterAlign ? 'justify-center' : ''}`}>
+          <span>{columnLabels[columnKey]}</span>
+          {isSorted ? (
+            <span className="opacity-100">
+              {sortDirection === 'asc' ? (
+                <ArrowUp className="h-4 w-4" />
+              ) : (
+                <ArrowDown className="h-4 w-4" />
+              )}
+            </span>
+          ) : (
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <ArrowUpDown className="h-4 w-4" />
+            </span>
+          )}
+        </div>
       </th>
     );
   };
