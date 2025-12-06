@@ -83,7 +83,7 @@ function AppContent() {
         return <ClientDetail clientId={pageId || 'new'} onNavigate={handleNavigate} />;
       
       case 'orders':
-        return <OrdersList onNavigate={handleNavigate} />;
+        return <OrdersList onNavigate={handleNavigate} pageId={pageId} />;
       
       case 'order-detail':
         return <OrderDetail orderId={pageId || 'new'} onNavigate={handleNavigate} />;

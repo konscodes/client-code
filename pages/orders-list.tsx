@@ -20,14 +20,23 @@ import type { OrderStatus } from '../lib/types';
 
 interface OrdersListProps {
   onNavigate: (page: string, id?: string) => void;
+  pageId?: string;
 }
 
 type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle';
 
-export function OrdersList({ onNavigate }: OrdersListProps) {
+export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const { t } = useTranslation();
   const { formatCurrency, formatDate } = useFormatting();
   const { orders, clients, loading } = useApp();
+  
+  // Parse client filter from pageId query string (e.g., "?client=client-10328")
+  const clientFilterId = pageId?.includes('?client=') 
+    ? pageId.split('?client=')[1]?.split('&')[0] 
+    : null;
+  
+  // Get the filtered client
+  const filteredClient = clientFilterId ? clients.find(c => c.id === clientFilterId) : null;
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
   const isLoading = loading || (orders.length === 0 && clients.length === 0);
@@ -215,6 +224,9 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       
+      // Client filter
+      const matchesClient = !clientFilterId || order.clientId === clientFilterId;
+      
       // Date filter
       let matchesDate = true;
       if (dateStart || dateEnd) {
@@ -231,7 +243,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
         }
       }
       
-      return matchesSearch && matchesStatus && matchesDate;
+      return matchesSearch && matchesStatus && matchesDate && matchesClient;
     }).sort((a, b) => {
       let comparison = 0;
       const clientA = clients.find(c => c.id === a.clientId);
@@ -276,7 +288,7 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
       
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [orders, clients, searchQuery, statusFilter, dateStart, dateEnd, sortBy, sortDirection]);
+  }, [orders, clients, searchQuery, statusFilter, dateStart, dateEnd, sortBy, sortDirection, clientFilterId]);
   
   // Pagination calculations
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -634,6 +646,25 @@ export function OrdersList({ onNavigate }: OrdersListProps) {
           {t('orders.newOrder')}
         </button>
       </div>
+      
+      {/* Client Filter Pill */}
+      {filteredClient && (
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#E3F2FD] text-[#1976D2] border border-[#1976D2]/20">
+            <span className="text-sm font-medium whitespace-nowrap">
+              {t('orders.filteredByClient')}: {filteredClient.company || filteredClient.name || `Client #${extractIdNumbers(filteredClient.id)}`}
+            </span>
+            <button
+              onClick={() => onNavigate('orders')}
+              className="ml-1 hover:bg-[#1976D2]/10 rounded-full p-0.5 transition-colors cursor-pointer flex-shrink-0"
+              aria-label={t('orders.clearClientFilter')}
+              type="button"
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Search and Action Buttons */}
       <div className="flex items-center justify-between gap-4 flex-wrap">

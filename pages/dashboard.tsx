@@ -74,13 +74,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => onNavigate('clients', 'new')}
+            onClick={() => onNavigate('client-detail', 'new')}
             className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
           >
             {t('dashboard.newClient')}
           </button>
           <button
-            onClick={() => onNavigate('orders', 'new')}
+            onClick={() => onNavigate('order-detail', 'new')}
             className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
           >
             {t('dashboard.newOrder')}
@@ -189,7 +189,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="px-6 py-12 text-center">
                   <p className="text-[#7C8085] mb-4">{t('dashboard.noOrders')}</p>
                   <button
-                    onClick={() => onNavigate('orders', 'new')}
+                    onClick={() => onNavigate('order-detail', 'new')}
                     className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
                   >
                     {t('dashboard.createFirstOrder')}
@@ -208,7 +208,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <p className="text-[#1E2025] mb-1">Order #{extractIdNumbers(order.id)}</p>
+                          <p className="text-[#1E2025] mb-1">{t('dashboard.orderNumber', { number: extractIdNumbers(order.id) })}</p>
                           <p className="text-[#7C8085]">{order.orderTitle || '-'}</p>
                         </div>
                         <StatusPill status={order.status} />
@@ -262,7 +262,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="px-6 py-12 text-center">
                   <p className="text-[#7C8085] mb-4">{t('dashboard.noClients')}</p>
                   <button
-                    onClick={() => onNavigate('clients', 'new')}
+                    onClick={() => onNavigate('client-detail', 'new')}
                     className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
                   >
                     {t('dashboard.addFirstClient')}
