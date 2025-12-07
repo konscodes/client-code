@@ -402,10 +402,22 @@ def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=3
     cost_para = doc.add_paragraph()
     if locale and locale.startswith('ru'):
         total_spelled = spell_money_russian(total)
-        cost_run = cost_para.add_run(f"Стоимость работ по заказу составляет: {format_number_russian(total)} руб. ({total_spelled}) Без НДС.")
+        # Text before amount (regular)
+        cost_run1 = cost_para.add_run("Стоимость работ по заказу составляет: ")
+        set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
+        # Amount (bold)
+        cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
+        set_font_times_new_roman(cost_run2, size=12, bold=True, italic=False)
+        # Text after amount (regular)
+        cost_run3 = cost_para.add_run(f" ({total_spelled}) Без НДС.")
+        set_font_times_new_roman(cost_run3, size=12, bold=False, italic=False)
     else:
-        cost_run = cost_para.add_run(f"Стоимость работ по заказу составляет: {format_number_russian(total)} руб.")
-    set_font_times_new_roman(cost_run, size=12, bold=False, italic=False)
+        # Text before amount (regular)
+        cost_run1 = cost_para.add_run("Стоимость работ по заказу составляет: ")
+        set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
+        # Amount (bold)
+        cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
+        set_font_times_new_roman(cost_run2, size=12, bold=True, italic=False)
     
     # Add new line after cost line
     doc.add_paragraph()
@@ -436,89 +448,40 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_wi
     doc.add_paragraph()
     
     if doc_type == 'invoice':
-        # For invoices: 3-column layout with signatures - use full width
-        footer_table = doc.add_table(rows=4, cols=3)
+        # For invoices: 2-column layout with signatures only
+        footer_table = doc.add_table(rows=1, cols=2)
         # Extract inch value from Inches object
         width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
-        footer_table.columns[0].width = Inches(width_val / 3)  # Исполнитель
-        footer_table.columns[1].width = Inches(width_val / 3)  # Заказчик
-        footer_table.columns[2].width = Inches(width_val / 3)  # Contact info
+        footer_table.columns[0].width = Inches(width_val * 0.5)  # Исполнитель
+        footer_table.columns[1].width = Inches(width_val * 0.5)  # Заказчик
         
-        # Row 1: Headers
-        left_header = footer_table.cell(0, 0)
-        left_header.text = "Исполнитель"
-        for paragraph in left_header.paragraphs:
-            for run in paragraph.runs:
-                set_font_times_new_roman(run, size=12, bold=True, italic=False)
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        # Left column: Исполнитель
+        left_cell = footer_table.cell(0, 0)
+        left_para = left_cell.paragraphs[0]
+        left_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        left_header_run = left_para.add_run("Исполнитель")
+        set_font_times_new_roman(left_header_run, size=12, bold=True, italic=False)
         
-        right_header = footer_table.cell(0, 1)
-        right_header.text = "Заказчик"
-        for paragraph in right_header.paragraphs:
-            for run in paragraph.runs:
-                set_font_times_new_roman(run, size=12, bold=True, italic=False)
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        # Double new line
+        left_para.add_run("\n\n")
         
-        # Contact header in right column
-        contact_header = footer_table.cell(0, 2)
-        contact_header_para = contact_header.paragraphs[0]
-        contact_header_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        contact_header_run = contact_header_para.add_run("С уважением,")
-        set_font_times_new_roman(contact_header_run, size=12, bold=False, italic=False)
+        # Signature lines: ________________/_________________/
+        left_sig_run = left_para.add_run("________________/_________________/")
+        set_font_times_new_roman(left_sig_run, size=12, bold=False, italic=False)
         
-        # Director info immediately after (no empty line) - add to same paragraph
-        if company_data.get('directorName'):
-            director_run1 = contact_header_para.add_run("\nТехнический директор")
-            set_font_times_new_roman(director_run1, size=12, bold=False, italic=False)
-            director_run2 = contact_header_para.add_run(f"\n{company_data.get('legalName', company_data.get('name', ''))}")
-            set_font_times_new_roman(director_run2, size=12, bold=False, italic=False)
-            director_run3 = contact_header_para.add_run(f"\n{company_data['directorName']}")
-            set_font_times_new_roman(director_run3, size=12, bold=False, italic=False)
+        # Right column: Заказчик
+        right_cell = footer_table.cell(0, 1)
+        right_para = right_cell.paragraphs[0]
+        right_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        right_header_run = right_para.add_run("Заказчик")
+        set_font_times_new_roman(right_header_run, size=12, bold=True, italic=False)
         
-        # Row 2: Signature lines
-        left_sig = footer_table.cell(1, 0)
-        left_sig.text = "_________________"
-        for para in left_sig.paragraphs:
-            for run in para.runs:
-                set_font_times_new_roman(run, size=12, bold=False, italic=False)
+        # Double new line
+        right_para.add_run("\n\n")
         
-        right_sig = footer_table.cell(1, 1)
-        right_sig.text = "_________________"
-        for para in right_sig.paragraphs:
-            for run in para.runs:
-                set_font_times_new_roman(run, size=12, bold=False, italic=False)
-        
-        # Contact info in right column (bottom right)
-        contact_cell = footer_table.cell(1, 2)
-        contact_para = contact_cell.paragraphs[0]
-        contact_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        if company_data.get('email'):
-            contact_run1 = contact_para.add_run(f"Email: {company_data['email']}")
-            set_font_times_new_roman(contact_run1, size=12, bold=False, italic=False)
-        if company_data.get('phone'):
-            if company_data.get('email'):
-                contact_run2 = contact_para.add_run(f"\nТел: {company_data['phone']}")
-            else:
-                contact_run2 = contact_para.add_run(f"Тел: {company_data['phone']}")
-            set_font_times_new_roman(contact_run2, size=12, bold=False, italic=False)
-        
-        # Row 3: Name lines
-        left_name = footer_table.cell(2, 0)
-        left_name.text = "_________________"
-        for para in left_name.paragraphs:
-            for run in para.runs:
-                set_font_times_new_roman(run, size=12, bold=False, italic=False)
-        
-        right_name = footer_table.cell(2, 1)
-        right_name.text = "_________________"
-        for para in right_name.paragraphs:
-            for run in para.runs:
-                set_font_times_new_roman(run, size=12, bold=False, italic=False)
-        
-        # Row 4: Empty
-        footer_table.cell(3, 0).text = ""
-        footer_table.cell(3, 1).text = ""
-        footer_table.cell(3, 2).text = ""
+        # Signature lines: ________________/_________________/
+        right_sig_run = right_para.add_run("________________/_________________/")
+        set_font_times_new_roman(right_sig_run, size=12, bold=False, italic=False)
     else:
         # For PO: 2-column layout - left: director info, right: contact info - use full width
         footer_table = doc.add_table(rows=1, cols=2)
