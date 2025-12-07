@@ -310,6 +310,7 @@
   },
   "orderDetail": {
     "newOrder": "Новый заказ",
+    "orderNumber": "Заказ #{{number}}",
     "editOrder": "Редактировать заказ",
     "backToOrders": "Назад к заказам",
     "createOrder": "Создать заказ",

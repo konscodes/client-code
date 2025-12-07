@@ -8,7 +8,8 @@ import {
   calculateLineTotal,
   getOrderTotals,
   generateId,
-  generateDocumentNumber
+  generateDocumentNumber,
+  extractIdNumbers
 } from '../lib/utils';
 import { generateInvoice, generatePurchaseOrder } from '../lib/document-generator';
 import { 
@@ -627,7 +628,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             </button>
             <div>
               <h1 className="text-[#1E2025] mb-1">
-                {t('orderDetail.newOrder') || 'New Order'}
+                {isNewOrder 
+                  ? t('orderDetail.newOrder') 
+                  : t('orderDetail.orderNumber', { number: extractIdNumbers(parsedOrderId) })
+                }
               </h1>
             </div>
           </div>
@@ -848,7 +852,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
           </button>
           <div>
             <h1 className="text-[#1E2025] mb-1">
-              {isNewOrder ? 'New Order' : (existingOrder?.id || parsedOrderId)}
+              {isNewOrder 
+                ? t('orderDetail.newOrder') 
+                : t('orderDetail.orderNumber', { number: extractIdNumbers(existingOrder?.id || parsedOrderId) })
+              }
             </h1>
             {selectedClient && (
               <button

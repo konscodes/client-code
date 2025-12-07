@@ -311,6 +311,7 @@
   },
   "orderDetail": {
     "newOrder": "New Order",
+    "orderNumber": "Order #{{number}}",
     "editOrder": "Edit Order",
     "backToOrders": "Back to Orders",
     "createOrder": "Create Order",
