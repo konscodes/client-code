@@ -22,6 +22,10 @@ dist-ssr
 # Sensitive data
 servicemk3.xml
 
+# Database backups
+backup_before_*.sql
+*.sql.backup
+
 # Supabase local files
 .supabase
 
