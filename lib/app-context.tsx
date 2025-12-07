@@ -214,6 +214,15 @@ function dbRowToCompanySettings(row: any): CompanySettings {
     defaultMarkup: parseFloat(row.defaultMarkup),
     invoicePrefix: row.invoicePrefix,
     poPrefix: row.poPrefix,
+    // Russian banking/legal fields
+    legalForm: row.legal_form,
+    inn: row.inn,
+    kpp: row.kpp,
+    bankAccount: row.bank_account,
+    bankName: row.bank_name,
+    correspondentAccount: row.correspondent_account,
+    bankBik: row.bank_bik,
+    directorName: row.director_name,
   };
 }
 
@@ -840,13 +849,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Settings methods
   const updateCompanySettings = useCallback(async (updates: Partial<CompanySettings>) => {
+    // Merge updates with existing settings
+    const mergedSettings = { ...companySettings, ...updates };
+    
+    // Convert camelCase to snake_case for database fields
+    const dbUpdates: any = {
+      id: 'default',
+      name: mergedSettings.name,
+      legalName: mergedSettings.legalName,
+      logo: mergedSettings.logo,
+      address: mergedSettings.address,
+      phone: mergedSettings.phone,
+      email: mergedSettings.email,
+      taxId: mergedSettings.taxId,
+      currency: mergedSettings.currency,
+      locale: mergedSettings.locale,
+      defaultTaxRate: mergedSettings.defaultTaxRate,
+      defaultMarkup: mergedSettings.defaultMarkup,
+      invoicePrefix: mergedSettings.invoicePrefix,
+      poPrefix: mergedSettings.poPrefix,
+      // Convert new banking fields to snake_case
+      legal_form: mergedSettings.legalForm,
+      inn: mergedSettings.inn,
+      kpp: mergedSettings.kpp,
+      bank_account: mergedSettings.bankAccount,
+      bank_name: mergedSettings.bankName,
+      correspondent_account: mergedSettings.correspondentAccount,
+      bank_bik: mergedSettings.bankBik,
+      director_name: mergedSettings.directorName,
+    };
+    
     const { error: err } = await supabase
       .from('company_settings')
-      .upsert({
-        id: 'default',
-        ...companySettings,
-        ...updates,
-      });
+      .upsert(dbUpdates);
     
     if (err) throw err;
     

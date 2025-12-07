@@ -89,6 +89,15 @@ export interface CompanySettings {
   defaultMarkup: number;
   invoicePrefix: string;
   poPrefix: string;
+  // Russian banking/legal fields
+  legalForm?: string; // ООО, ИП, etc.
+  inn?: string; // ИНН - Taxpayer ID
+  kpp?: string; // КПП - Registration Reason Code
+  bankAccount?: string; // p/c - current account
+  bankName?: string;
+  correspondentAccount?: string; // к/с
+  bankBik?: string; // БИК - Bank Identifier Code
+  directorName?: string; // Technical Director name
 }
 
 export interface DocumentTemplate {

@@ -2,17 +2,29 @@
 import type { Order, Client, CompanySettings, OrderJob } from './types';
 import { getOrderTotals, formatDate } from './utils';
 
-// Use Vercel serverless function endpoint
-const PYTHON_SERVICE_URL = '/api/generate';
+// Use local Python service in development, Vercel serverless function in production
+const PYTHON_SERVICE_URL = 
+  import.meta.env.VITE_DOCX_SERVICE_URL || 
+  (import.meta.env.DEV ? 'http://localhost:5001/generate' : '/api/generate');
 
 interface DocumentData {
   type: 'invoice' | 'po';
+  locale?: string;
   company: {
     name: string;
     address: string;
     phone: string;
     email: string;
     taxId?: string;
+    legalForm?: string;
+    inn?: string;
+    kpp?: string;
+    bankAccount?: string;
+    bankName?: string;
+    correspondentAccount?: string;
+    bankBik?: string;
+    directorName?: string;
+    legalName?: string;
   };
   client: {
     name: string;
@@ -29,6 +41,7 @@ interface DocumentData {
     subtotal: string;
     tax: string;
     total: string;
+    orderTitle?: string;
   };
   jobs: Array<{
     code: string;
@@ -38,6 +51,7 @@ interface DocumentData {
     unitPrice: string;
     lineTotal: string;
   }>;
+  workCompletionDays?: number;
 }
 
 function formatDocumentData(
@@ -65,12 +79,22 @@ function formatDocumentData(
   
   const orderData: DocumentData = {
     type: documentType,
+    locale: companySettings.locale,
     company: {
       name: companySettings.name,
       address: companySettings.address,
       phone: companySettings.phone,
       email: companySettings.email,
       taxId: companySettings.taxId,
+      legalForm: companySettings.legalForm,
+      inn: companySettings.inn,
+      kpp: companySettings.kpp,
+      bankAccount: companySettings.bankAccount,
+      bankName: companySettings.bankName,
+      correspondentAccount: companySettings.correspondentAccount,
+      bankBik: companySettings.bankBik,
+      directorName: companySettings.directorName,
+      legalName: companySettings.legalName,
     },
     client: {
       name: client.name || 'Unknown',
@@ -85,8 +109,10 @@ function formatDocumentData(
       subtotal: totals.subtotal.toFixed(2),
       tax: totals.tax.toFixed(2),
       total: totals.total.toFixed(2),
+      orderTitle: order.orderTitle,
     },
     jobs,
+    workCompletionDays: 30, // Default to 30 days, can be made configurable
   };
   
   if (documentType === 'invoice') {

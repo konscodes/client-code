@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { localeToLanguage } from '../lib/i18n';
+import i18n from '../lib/i18n';
 import type { CompanySettings } from '../lib/types';
 
 interface SettingsProps {
@@ -40,7 +41,6 @@ export function Settings({ onNavigate }: SettingsProps) {
     
     // If locale changed, update i18n language immediately
     if (field === 'locale' && typeof value === 'string') {
-      const { i18n } = require('../lib/i18n');
       i18n.changeLanguage(localeToLanguage(value));
     }
   };
@@ -51,7 +51,6 @@ export function Settings({ onNavigate }: SettingsProps) {
     toast.success(t('settings.savedSuccessfully'));
     
     // Update i18n language if locale changed
-    const { i18n } = require('../lib/i18n');
     i18n.changeLanguage(localeToLanguage(formData.locale));
   };
   
@@ -134,12 +133,85 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="taxId">{t('settings.taxId')}</Label>
+                <Label htmlFor="inn">{t('settings.inn')}</Label>
                 <Input
-                  id="taxId"
-                  value={formData.taxId}
-                  onChange={(e) => handleChange('taxId', e.target.value)}
+                  id="inn"
+                  value={formData.inn || ''}
+                  onChange={(e) => handleChange('inn', e.target.value)}
+                  placeholder={t('settings.innPlaceholder')}
                 />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="kpp">{t('settings.kpp')}</Label>
+                <Input
+                  id="kpp"
+                  value={formData.kpp || ''}
+                  onChange={(e) => handleChange('kpp', e.target.value)}
+                  placeholder={t('settings.kppPlaceholder')}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="directorName">{t('settings.directorName')}</Label>
+                <Input
+                  id="directorName"
+                  value={formData.directorName || ''}
+                  onChange={(e) => handleChange('directorName', e.target.value)}
+                  placeholder={t('settings.directorNamePlaceholder')}
+                />
+              </div>
+            </div>
+          </div>
+          
+          {/* Banking Information Section */}
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 mt-6">
+            <h2 className="text-[#1E2025] mb-6">{t('settings.bankingInformation')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left column: Bank Name and БИК */}
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="bankName">{t('settings.bankName')}</Label>
+                  <Input
+                    id="bankName"
+                    value={formData.bankName || ''}
+                    onChange={(e) => handleChange('bankName', e.target.value)}
+                    placeholder={t('settings.bankNamePlaceholder')}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="bankBik">{t('settings.bankBik')}</Label>
+                  <Input
+                    id="bankBik"
+                    value={formData.bankBik || ''}
+                    onChange={(e) => handleChange('bankBik', e.target.value)}
+                    placeholder={t('settings.bankBikPlaceholder')}
+                  />
+                </div>
+              </div>
+              
+              {/* Right column: Account numbers */}
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="bankAccount">{t('settings.bankAccount')}</Label>
+                  <Input
+                    id="bankAccount"
+                    value={formData.bankAccount || ''}
+                    onChange={(e) => handleChange('bankAccount', e.target.value)}
+                    placeholder={t('settings.bankAccountPlaceholder')}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="correspondentAccount">{t('settings.correspondentAccount')}</Label>
+                  <Input
+                    id="correspondentAccount"
+                    value={formData.correspondentAccount || ''}
+                    onChange={(e) => handleChange('correspondentAccount', e.target.value)}
+                    placeholder={t('settings.correspondentAccountPlaceholder')}
+                  />
+                </div>
               </div>
             </div>
           </div>
