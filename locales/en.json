@@ -336,7 +336,6 @@
     "orderType": "Order Type",
     "orderTypePlaceholder": "Select order type...",
     "orderTitle": "Order Title",
-    "orderTitleRequired": "Order Title *",
     "orderTitlePlaceholder": "Enter order title...",
     "lineItems": "Line Items",
     "addJob": "Add Job",

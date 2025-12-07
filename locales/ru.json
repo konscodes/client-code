@@ -335,7 +335,6 @@
     "orderType": "Тип заказа",
     "orderTypePlaceholder": "Выберите тип заказа...",
     "orderTitle": "Название заказа",
-    "orderTitleRequired": "Название заказа *",
     "orderTitlePlaceholder": "Введите название заказа...",
     "lineItems": "Позиции заказа",
     "addJob": "Добавить работу",

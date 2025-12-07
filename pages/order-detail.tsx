@@ -132,6 +132,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
   const [clientValidationError, setClientValidationError] = useState<string>('');
   const [orderTitleValidationError, setOrderTitleValidationError] = useState<string>('');
+  const [touchedOrderTitle, setTouchedOrderTitle] = useState(false);
   const [showDocumentDropdown, setShowDocumentDropdown] = useState(false);
   const documentDropdownRef = useRef<HTMLDivElement>(null);
   
@@ -270,6 +271,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // Validate order title is provided
     if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setTouchedOrderTitle(true);
       setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
       toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
       return;
@@ -337,6 +339,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // Validate order title is provided
     if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setTouchedOrderTitle(true);
       setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
       toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
       return;
@@ -509,6 +512,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // Validate order title is provided
     if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setTouchedOrderTitle(true);
+      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
       toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
       setPendingDocumentAction(null);
       return;
@@ -938,7 +943,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             </div>
             
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="orderTitle">{t('orderDetail.orderTitleRequired')}</Label>
+              <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
               <Textarea
                 id="orderTitle"
                 value={formData.orderTitle || ''}
@@ -948,12 +953,19 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     setOrderTitleValidationError('');
                   }
                 }}
+                onBlur={() => {
+                  setTouchedOrderTitle(true);
+                  if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+                    setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+                  }
+                }}
                 rows={2}
                 placeholder={t('orderDetail.orderTitlePlaceholder')}
                 required
-                className={orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
+                aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
+                className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
               />
-              {orderTitleValidationError && (
+              {touchedOrderTitle && orderTitleValidationError && (
                 <p className="text-sm text-red-600">{orderTitleValidationError}</p>
               )}
             </div>
@@ -1257,7 +1269,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitleRequired')}</Label>
+                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
                     <Textarea
                       id="orderTitle"
                       value={formData.orderTitle || ''}
@@ -1267,12 +1279,19 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                           setOrderTitleValidationError('');
                         }
                       }}
+                      onBlur={() => {
+                        setTouchedOrderTitle(true);
+                        if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+                          setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+                        }
+                      }}
                       rows={2}
                       placeholder={t('orderDetail.orderTitlePlaceholder')}
                       required
-                      className={orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
+                      aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
+                      className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
                     />
-                    {orderTitleValidationError && (
+                    {touchedOrderTitle && orderTitleValidationError && (
                       <p className="text-sm text-red-600">{orderTitleValidationError}</p>
                     )}
                   </div>
