@@ -237,7 +237,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         await addOrder(orderData);
         toast.success(t('orderDetail.orderCreatedSuccess'));
         // Update formData with the new order ID before navigation
-        setFormData({ ...formData, id: orderData.id, ...orderData });
+        setFormData({ ...formData, ...orderData });
         onNavigate('order-detail', orderData.id);
       } else {
         await updateOrder(orderData.id, orderData);
@@ -475,7 +475,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         toast.success(t('orderDetail.orderCreatedSuccess'));
         // Update formData with the new order ID and all order data
         // This ensures the order is recognized as saved
-        setFormData({ ...formData, id: orderData.id, ...orderData });
+        setFormData({ ...formData, ...orderData });
       } else {
         await updateOrder(orderData.id, orderData);
         toast.success(t('orderDetail.orderUpdatedSuccess'));
