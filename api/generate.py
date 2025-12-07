@@ -183,11 +183,11 @@ def set_font_times_new_roman(run, size=12, bold=False, italic=False):
     run.font.bold = bold
     run.font.italic = italic
 
-def add_company_header(doc, company_data, locale='ru-RU'):
+def add_company_header(doc, company_data, locale='ru-RU', available_width=Inches(7.5)):
     """Add company information header in Russian format using a table with border"""
     # Create header table
     header_table = doc.add_table(rows=1, cols=1)
-    header_table.columns[0].width = Inches(6.5)
+    header_table.columns[0].width = available_width
     
     header_cell = header_table.cell(0, 0)
     
@@ -270,7 +270,7 @@ def extract_order_number(order_id):
     
     return order_str
 
-def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU'):
+def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', available_width=Inches(7.5)):
     """Add document header (Смета № or КП №)"""
     if doc_type == 'invoice':
         doc_label = "Смета №"
@@ -288,10 +288,12 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU'):
     else:
         date_formatted = current_date.strftime('%Y-%m-%d')
     
-    # Create table for alignment
+    # Create table for alignment - use full width
     header_table = doc.add_table(rows=2, cols=2)
-    header_table.columns[0].width = Inches(4)
-    header_table.columns[1].width = Inches(2)
+    # Extract inch value from Inches object
+    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+    header_table.columns[0].width = Inches(width_val * 0.65)  # 65% for left content
+    header_table.columns[1].width = Inches(width_val * 0.35)  # 35% for date
     
     # Left column: Document number and client
     left_cell = header_table.cell(0, 0)
@@ -329,20 +331,23 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU'):
     
     doc.add_paragraph()
 
-def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=30):
+def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=30, available_width=Inches(7.5)):
     """Add work description with table view for jobs"""
     if not jobs_data:
         doc.add_paragraph("Нет работ")
         return
     
-    # Create jobs table with 5 columns
+    # Create jobs table with 5 columns - use full available width
     jobs_table = doc.add_table(rows=1, cols=5)
     jobs_table.style = 'Table Grid'
-    jobs_table.columns[0].width = Inches(0.4)  # №
-    jobs_table.columns[1].width = Inches(2.8)  # Наименование
-    jobs_table.columns[2].width = Inches(0.6)  # Кол-во
-    jobs_table.columns[3].width = Inches(1.0)  # Цена за единицу
-    jobs_table.columns[4].width = Inches(1.2)  # Стоимость
+    # Extract inch value from Inches object
+    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+    # Proportional widths: № (5%), Наименование (50%), Кол-во (10%), Цена за единицу (15%), Стоимость (20%)
+    jobs_table.columns[0].width = Inches(width_val * 0.05)  # №
+    jobs_table.columns[1].width = Inches(width_val * 0.50)  # Наименование
+    jobs_table.columns[2].width = Inches(width_val * 0.10)  # Кол-во
+    jobs_table.columns[3].width = Inches(width_val * 0.15)  # Цена за единицу
+    jobs_table.columns[4].width = Inches(width_val * 0.20)  # Стоимость
     
     # Header row
     header_cells = jobs_table.rows[0].cells
@@ -423,7 +428,7 @@ def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=3
     
     doc.add_paragraph()
 
-def add_footer_section(doc, company_data, doc_type, locale='ru-RU'):
+def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_width=Inches(7.5)):
     """Add footer section with signature and contact info"""
     if not (locale and locale.startswith('ru')):
         return
@@ -431,11 +436,13 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU'):
     doc.add_paragraph()
     
     if doc_type == 'invoice':
-        # For invoices: 3-column layout with signatures
+        # For invoices: 3-column layout with signatures - use full width
         footer_table = doc.add_table(rows=4, cols=3)
-        footer_table.columns[0].width = Inches(2.2)  # Исполнитель
-        footer_table.columns[1].width = Inches(2.2)  # Заказчик
-        footer_table.columns[2].width = Inches(2.1)  # Contact info
+        # Extract inch value from Inches object
+        width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+        footer_table.columns[0].width = Inches(width_val / 3)  # Исполнитель
+        footer_table.columns[1].width = Inches(width_val / 3)  # Заказчик
+        footer_table.columns[2].width = Inches(width_val / 3)  # Contact info
         
         # Row 1: Headers
         left_header = footer_table.cell(0, 0)
@@ -513,10 +520,12 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU'):
         footer_table.cell(3, 1).text = ""
         footer_table.cell(3, 2).text = ""
     else:
-        # For PO: 2-column layout - left: director info, right: contact info
+        # For PO: 2-column layout - left: director info, right: contact info - use full width
         footer_table = doc.add_table(rows=1, cols=2)
-        footer_table.columns[0].width = Inches(3.5)  # Director info
-        footer_table.columns[1].width = Inches(3.0)  # Contact info
+        # Extract inch value from Inches object
+        width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+        footer_table.columns[0].width = Inches(width_val * 0.55)  # Director info (55%)
+        footer_table.columns[1].width = Inches(width_val * 0.45)  # Contact info (45%)
         
         # Left column: Director info
         left_cell = footer_table.cell(0, 0)
@@ -550,6 +559,17 @@ def generate_document(data, doc_type):
     """Generate DOCX document from data"""
     doc = Document()
     
+    # Set narrow margins (0.5 inches on all sides)
+    sections = doc.sections
+    for section in sections:
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
+        section.left_margin = Inches(0.5)
+        section.right_margin = Inches(0.5)
+    
+    # Available width with narrow margins: 8.5" - 0.5" - 0.5" = 7.5"
+    AVAILABLE_WIDTH = Inches(7.5)
+    
     # Set default font to Times New Roman, size 12
     style = doc.styles['Normal']
     font = style.font
@@ -570,16 +590,16 @@ def generate_document(data, doc_type):
     work_days = data.get('workCompletionDays', 30)
     
     # 1. Company header with banking
-    add_company_header(doc, company_data, locale)
+    add_company_header(doc, company_data, locale, AVAILABLE_WIDTH)
     
     # 2. Document header (Смета № or КП №)
-    add_document_header(doc, order_data, client_data, doc_type, locale)
+    add_document_header(doc, order_data, client_data, doc_type, locale, AVAILABLE_WIDTH)
     
     # 3. Work description with table view
-    add_work_description(doc, jobs_data, order_data, locale, work_days)
+    add_work_description(doc, jobs_data, order_data, locale, work_days, AVAILABLE_WIDTH)
     
     # 4. Footer with signature and contact (3-column layout)
-    add_footer_section(doc, company_data, doc_type, locale)
+    add_footer_section(doc, company_data, doc_type, locale, AVAILABLE_WIDTH)
     
     return doc
 
