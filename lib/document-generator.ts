@@ -2,10 +2,8 @@
 import type { Order, Client, CompanySettings, OrderJob } from './types';
 import { getOrderTotals, formatDate } from './utils';
 
-// Get Python service URL from environment variable or use default for local development
-const PYTHON_SERVICE_URL = 
-  import.meta.env.VITE_DOCX_SERVICE_URL || 
-  'http://localhost:5001/generate';
+// Use Vercel serverless function endpoint
+const PYTHON_SERVICE_URL = '/api/generate';
 
 interface DocumentData {
   type: 'invoice' | 'po';
