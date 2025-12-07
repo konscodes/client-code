@@ -158,7 +158,7 @@ LEFT JOIN LATERAL (
 |-----------|-------------|--------------|-------|
 | `WorksName` | `tblWorks` | `jobName` | Job name |
 | `WorksName` | `tblWorks` | `description` | Same as jobName |
-| `WorksPrice` | `tblWorks` | `unitPrice` | Parse as float, handle comma decimal separator |
+| `WorksFirstPrice` | `tblWorks` | `unitPrice` | **Base price BEFORE markup** - Parse as float, handle comma decimal separator. Fallback to `WorksPrice` if `WorksFirstPrice` not available |
 | `WorksQuantity` | `tblWorks` | `quantity` | Parse as float, handle comma decimal separator |
 | `WorksRatio` | `tblWorks` | `lineMarkup` | **See Markup Conversion below** |
 | `WorksCWorksID` | `tblWorks` | `jobId` | Link to catalog if exists, otherwise empty string |
@@ -167,31 +167,45 @@ LEFT JOIN LATERAL (
 | - | - | `taxApplicable` | Default: true |
 | - | - | `position` | Sequential index (0, 1, 2, ...) based on `ID` field |
 
+**IMPORTANT - Price Field Selection**:
+- **Use `WorksFirstPrice`** (base price before markup) for `unitPrice`
+- **Do NOT use `WorksPrice`** (price with markup already applied)
+- Relationship: `WorksPrice = WorksFirstPrice × WorksRatio`
+- The application calculates final price as: `unitPrice × (1 + lineMarkup/100)`
+- If `WorksFirstPrice` is missing, fallback to `WorksPrice` (for backward compatibility)
+
 **Important**: Order jobs are sorted by their `ID` field within each order to maintain the correct sequence.
 
 ### Markup Conversion Formula
 
-**CRITICAL**: XML uses a different markup representation than the application.
+**CRITICAL**: XML uses a ratio format (multiplier) while the application uses percentage markup.
 
-- **XML Format**: Ratio where 100 = no markup (0%), 110 = 10% markup
-- **Application Format**: Percentage where 0 = no markup, 10 = 10% markup
+- **XML Format**: Ratio multiplier where 1.0 = no markup (0%), 1.5 = 50% markup, 1.7 = 70% markup
+- **Application Format**: Percentage where 0 = no markup, 50 = 50% markup, 70 = 70% markup
 
 **Conversion Formula**:
 ```
-lineMarkup = (WorksRatio - 100) / 10
+lineMarkup = (WorksRatio - 1) × 100
 ```
 
 **Examples**:
-- XML `WorksRatio = 100` → `lineMarkup = 0` (0% markup)
-- XML `WorksRatio = 110` → `lineMarkup = 10` (10% markup)
-- XML `WorksRatio = 120` → `lineMarkup = 20` (20% markup)
-- XML `WorksRatio = 150` → `lineMarkup = 50` (50% markup)
+- XML `WorksRatio = 1,0` (1.0) → `lineMarkup = 0` (0% markup)
+- XML `WorksRatio = 1,5` (1.5) → `lineMarkup = 50` (50% markup)
+- XML `WorksRatio = 1,7` (1.7) → `lineMarkup = 70` (70% markup)
+- XML `WorksRatio = 1,35` (1.35) → `lineMarkup = 35` (35% markup)
 
 **Implementation**:
 ```javascript
+// Handle comma as decimal separator (Russian format)
 const xmlRatio = parseFloat(worksRatio.replace(',', '.'));
-const lineMarkup = (xmlRatio - 100) / 10;
+// Convert ratio (1.5) to percentage markup (50%)
+const lineMarkup = (xmlRatio - 1) * 100;
 ```
+
+**Price Calculation**:
+- XML: `WorksPrice = WorksFirstPrice × WorksRatio`
+- Application: `finalPrice = unitPrice × (1 + lineMarkup/100)`
+- Example: Base price 100, markup 50% → Final price = 100 × 1.5 = 150
 
 ### Status Mapping (Russian → English)
 
@@ -265,8 +279,8 @@ SELECT
   w.WorksName as "jobName",
   w.WorksName as description,
   CAST(REPLACE(w.WorksQuantity, ',', '.') AS NUMERIC) as quantity,
-  CAST(REPLACE(w.WorksPrice, ',', '.') AS NUMERIC) as "unitPrice",
-  (CAST(REPLACE(w.WorksRatio, ',', '.') AS NUMERIC) - 100) / 10 as "lineMarkup",
+  CAST(REPLACE(COALESCE(w.WorksFirstPrice, w.WorksPrice), ',', '.') AS NUMERIC) as "unitPrice",
+  (CAST(REPLACE(w.WorksRatio, ',', '.') AS NUMERIC) - 1) * 100 as "lineMarkup",
   true as "taxApplicable",
   ROW_NUMBER() OVER (PARTITION BY w.WorksOrderID ORDER BY w.ID) - 1 as position
 FROM tblWorks w

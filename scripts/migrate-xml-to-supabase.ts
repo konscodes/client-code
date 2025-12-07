@@ -68,10 +68,13 @@ function parseNumber(value: string | undefined): number {
 }
 
 // Helper function to convert markup ratio
+// XML format: WorksRatio = "1,5" means 1.5x multiplier = 50% markup
+// Supabase format: lineMarkup = 50 means 50% markup
 function convertMarkup(ratio: string | undefined): number {
   if (!ratio) return 0;
   const numRatio = parseNumber(ratio);
-  return (numRatio - 100) / 10;
+  // Convert ratio (1.5) to percentage markup (50%)
+  return (numRatio - 1) * 100;
 }
 
 // Helper function to trim and clean string
@@ -129,6 +132,7 @@ interface XMLWork {
   WorksOrderID: string;
   WorksName?: string;
   WorksPrice?: string;
+  WorksFirstPrice?: string;
   WorksQuantity?: string;
   WorksRatio?: string;
   WorksCWorksID?: string;
@@ -466,12 +470,9 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
         const work = works[i];
         const jobId = `oj-${xmlOrderId}-${i + 1}`;
         
-        // Handle WorksRatio - if it's 1 or very small, it might be a different format
-        let lineMarkup = convertMarkup(work.WorksRatio);
-        // If the ratio is 1, it might mean 0% markup (100% = no markup in XML format)
-        if (work.WorksRatio && parseNumber(work.WorksRatio) === 1) {
-          lineMarkup = 0;
-        }
+        // Convert WorksRatio to markup percentage
+        // WorksRatio = "1,5" means 1.5x multiplier = 50% markup
+        const lineMarkup = convertMarkup(work.WorksRatio);
         
         const jobData: any = {
           id: jobId,
@@ -480,7 +481,9 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
           jobName: cleanString(work.WorksName) || 'Unknown',
           description: cleanString(work.WorksName) || 'Unknown',
           quantity: parseNumber(work.WorksQuantity),
-          unitPrice: parseNumber(work.WorksPrice),
+          // Use WorksFirstPrice (base price) instead of WorksPrice (price with markup)
+          // WorksPrice = WorksFirstPrice * WorksRatio, so we store the base price
+          unitPrice: parseNumber(work.WorksFirstPrice) || parseNumber(work.WorksPrice),
           lineMarkup: lineMarkup,
           taxApplicable: true,
           position: i,
