@@ -1,6 +1,7 @@
 // Order detail page - create and manage orders with job line items
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { 
@@ -63,10 +64,13 @@ const ORDER_TYPES = [
 interface OrderDetailProps {
   orderId: string;
   onNavigate: (page: string, id?: string) => void;
+  previousPage?: { page: string; id?: string } | null;
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
 }
 
-export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
+export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChangesChange }: OrderDetailProps) {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder } = useApp();
   const { formatCurrency } = useFormatting();
   
@@ -78,6 +82,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
   };
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [generatingPO, setGeneratingPO] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Parse orderId to extract client ID from query string (e.g., "new?client=client-10328")
   const parsedOrderId = orderId?.includes('?') ? orderId.split('?')[0] : orderId;
@@ -121,10 +126,9 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editingJobName, setEditingJobName] = useState('');
   const [focusedPriceInputs, setFocusedPriceInputs] = useState<Set<string>>(new Set());
-  const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
-  const [pendingNavigation, setPendingNavigation] = useState<{ page: string; id?: string } | null>(null);
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
   const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
+  const [clientValidationError, setClientValidationError] = useState<string>('');
   
   // Resizable column width state
   const [jobColumnWidth, setJobColumnWidth] = useState(() => {
@@ -188,38 +192,126 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
   
   const hasMoreClients = filteredClients.length > 5;
   
-  // Check if order is saved (exists in orders list or has a real ID)
+  // Check if order is saved (exists in orders list)
   const isOrderSaved = useMemo(() => {
-    // If we have a valid ID (not 'new') and it exists in orders list, it's saved
-    if (formData.id && formData.id !== 'new') {
-      return orders.some(o => o.id === formData.id);
-    }
-    return false;
-  }, [formData.id, orders]);
+    // If existingOrder exists, the order is saved
+    return !!existingOrder;
+  }, [existingOrder]);
   
   // Check if order has unsaved changes
   const hasUnsavedChanges = useMemo(() => {
-    // If order is saved, no unsaved changes
-    if (isOrderSaved) return false;
+    // If order is saved, compare formData to existingOrder to detect changes
+    if (isOrderSaved && existingOrder) {
+      // Deep comparison of jobs array
+      const jobsChanged = JSON.stringify(formData.jobs || []) !== JSON.stringify(existingOrder.jobs || []);
+      
+      // Check if any field has changed
+      return (
+        formData.clientId !== existingOrder.clientId ||
+        formData.status !== existingOrder.status ||
+        formData.orderType !== existingOrder.orderType ||
+        formData.orderTitle !== existingOrder.orderTitle ||
+        formData.taxRate !== existingOrder.taxRate ||
+        formData.globalMarkup !== existingOrder.globalMarkup ||
+        formData.currency !== existingOrder.currency ||
+        jobsChanged
+      );
+    }
     
     // For new orders, check if any data has been entered
     if (isNewOrder) {
       return !!(formData.clientId || (formData.jobs && formData.jobs.length > 0));
     }
     
-    // For existing orders that aren't saved yet, there are unsaved changes
-    return true;
-  }, [isNewOrder, formData.clientId, formData.jobs, isOrderSaved]);
+    // For orders that don't exist yet, no unsaved changes
+    return false;
+  }, [isOrderSaved, existingOrder, isNewOrder, formData.clientId, formData.status, formData.orderType, formData.orderTitle, formData.taxRate, formData.globalMarkup, formData.currency, formData.jobs]);
   
+  // Notify parent component about unsaved changes state
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+  
+  const handleCancel = () => {
+    // Navigate back to previous page, or default to orders list
+    if (previousPage) {
+      onNavigate(previousPage.page, previousPage.id);
+    } else {
+      onNavigate('orders');
+    }
+  };
+
+  const handleCreate = async () => {
+    // Validate client is selected
+    if (!formData.clientId) {
+      setClientValidationError(t('orderDetail.selectClientRequired') || 'Please select a client');
+      toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
+      return;
+    }
+    
+    setClientValidationError('');
+    setIsSaving(true);
+    
+    try {
+      const orderData: Order = {
+        id: 'new',
+        clientId: formData.clientId,
+        status: formData.status as OrderStatus || 'proposal',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        taxRate: formData.taxRate || 8.5,
+        globalMarkup: formData.globalMarkup || 0,
+        currency: formData.currency || 'USD',
+        orderType: formData.orderType || '',
+        orderTitle: formData.orderTitle || '',
+        jobs: [],
+      };
+      
+      const generatedOrderId = await addOrder(orderData);
+      
+      // Construct the order object with the database-generated ID
+      const newOrder: Order = {
+        id: generatedOrderId,
+        clientId: orderData.clientId,
+        status: orderData.status,
+        createdAt: orderData.createdAt,
+        updatedAt: orderData.updatedAt,
+        taxRate: orderData.taxRate,
+        globalMarkup: orderData.globalMarkup,
+        currency: orderData.currency,
+        orderType: orderData.orderType,
+        orderTitle: orderData.orderTitle,
+        jobs: [], // New orders have no jobs
+      };
+      
+      // Add to cache directly (no refetch needed - much faster!)
+      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+        // Add new order at the beginning (most recent first, matching the fetch order)
+        return [newOrder, ...oldOrders];
+      });
+      
+      toast.success(t('orderDetail.orderCreatedSuccess'));
+      // Navigate to the new order with the database-generated ID
+      onNavigate('order-detail', generatedOrderId);
+    } catch (error: any) {
+      console.error('Error creating order:', error);
+      const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
+      toast.error(errorMessage);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!formData.clientId) {
       toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
       return;
     }
     
+    setIsSaving(true);
     try {
       const orderData: Order = {
-        id: isNewOrder ? 'new' : (existingOrder?.id || formData.id || ''),
+        id: existingOrder?.id || formData.id || '',
         clientId: formData.clientId,
         status: formData.status as OrderStatus || 'proposal',
         createdAt: existingOrder?.createdAt || new Date(),
@@ -232,107 +324,17 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         jobs: formData.jobs || [],
       };
       
-      if (isNewOrder) {
-        const generatedOrderId = await addOrder(orderData);
-        toast.success(t('orderDetail.orderCreatedSuccess'));
-        // Navigate to the new order with the database-generated ID
-        onNavigate('order-detail', generatedOrderId);
-      } else {
-        await updateOrder(orderData.id, orderData);
-        toast.success(t('orderDetail.orderUpdatedSuccess'));
-        // Update formData to reflect saved state
-        setFormData({ ...formData, ...orderData });
-      }
+      await updateOrder(orderData.id, orderData);
+      toast.success(t('orderDetail.orderUpdatedSuccess'));
+      // Update formData to reflect saved state
+      setFormData({ ...formData, ...orderData });
     } catch (error: any) {
       console.error('Error saving order:', error);
       const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
       toast.error(errorMessage);
+    } finally {
+      setIsSaving(false);
     }
-  };
-  
-  // Handle navigation with unsaved changes warning
-  const handleNavigate = useCallback((page: string, id?: string) => {
-    if (hasUnsavedChanges) {
-      setPendingNavigation({ page, id });
-      setShowUnsavedChangesDialog(true);
-      return;
-    }
-    onNavigate(page, id);
-  }, [hasUnsavedChanges, onNavigate]);
-  
-  const handleConfirmNavigation = () => {
-    if (pendingNavigation) {
-      onNavigate(pendingNavigation.page, pendingNavigation.id);
-      setPendingNavigation(null);
-    }
-    setShowUnsavedChangesDialog(false);
-  };
-  
-  const handleSaveAndLeave = async () => {
-    if (!formData.clientId) {
-      toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
-      setShowUnsavedChangesDialog(false);
-      return;
-    }
-    
-    try {
-      // Check if order already exists in the database
-      const orderExists = formData.id && formData.id !== 'new' && orders.some(o => o.id === formData.id);
-      
-      const orderData: Order = {
-        id: orderExists ? formData.id! : (isNewOrder ? 'new' : (existingOrder?.id || formData.id || '')),
-        clientId: formData.clientId,
-        status: formData.status as OrderStatus || 'proposal',
-        createdAt: existingOrder?.createdAt || new Date(),
-        updatedAt: new Date(),
-        taxRate: formData.taxRate || 8.5,
-        globalMarkup: formData.globalMarkup || 0,
-        currency: formData.currency || 'USD',
-        orderType: formData.orderType || '',
-        orderTitle: formData.orderTitle || '',
-        jobs: formData.jobs || [],
-      };
-      
-      if (orderExists) {
-        // Order already exists, update it
-        await updateOrder(orderData.id, orderData);
-        toast.success(t('orderDetail.orderUpdatedSuccess'));
-      } else if (isNewOrder) {
-        // New order, create it
-        const generatedOrderId = await addOrder(orderData);
-        toast.success(t('orderDetail.orderCreatedSuccess'));
-        // Navigate to pending navigation or created order
-        if (pendingNavigation) {
-          onNavigate(pendingNavigation.page, pendingNavigation.id);
-        } else {
-          onNavigate('order-detail', generatedOrderId);
-        }
-      } else {
-        // Existing order (not in list yet), update it
-        await updateOrder(orderData.id, orderData);
-        toast.success(t('orderDetail.orderUpdatedSuccess'));
-        if (pendingNavigation) {
-          onNavigate(pendingNavigation.page, pendingNavigation.id);
-        }
-      }
-      
-      // Navigate to pending navigation if not already handled
-      if (pendingNavigation && !isNewOrder) {
-        onNavigate(pendingNavigation.page, pendingNavigation.id);
-      }
-      
-      setPendingNavigation(null);
-      setShowUnsavedChangesDialog(false);
-    } catch (error: any) {
-      console.error('Error saving order:', error);
-      const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
-      toast.error(errorMessage);
-    }
-  };
-  
-  const handleCancelNavigation = () => {
-    setPendingNavigation(null);
-    setShowUnsavedChangesDialog(false);
   };
   
   const handleAddJob = (jobId: string) => {
@@ -609,13 +611,236 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     );
   }
   
+  // Simplified create form for new orders
+  if (isNewOrder) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleCancel}
+              className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
+              aria-label="Back"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-[#1E2025] mb-1">
+                {t('orderDetail.newOrder') || 'New Order'}
+              </h1>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
+            >
+              {t('common.cancel') || 'Cancel'}
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+                  {t('common.saving') || 'Saving...'}
+                </>
+              ) : (
+                <>
+                  <Save size={20} aria-hidden="true" />
+                  {t('orderDetail.createOrder') || 'Create Order'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+        
+        {/* Basic Order Information Card */}
+        <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+          <h2 className="text-[#1E2025] mb-4">{t('orderDetail.orderInformation')}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="client"
+                    variant="outline"
+                    role="combobox"
+                    className={`w-full justify-between text-left font-normal h-9 ${
+                      clientValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''
+                    }`}
+                  >
+                    {selectedClient 
+                      ? (() => {
+                          const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
+                          const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
+                          if (hasName && hasCompany) {
+                            return `${selectedClient.name} - ${selectedClient.company}`;
+                          } else if (hasName) {
+                            return selectedClient.name;
+                          } else if (hasCompany) {
+                            return selectedClient.company;
+                          }
+                          return t('orderDetail.selectClient');
+                        })()
+                      : t('orderDetail.selectClient')}
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent 
+                  className="!w-[400px] !max-w-[400px] !min-w-[400px] p-0 overflow-hidden" 
+                  align="start"
+                  style={{ width: '400px', maxWidth: '400px', minWidth: '400px' }}
+                >
+                  <div className="w-full overflow-hidden" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                    <div className="p-4 border-b border-[#E4E7E7]">
+                      <div className="relative">
+                        <Search 
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+                          size={18}
+                          aria-hidden="true"
+                        />
+                        <Input
+                          type="search"
+                          placeholder={t('orderDetail.searchClientsPlaceholder') || 'Search clients...'}
+                          value={clientSearchQuery}
+                          onChange={(e) => {
+                            setClientSearchQuery(e.target.value);
+                            if (clientValidationError) {
+                              setClientValidationError('');
+                            }
+                          }}
+                          className="pl-10 w-full"
+                          style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                          aria-label={t('orderDetail.searchClientsLabel') || 'Search clients'}
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto w-full" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                      {filteredClients.length === 0 ? (
+                        <div className="p-4 text-center text-[#7C8085]">
+                          {clientSearchQuery.trim() 
+                            ? (t('orderDetail.noClientsFound') || 'No clients found')
+                            : (t('orderDetail.startTypingToSearchClients') || 'Start typing to search for clients')}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="p-2">
+                            {displayedClients.map(client => (
+                            <button
+                              key={client.id}
+                              onClick={() => {
+                                setFormData({ ...formData, clientId: client.id });
+                                setClientPickerOpen(false);
+                                setClientSearchQuery('');
+                                setClientValidationError('');
+                              }}
+                              className="w-full p-3 text-left rounded-lg hover:bg-[#F7F8F8] transition-colors cursor-pointer overflow-hidden"
+                              style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                            >
+                              {client.company && client.company.trim() !== '' ? (
+                                <>
+                                  <p className="text-[#1E2025] font-medium truncate">
+                                    {client.company}
+                                  </p>
+                                  {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                    <p className="text-[#7C8085] text-sm truncate">{client.name}</p>
+                                  )}
+                                </>
+                              ) : (
+                                client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                  <p className="text-[#1E2025] font-medium truncate">{client.name}</p>
+                                )
+                              )}
+                              {client.email && typeof client.email === 'string' && client.email.trim() !== '' && (
+                                <p className="text-[#7C8085] text-sm truncate">{client.email}</p>
+                              )}
+                            </button>
+                          ))}
+                          </div>
+                          {hasMoreClients && (
+                            <div className="p-3 border-t border-[#E4E7E7] text-center">
+                              <p className="text-[#7C8085] text-sm">
+                                {t('orderDetail.moreClientsAvailable', { count: filteredClients.length - 5 }) || `Continue typing to see ${filteredClients.length - 5} more result${filteredClients.length - 5 === 1 ? '' : 's'}`}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {clientValidationError && (
+                <p className="text-sm text-red-600">{clientValidationError}</p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="status">{t('orderDetail.status')}</Label>
+              <Select
+                value={formData.status || 'proposal'}
+                onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
+                  <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                  <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                  <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
+              <Select
+                value={formData.orderType || ''}
+                onValueChange={(value) => setFormData({ ...formData, orderType: value })}
+              >
+                <SelectTrigger id="orderType">
+                  <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORDER_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {getOrderTypeLabel(type.value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
+              <Textarea
+                id="orderTitle"
+                value={formData.orderTitle || ''}
+                onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
+                rows={2}
+                placeholder={t('orderDetail.orderTitlePlaceholder')}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Full order detail view for existing orders
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => handleNavigate('orders')}
+            onClick={() => onNavigate('orders')}
             className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
             aria-label="Back to orders"
           >
@@ -623,7 +848,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
           </button>
           <div>
             <h1 className="text-[#1E2025] mb-1">
-              {isNewOrder ? 'New Order' : formData.id}
+              {isNewOrder ? 'New Order' : (existingOrder?.id || parsedOrderId)}
             </h1>
             {selectedClient && (
               <button
@@ -671,10 +896,18 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
+          disabled={isSaving}
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save size={20} aria-hidden="true" />
-          {isNewOrder ? t('orderDetail.createOrder') : t('common.saveChanges')}
+          {isSaving ? (
+            <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Save size={20} aria-hidden="true" />
+          )}
+          {isSaving 
+            ? (t('common.saving') || 'Saving...')
+            : (isNewOrder ? t('orderDetail.createOrder') : t('common.saveChanges'))
+          }
         </button>
       </div>
       
@@ -1357,40 +1590,6 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
           </div>
         </div>
       </div>
-      
-      {/* Unsaved Changes Confirmation Dialog */}
-      <AlertDialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
-        <AlertDialogContent className="bg-white border border-[#E4E7E7]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[#1E2025]">
-              {t('orderDetail.unsavedChangesTitle') || 'Unsaved Changes'}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-[#555A60]">
-              {t('orderDetail.unsavedChangesWarning') || 'You have unsaved changes. Are you sure you want to leave?'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
-            <AlertDialogCancel
-              onClick={handleCancelNavigation}
-              className="bg-[#E4E7E7] text-[#1E2025] hover:bg-[#D2D6D6] m-0"
-            >
-              {t('common.cancel') || 'Cancel'}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmNavigation}
-              className="bg-[#E4E7E7] text-[#1E2025] hover:bg-[#D2D6D6] m-0"
-            >
-              {t('orderDetail.leaveWithoutSaving') || 'Leave'}
-            </AlertDialogAction>
-            <AlertDialogAction
-              onClick={handleSaveAndLeave}
-              className="bg-[#1F744F] text-white hover:bg-[#165B3C] m-0"
-            >
-              {t('orderDetail.saveAndLeave') || 'Save and Leave'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       
       {/* Document Generation Confirmation Dialog */}
       <AlertDialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>

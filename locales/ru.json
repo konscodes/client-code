@@ -371,7 +371,7 @@
     "generatePO": "Создать КП",
     "generating": "Создание...",
     "unsavedChangesTitle": "Несохраненные изменения",
-    "unsavedChangesWarning": "У вас есть несохраненные изменения. Вы уверены, что хотите уйти?",
+    "unsavedChangesWarning": "Все несохраненные изменения будут потеряны. Вы уверены, что хотите уйти?",
     "leaveWithoutSaving": "Закрыть",
     "saveAndLeave": "Сохранить и закрыть",
     "unsavedOrderTitle": "Заказ не сохранен",

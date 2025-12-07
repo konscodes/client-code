@@ -372,7 +372,7 @@
     "generatePO": "Generate PO",
     "generating": "Generating...",
     "unsavedChangesTitle": "Unsaved Changes",
-    "unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?",
+    "unsavedChangesWarning": "All unsaved changes will be lost. Are you sure you want to leave?",
     "leaveWithoutSaving": "Leave",
     "saveAndLeave": "Save and leave",
     "unsavedOrderTitle": "Order Not Saved",
