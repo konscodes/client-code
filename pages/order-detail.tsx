@@ -343,9 +343,19 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       };
       
       await updateOrder(orderData.id, orderData);
-      toast.success(t('orderDetail.orderUpdatedSuccess'));
+      
+      // Optimistically update the query cache so existingOrder updates immediately
+      // This ensures hasUnsavedChanges becomes false right after saving
+      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+        return oldOrders.map(order => 
+          order.id === orderData.id ? orderData : order
+        );
+      });
+      
       // Update formData to reflect saved state
       setFormData({ ...formData, ...orderData });
+      
+      toast.success(t('orderDetail.orderUpdatedSuccess'));
     } catch (error: any) {
       console.error('Error saving order:', error);
       const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
