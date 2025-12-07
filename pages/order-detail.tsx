@@ -131,6 +131,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
   const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
   const [clientValidationError, setClientValidationError] = useState<string>('');
+  const [orderTitleValidationError, setOrderTitleValidationError] = useState<string>('');
   const [showDocumentDropdown, setShowDocumentDropdown] = useState(false);
   const documentDropdownRef = useRef<HTMLDivElement>(null);
   
@@ -267,7 +268,15 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       return;
     }
     
+    // Validate order title is provided
+    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      return;
+    }
+    
     setClientValidationError('');
+    setOrderTitleValidationError('');
     setIsSaving(true);
     
     try {
@@ -326,6 +335,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       return;
     }
     
+    // Validate order title is provided
+    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      return;
+    }
+    
+    setOrderTitleValidationError('');
     setIsSaving(true);
     try {
       const orderData: Order = {
@@ -486,6 +503,13 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     // Save the order first
     if (!formData.clientId) {
       toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
+      setPendingDocumentAction(null);
+      return;
+    }
+    
+    // Validate order title is provided
+    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
       setPendingDocumentAction(null);
       return;
     }
@@ -914,14 +938,24 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             </div>
             
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
+              <Label htmlFor="orderTitle">{t('orderDetail.orderTitleRequired')}</Label>
               <Textarea
                 id="orderTitle"
                 value={formData.orderTitle || ''}
-                onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, orderTitle: e.target.value });
+                  if (orderTitleValidationError) {
+                    setOrderTitleValidationError('');
+                  }
+                }}
                 rows={2}
                 placeholder={t('orderDetail.orderTitlePlaceholder')}
+                required
+                className={orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
               />
+              {orderTitleValidationError && (
+                <p className="text-sm text-red-600">{orderTitleValidationError}</p>
+              )}
             </div>
           </div>
         </div>
@@ -1223,14 +1257,24 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
+                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitleRequired')}</Label>
                     <Textarea
                       id="orderTitle"
                       value={formData.orderTitle || ''}
-                      onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, orderTitle: e.target.value });
+                        if (orderTitleValidationError) {
+                          setOrderTitleValidationError('');
+                        }
+                      }}
                       rows={2}
                       placeholder={t('orderDetail.orderTitlePlaceholder')}
+                      required
+                      className={orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
                     />
+                    {orderTitleValidationError && (
+                      <p className="text-sm text-red-600">{orderTitleValidationError}</p>
+                    )}
                   </div>
                 </div>
               </div>
