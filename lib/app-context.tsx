@@ -23,7 +23,7 @@ interface AppContextType {
   getClient: (id: string) => Client | undefined;
   
   // Order methods
-  addOrder: (order: Order) => Promise<void>;
+  addOrder: (order: Order) => Promise<string>;
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   getOrder: (id: string) => Order | undefined;
@@ -543,7 +543,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Order methods with React Query mutations
   const addOrderMutation = useMutation({
-    mutationFn: async (order: Order) => {
+    mutationFn: async (order: Order): Promise<string> => {
       // Generate ID from database sequence if not provided
       let orderId = order.id;
       if (!orderId || orderId === 'new') {
@@ -592,14 +592,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         
         if (jobsErr) throw jobsErr;
       }
+      
+      return orderId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
   });
 
-  const addOrder = useCallback(async (order: Order) => {
-    await addOrderMutation.mutateAsync(order);
+  const addOrder = useCallback(async (order: Order): Promise<string> => {
+    return await addOrderMutation.mutateAsync(order);
   }, [addOrderMutation]);
 
   const updateOrderMutation = useMutation({

@@ -6,7 +6,6 @@ import { useFormatting } from '../lib/use-formatting';
 import { 
   calculateLineTotal,
   getOrderTotals,
-  generateOrderId,
   generateId,
   generateDocumentNumber
 } from '../lib/utils';
@@ -220,7 +219,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     
     try {
       const orderData: Order = {
-        id: isNewOrder ? generateOrderId() : (existingOrder?.id || formData.id || ''),
+        id: isNewOrder ? 'new' : (existingOrder?.id || formData.id || ''),
         clientId: formData.clientId,
         status: formData.status as OrderStatus || 'proposal',
         createdAt: existingOrder?.createdAt || new Date(),
@@ -234,11 +233,10 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       };
       
       if (isNewOrder) {
-        await addOrder(orderData);
+        const generatedOrderId = await addOrder(orderData);
         toast.success(t('orderDetail.orderCreatedSuccess'));
-        // Update formData with the new order ID before navigation
-        setFormData({ ...formData, ...orderData });
-        onNavigate('order-detail', orderData.id);
+        // Navigate to the new order with the database-generated ID
+        onNavigate('order-detail', generatedOrderId);
       } else {
         await updateOrder(orderData.id, orderData);
         toast.success(t('orderDetail.orderUpdatedSuccess'));
@@ -282,7 +280,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       const orderExists = formData.id && formData.id !== 'new' && orders.some(o => o.id === formData.id);
       
       const orderData: Order = {
-        id: orderExists ? formData.id! : (isNewOrder ? generateOrderId() : (existingOrder?.id || formData.id || '')),
+        id: orderExists ? formData.id! : (isNewOrder ? 'new' : (existingOrder?.id || formData.id || '')),
         clientId: formData.clientId,
         status: formData.status as OrderStatus || 'proposal',
         createdAt: existingOrder?.createdAt || new Date(),
@@ -301,19 +299,26 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
         toast.success(t('orderDetail.orderUpdatedSuccess'));
       } else if (isNewOrder) {
         // New order, create it
-        await addOrder(orderData);
+        const generatedOrderId = await addOrder(orderData);
         toast.success(t('orderDetail.orderCreatedSuccess'));
+        // Navigate to pending navigation or created order
+        if (pendingNavigation) {
+          onNavigate(pendingNavigation.page, pendingNavigation.id);
+        } else {
+          onNavigate('order-detail', generatedOrderId);
+        }
       } else {
         // Existing order (not in list yet), update it
         await updateOrder(orderData.id, orderData);
         toast.success(t('orderDetail.orderUpdatedSuccess'));
+        if (pendingNavigation) {
+          onNavigate(pendingNavigation.page, pendingNavigation.id);
+        }
       }
       
-      // Navigate to pending navigation or saved order
-      if (pendingNavigation) {
+      // Navigate to pending navigation if not already handled
+      if (pendingNavigation && !isNewOrder) {
         onNavigate(pendingNavigation.page, pendingNavigation.id);
-      } else if (isNewOrder && !orderExists) {
-        onNavigate('order-detail', orderData.id);
       }
       
       setPendingNavigation(null);
@@ -457,7 +462,7 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
     
     try {
       const orderData: Order = {
-        id: isNewOrder ? generateOrderId() : (existingOrder?.id || formData.id || ''),
+        id: isNewOrder ? 'new' : (existingOrder?.id || formData.id || ''),
         clientId: formData.clientId,
         status: (formData.status || 'proposal') as OrderStatus,
         orderType: formData.orderType || '',
@@ -471,11 +476,11 @@ export function OrderDetail({ orderId, onNavigate }: OrderDetailProps) {
       };
       
       if (isNewOrder) {
-        await addOrder(orderData);
+        const generatedOrderId = await addOrder(orderData);
         toast.success(t('orderDetail.orderCreatedSuccess'));
         // Update formData with the new order ID and all order data
         // This ensures the order is recognized as saved
-        setFormData({ ...formData, ...orderData });
+        setFormData({ ...formData, ...orderData, id: generatedOrderId });
       } else {
         await updateOrder(orderData.id, orderData);
         toast.success(t('orderDetail.orderUpdatedSuccess'));
