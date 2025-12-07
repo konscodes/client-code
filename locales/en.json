@@ -369,6 +369,7 @@
     "noPresetsAvailable": "No presets available",
     "jobsCount": "jobs",
     "documents": "Documents",
+    "generateDocument": "Generate Document",
     "generateInvoice": "Generate Invoice",
     "generatePO": "Generate PO",
     "generating": "Generating...",

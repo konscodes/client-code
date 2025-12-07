@@ -368,6 +368,7 @@
     "noPresetsAvailable": "Шаблоны недоступны",
     "jobsCount": "работ",
     "documents": "Документы",
+    "generateDocument": "Создать документ",
     "generateInvoice": "Создать смету",
     "generatePO": "Создать КП",
     "generating": "Создание...",

@@ -1,5 +1,5 @@
 // Order detail page - create and manage orders with job line items
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '../lib/app-context';
@@ -24,7 +24,8 @@ import {
   Copy,
   Edit2,
   Check,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -130,6 +131,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
   const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
   const [clientValidationError, setClientValidationError] = useState<string>('');
+  const [showDocumentDropdown, setShowDocumentDropdown] = useState(false);
+  const documentDropdownRef = useRef<HTMLDivElement>(null);
   
   // Resizable column width state
   const [jobColumnWidth, setJobColumnWidth] = useState(() => {
@@ -232,6 +235,20 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   useEffect(() => {
     onUnsavedChangesChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onUnsavedChangesChange]);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (documentDropdownRef.current && !documentDropdownRef.current.contains(event.target as Node)) {
+        setShowDocumentDropdown(false);
+      }
+    };
+    
+    if (showDocumentDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDocumentDropdown]);
   
   const handleCancel = () => {
     // Navigate back to previous page, or default to orders list
@@ -509,6 +526,71 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const handleCancelDocumentDialog = () => {
     setShowDocumentDialog(false);
     setPendingDocumentAction(null);
+  };
+  
+  // Document generation handlers
+  const handleGenerateInvoice = async () => {
+    if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
+      toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
+      return;
+    }
+    
+    const client = clients.find(c => c.id === formData.clientId);
+    if (!client) {
+      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+      return;
+    }
+    
+    await handleGenerateDocument(async () => {
+      setGeneratingInvoice(true);
+      try {
+        const order = formData as Order;
+        const invoiceNumber = generateDocumentNumber(
+          companySettings.invoicePrefix,
+          order.id,
+          order.createdAt || new Date()
+        );
+        await generateInvoice(order, client, companySettings, invoiceNumber);
+        toast.success(t('orderDetail.invoiceGeneratedSuccess'));
+      } catch (error) {
+        console.error('Error generating invoice:', error);
+        toast.error(t('orderDetail.invoiceGenerationFailed'));
+      } finally {
+        setGeneratingInvoice(false);
+      }
+    });
+  };
+  
+  const handleGeneratePO = async () => {
+    if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
+      toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
+      return;
+    }
+    
+    const client = clients.find(c => c.id === formData.clientId);
+    if (!client) {
+      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+      return;
+    }
+    
+    await handleGenerateDocument(async () => {
+      setGeneratingPO(true);
+      try {
+        const order = formData as Order;
+        const poNumber = generateDocumentNumber(
+          companySettings.poPrefix,
+          order.id,
+          order.createdAt || new Date()
+        );
+        await generatePurchaseOrder(order, client, companySettings, poNumber);
+        toast.success(t('orderDetail.poGeneratedSuccess'));
+      } catch (error) {
+        console.error('Error generating PO:', error);
+        toast.error(t('orderDetail.poGenerationFailed'));
+      } finally {
+        setGeneratingPO(false);
+      }
+    });
   };
   
   // Number formatting helpers
@@ -901,183 +983,313 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             )}
           </div>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSaving ? (
-            <Loader2 size={20} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Save size={20} aria-hidden="true" />
-          )}
-          {isSaving 
-            ? (t('common.saving') || 'Saving...')
-            : (isNewOrder ? t('orderDetail.createOrder') : t('common.saveChanges'))
-          }
-        </button>
+        <div className="flex gap-3">
+          {/* Document Dropdown */}
+          <div className="relative" ref={documentDropdownRef}>
+            <button
+              onClick={() => setShowDocumentDropdown(!showDocumentDropdown)}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-[#1E2025] border border-[#E4E7E7] rounded-lg hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
+            >
+              <FileText size={20} aria-hidden="true" />
+              {t('orderDetail.generateDocument')}
+              <ChevronDown size={16} aria-hidden="true" />
+            </button>
+            
+            {showDocumentDropdown && (
+              <div className="absolute right-0 top-full mt-1 w-full min-w-[200px] bg-white border border-[#E4E7E7] rounded-lg shadow-lg z-50 overflow-hidden">
+                <button
+                  onClick={() => {
+                    handleGenerateInvoice();
+                    setShowDocumentDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={generatingInvoice || generatingPO}
+                >
+                  {generatingInvoice ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                      {t('orderDetail.generating')}
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={18} aria-hidden="true" />
+                      {t('orderDetail.generateInvoice')}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    handleGeneratePO();
+                    setShowDocumentDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={generatingInvoice || generatingPO}
+                >
+                  {generatingPO ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                      {t('orderDetail.generating')}
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={18} aria-hidden="true" />
+                      {t('orderDetail.generatePO')}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white border border-transparent rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+              <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Save size={20} aria-hidden="true" />
+            )}
+            {isSaving 
+              ? (t('common.saving') || 'Saving...')
+              : (isNewOrder ? t('orderDetail.createOrder') : t('common.saveChanges'))
+            }
+          </button>
+        </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content - Left 2 columns */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="space-y-6">
           {/* Order Info Card */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-4">{t('orderDetail.orderInformation')}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
-                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="client"
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between text-left font-normal h-9"
-                    >
-                      {selectedClient 
-                        ? (() => {
-                            const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
-                            const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                            if (hasName && hasCompany) {
-                              return `${selectedClient.name} - ${selectedClient.company}`;
-                            } else if (hasName) {
-                              return selectedClient.name;
-                            } else if (hasCompany) {
-                              return selectedClient.company;
-                            }
-                            return t('orderDetail.selectClient');
-                          })()
-                        : t('orderDetail.selectClient')}
-                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent 
-                    className="!w-[400px] !max-w-[400px] !min-w-[400px] p-0 overflow-hidden" 
-                    align="start"
-                    style={{ width: '400px', maxWidth: '400px', minWidth: '400px' }}
-                  >
-                    <div className="w-full overflow-hidden" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
-                      <div className="p-4 border-b border-[#E4E7E7]">
-                        <div className="relative">
-                          <Search 
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
-                            size={18}
-                            aria-hidden="true"
-                          />
-                          <Input
-                            type="search"
-                            placeholder={t('orderDetail.searchClientsPlaceholder') || 'Search clients...'}
-                            value={clientSearchQuery}
-                            onChange={(e) => setClientSearchQuery(e.target.value)}
-                            className="pl-10 w-full"
-                            style={{ maxWidth: '100%', boxSizing: 'border-box' }}
-                            aria-label={t('orderDetail.searchClientsLabel') || 'Search clients'}
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto w-full" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
-                        {filteredClients.length === 0 ? (
-                          <div className="p-4 text-center text-[#7C8085]">
-                            {clientSearchQuery.trim() 
-                              ? (t('orderDetail.noClientsFound') || 'No clients found')
-                              : (t('orderDetail.startTypingToSearchClients') || 'Start typing to search for clients')}
-                          </div>
-                        ) : (
-                          <>
-                            <div className="p-2">
-                              {displayedClients.map(client => (
-                              <button
-                                key={client.id}
-                                onClick={() => {
-                                  setFormData({ ...formData, clientId: client.id });
-                                  setClientPickerOpen(false);
-                                  setClientSearchQuery('');
-                                }}
-                                className="w-full p-3 text-left rounded-lg hover:bg-[#F7F8F8] transition-colors cursor-pointer overflow-hidden"
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Section 1: Basic Order Information */}
+              <div>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
+                    <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="client"
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between text-left font-normal h-9"
+                        >
+                          {selectedClient 
+                            ? (() => {
+                                const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
+                                const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
+                                if (hasName && hasCompany) {
+                                  return `${selectedClient.name} - ${selectedClient.company}`;
+                                } else if (hasName) {
+                                  return selectedClient.name;
+                                } else if (hasCompany) {
+                                  return selectedClient.company;
+                                }
+                                return t('orderDetail.selectClient');
+                              })()
+                            : t('orderDetail.selectClient')}
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent 
+                        className="!w-[400px] !max-w-[400px] !min-w-[400px] p-0 overflow-hidden" 
+                        align="start"
+                        style={{ width: '400px', maxWidth: '400px', minWidth: '400px' }}
+                      >
+                        <div className="w-full overflow-hidden" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                          <div className="p-4 border-b border-[#E4E7E7]">
+                            <div className="relative">
+                              <Search 
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+                                size={18}
+                                aria-hidden="true"
+                              />
+                              <Input
+                                type="search"
+                                placeholder={t('orderDetail.searchClientsPlaceholder') || 'Search clients...'}
+                                value={clientSearchQuery}
+                                onChange={(e) => setClientSearchQuery(e.target.value)}
+                                className="pl-10 w-full"
                                 style={{ maxWidth: '100%', boxSizing: 'border-box' }}
-                              >
-                                {client.company && client.company.trim() !== '' ? (
-                                  <>
-                                    <p className="text-[#1E2025] font-medium truncate">
-                                      {client.company}
-                                    </p>
-                                    {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
-                                      <p className="text-[#7C8085] text-sm truncate">{client.name}</p>
-                                    )}
-                                  </>
-                                ) : (
-                                  client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
-                                    <p className="text-[#1E2025] font-medium truncate">{client.name}</p>
-                                  )
-                                )}
-                                {client.email && typeof client.email === 'string' && client.email.trim() !== '' && (
-                                  <p className="text-[#7C8085] text-sm truncate">{client.email}</p>
-                                )}
-                              </button>
-                            ))}
+                                aria-label={t('orderDetail.searchClientsLabel') || 'Search clients'}
+                              />
                             </div>
-                            {hasMoreClients && (
-                              <div className="p-3 border-t border-[#E4E7E7] text-center">
-                                <p className="text-[#7C8085] text-sm">
-                                  {t('orderDetail.moreClientsAvailable', { count: filteredClients.length - 5 }) || `Continue typing to see ${filteredClients.length - 5} more result${filteredClients.length - 5 === 1 ? '' : 's'}`}
-                                </p>
+                          </div>
+                          <div className="max-h-[300px] overflow-y-auto w-full" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                            {filteredClients.length === 0 ? (
+                              <div className="p-4 text-center text-[#7C8085]">
+                                {clientSearchQuery.trim() 
+                                  ? (t('orderDetail.noClientsFound') || 'No clients found')
+                                  : (t('orderDetail.startTypingToSearchClients') || 'Start typing to search for clients')}
                               </div>
+                            ) : (
+                              <>
+                                <div className="p-2">
+                                  {displayedClients.map(client => (
+                                  <button
+                                    key={client.id}
+                                    onClick={() => {
+                                      setFormData({ ...formData, clientId: client.id });
+                                      setClientPickerOpen(false);
+                                      setClientSearchQuery('');
+                                    }}
+                                    className="w-full p-3 text-left rounded-lg hover:bg-[#F7F8F8] transition-colors cursor-pointer overflow-hidden"
+                                    style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                                  >
+                                    {client.company && client.company.trim() !== '' ? (
+                                      <>
+                                        <p className="text-[#1E2025] font-medium truncate">
+                                          {client.company}
+                                        </p>
+                                        {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                          <p className="text-[#7C8085] text-sm truncate">{client.name}</p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                        <p className="text-[#1E2025] font-medium truncate">{client.name}</p>
+                                      )
+                                    )}
+                                    {client.email && typeof client.email === 'string' && client.email.trim() !== '' && (
+                                      <p className="text-[#7C8085] text-sm truncate">{client.email}</p>
+                                    )}
+                                  </button>
+                                ))}
+                                </div>
+                                {hasMoreClients && (
+                                  <div className="p-3 border-t border-[#E4E7E7] text-center">
+                                    <p className="text-[#7C8085] text-sm">
+                                      {t('orderDetail.moreClientsAvailable', { count: filteredClients.length - 5 }) || `Continue typing to see ${filteredClients.length - 5} more result${filteredClients.length - 5 === 1 ? '' : 's'}`}
+                                    </p>
+                                  </div>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="status">{t('orderDetail.status')}</Label>
+                    <Select
+                      value={formData.status || 'proposal'}
+                      onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
+                        <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                        <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                        <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
+                    <Select
+                      value={formData.orderType || ''}
+                      onValueChange={(value) => setFormData({ ...formData, orderType: value })}
+                    >
+                      <SelectTrigger id="orderType">
+                        <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ORDER_TYPES.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {getOrderTypeLabel(type.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
+                    <Textarea
+                      id="orderTitle"
+                      value={formData.orderTitle || ''}
+                      onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
+                      rows={2}
+                      placeholder={t('orderDetail.orderTitlePlaceholder')}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Section 2: Tax and Markup */}
+              <div>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.markupAndTax')}</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="globalMarkup">{t('orderDetail.globalMarkup')}</Label>
+                    <Input
+                      id="globalMarkup"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.globalMarkup || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        globalMarkup: parseFloat(e.target.value) || 0 
+                      })}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={handleApplyGlobalMarkup}
+                    className="w-full px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+                    disabled={!formData.jobs || formData.jobs.length === 0}
+                  >
+                    {t('orderDetail.applyToAllJobs')}
+                  </button>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="taxRate">{t('orderDetail.taxRate')}</Label>
+                    <Input
+                      id="taxRate"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={formData.taxRate || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        taxRate: parseFloat(e.target.value) || 0 
+                      })}
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Section 3: Order Summary */}
+              <div>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderSummary')}</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-[#555A60]">
+                    <span>{t('orderDetail.subtotal')}</span>
+                    <span>{formatCurrency(totals.subtotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#555A60]">
+                    <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
+                    <span>{formatCurrency(totals.tax)}</span>
+                  </div>
+                  <div className="pt-3 border-t border-[#E4E7E7]">
+                    <div className="flex items-center justify-between text-[#1E2025]">
+                      <span>{t('orderDetail.total')}</span>
+                      <span>{formatCurrency(totals.total)}</span>
                     </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="status">{t('orderDetail.status')}</Label>
-                <Select
-                  value={formData.status || 'proposal'}
-                  onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
-                    <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
-                    <SelectItem value="completed">{t('orders.completed')}</SelectItem>
-                    <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
-                <Select
-                  value={formData.orderType || ''}
-                  onValueChange={(value) => setFormData({ ...formData, orderType: value })}
-                >
-                  <SelectTrigger id="orderType">
-                    <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ORDER_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {getOrderTypeLabel(type.value)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')}</Label>
-                <Textarea
-                  id="orderTitle"
-                  value={formData.orderTitle || ''}
-                  onChange={(e) => setFormData({ ...formData, orderTitle: e.target.value })}
-                  rows={2}
-                  placeholder={t('orderDetail.orderTitlePlaceholder')}
-                />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1424,178 +1636,6 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
             )}
           </div>
-        </div>
-        
-        {/* Right Sidebar - Pricing Summary */}
-        <div className="space-y-6">
-          {/* Markup Controls */}
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.markupAndTax')}</h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="globalMarkup">{t('orderDetail.globalMarkup')}</Label>
-                <Input
-                  id="globalMarkup"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={formData.globalMarkup || 0}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    globalMarkup: parseFloat(e.target.value) || 0 
-                  })}
-                  onWheel={(e) => e.currentTarget.blur()}
-                />
-              </div>
-              
-              <button
-                onClick={handleApplyGlobalMarkup}
-                className="w-full px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
-                disabled={!formData.jobs || formData.jobs.length === 0}
-              >
-                {t('orderDetail.applyToAllJobs')}
-              </button>
-              
-              <div className="space-y-2">
-                <Label htmlFor="taxRate">{t('orderDetail.taxRate')}</Label>
-                <Input
-                  id="taxRate"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={formData.taxRate || 0}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    taxRate: parseFloat(e.target.value) || 0 
-                  })}
-                  onWheel={(e) => e.currentTarget.blur()}
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* Pricing Summary */}
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.orderSummary')}</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-[#555A60]">
-                <span>{t('orderDetail.subtotal')}</span>
-                <span>{formatCurrency(totals.subtotal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[#555A60]">
-                <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
-                <span>{formatCurrency(totals.tax)}</span>
-              </div>
-              <div className="pt-3 border-t border-[#E4E7E7]">
-                <div className="flex items-center justify-between text-[#1E2025]">
-                  <span>{t('orderDetail.total')}</span>
-                  <span>{formatCurrency(totals.total)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Document Generation */}
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h3 className="text-[#1E2025] mb-4">{t('orderDetail.documents')}</h3>
-            <div className="space-y-2">
-              <button
-                onClick={async () => {
-                  if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
-                    toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
-                    return;
-                  }
-                  
-                  const client = clients.find(c => c.id === formData.clientId);
-                  if (!client) {
-                    toast.error(t('orderDetail.clientNotFound') || 'Client not found');
-                    return;
-                  }
-                  
-                  await handleGenerateDocument(async () => {
-                    setGeneratingInvoice(true);
-                    try {
-                      const order = formData as Order;
-                      const invoiceNumber = generateDocumentNumber(
-                        companySettings.invoicePrefix,
-                        order.id,
-                        order.createdAt || new Date()
-                      );
-                      await generateInvoice(order, client, companySettings, invoiceNumber);
-                      toast.success(t('orderDetail.invoiceGeneratedSuccess'));
-                    } catch (error) {
-                      console.error('Error generating invoice:', error);
-                      toast.error(t('orderDetail.invoiceGenerationFailed'));
-                    } finally {
-                      setGeneratingInvoice(false);
-                    }
-                  });
-                }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
-              >
-                {generatingInvoice ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                    {t('orderDetail.generating')}
-                  </>
-                ) : (
-                  <>
-                    <FileText size={18} aria-hidden="true" />
-                    {t('orderDetail.generateInvoice')}
-                  </>
-                )}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
-                    toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
-                    return;
-                  }
-                  
-                  const client = clients.find(c => c.id === formData.clientId);
-                  if (!client) {
-                    toast.error(t('orderDetail.clientNotFound') || 'Client not found');
-                    return;
-                  }
-                  
-                  await handleGenerateDocument(async () => {
-                    setGeneratingPO(true);
-                    try {
-                      const order = formData as Order;
-                      const poNumber = generateDocumentNumber(
-                        companySettings.poPrefix,
-                        order.id,
-                        order.createdAt || new Date()
-                      );
-                      await generatePurchaseOrder(order, client, companySettings, poNumber);
-                      toast.success(t('orderDetail.poGeneratedSuccess'));
-                    } catch (error) {
-                      console.error('Error generating PO:', error);
-                      toast.error(t('orderDetail.poGenerationFailed'));
-                    } finally {
-                      setGeneratingPO(false);
-                    }
-                  });
-                }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
-              >
-                {generatingPO ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                    {t('orderDetail.generating')}
-                  </>
-                ) : (
-                  <>
-                    <FileText size={18} aria-hidden="true" />
-                    {t('orderDetail.generatePO')}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
       
       {/* Document Generation Confirmation Dialog */}
