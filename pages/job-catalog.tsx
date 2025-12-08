@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { generateId } from '../lib/utils';
+import { logger } from '../lib/logger';
 import { Search, Plus, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -158,7 +159,7 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
       
       handleClose();
     } catch (error: any) {
-      console.error('Error saving job:', error);
+      logger.error('Error saving job', error);
       toast.error(error?.message || t('jobCatalog.saveFailed') || 'Failed to save job');
     } finally {
       setIsSaving(false);
@@ -190,7 +191,7 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
       toast.success(t('jobCatalog.jobTemplateDeleted'));
       setJobToDelete(null);
     } catch (error: any) {
-      console.error('Error deleting job:', error);
+      logger.error('Error deleting job', error);
       toast.error(error?.message || t('jobCatalog.deleteFailed') || 'Failed to delete job');
     } finally {
       setShowDeleteDialog(false);

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
+import { logger } from '../lib/logger';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
@@ -76,7 +77,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
-      console.error('Failed to save to localStorage:', error);
+      logger.warn('Failed to save to localStorage', error);
     }
   };
   

@@ -20,6 +20,7 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { PhoneInput } from '../components/ui/phone-input';
 import { toast } from 'sonner';
+import { logger } from '../lib/logger';
 import type { Client } from '../lib/types';
 
 interface ClientDetailProps {
@@ -160,7 +161,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
         // Navigate to the new client page
         onNavigate('client-detail', generatedId);
       } catch (error) {
-        console.error('Error creating client:', error);
+        logger.error('Error creating client', error);
         toast.error(t('clientDetail.clientCreationFailed'));
       } finally {
         setIsSaving(false);
@@ -173,7 +174,7 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
         setValidationErrors({});
         setTouched({});
       } catch (error) {
-        console.error('Error updating client:', error);
+        logger.error('Error updating client', error);
         toast.error(t('clientDetail.clientUpdateFailed'));
       }
     }

@@ -1,6 +1,7 @@
 // Document generation utility for invoices and purchase orders
 import type { Order, Client, CompanySettings, OrderJob } from './types';
 import { getOrderTotals, formatDate } from './utils';
+import { logger } from './logger';
 
 // Use local Python service in development, Vercel serverless function in production
 const PYTHON_SERVICE_URL = 
@@ -153,7 +154,7 @@ async function downloadDocument(data: DocumentData): Promise<void> {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
   } catch (error) {
-    console.error('Error generating document:', error);
+    logger.error('Error generating document', error);
     throw error;
   }
 }

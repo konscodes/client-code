@@ -5,6 +5,7 @@ import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, Compan
 import { supabase } from './supabase';
 import { normalizePhoneNumber } from './utils';
 import { localeToLanguage } from './i18n';
+import { logger } from './logger';
 
 interface AppContextType {
   clients: Client[];
@@ -138,7 +139,7 @@ async function fetchOrderJobsBatch(orderIds: string[]): Promise<Map<string, Orde
       .order('position');
     
     if (jobsError) {
-      console.error('Error fetching order jobs batch:', jobsError);
+      logger.error('Error fetching order jobs batch', jobsError);
       continue;
     }
     
@@ -179,7 +180,7 @@ async function dbRowToJobPreset(row: any): Promise<JobPreset> {
     .order('position');
   
   if (presetJobsError) {
-    console.error('Error fetching preset jobs:', presetJobsError);
+    logger.error('Error fetching preset jobs', presetJobsError);
   }
   
   const jobs: PresetJob[] = (presetJobsData || []).map((pj: any) => ({
@@ -404,7 +405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
-      console.error('Error loading data:', err);
+      logger.error('Error loading data', err);
     } finally {
       setOtherDataLoading(false);
     }
@@ -491,7 +492,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!clientId || clientId === 'new') {
       const { data: idData, error: idError } = await supabase.rpc('next_client_id');
       if (idError) {
-        console.error('Error generating client ID:', idError);
+        logger.error('Error generating client ID', idError);
         throw idError;
       }
       clientId = idData;
@@ -558,7 +559,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!orderId || orderId === 'new') {
         const { data: idData, error: idError } = await supabase.rpc('next_order_id');
         if (idError) {
-          console.error('Error generating order ID:', idError);
+          logger.error('Error generating order ID', idError);
           throw idError;
         }
         orderId = idData;
@@ -696,7 +697,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!jobId || jobId === 'new') {
         const { data: idData, error: idError } = await supabase.rpc('next_job_id');
         if (idError) {
-          console.error('Error generating job ID:', idError);
+          logger.error('Error generating job ID', idError);
           throw idError;
         }
         jobId = idData;

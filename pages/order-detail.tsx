@@ -12,6 +12,7 @@ import {
   extractIdNumbers
 } from '../lib/utils';
 import { generateInvoice, generatePurchaseOrder, generateSpecification } from '../lib/document-generator';
+import { logger } from '../lib/logger';
 import { 
   ArrowLeft, 
   Plus, 
@@ -345,7 +346,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       // Navigate to the new order with the database-generated ID
       onNavigate('order-detail', generatedOrderId);
     } catch (error: any) {
-      console.error('Error creating order:', error);
+      logger.error('Error creating order', error);
       const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
       toast.error(errorMessage);
     } finally {
@@ -399,7 +400,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       
       toast.success(t('orderDetail.orderUpdatedSuccess'));
     } catch (error: any) {
-      console.error('Error saving order:', error);
+      logger.error('Error saving order', error);
       const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
       toast.error(errorMessage);
     } finally {
@@ -578,7 +579,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         setPendingDocumentAction(null);
       }
     } catch (error) {
-      console.error('Error saving order:', error);
+      logger.error('Error saving order', error);
       toast.error(t('orderDetail.saveOrderFailed'));
       setPendingDocumentAction(null);
     }
@@ -614,7 +615,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         await generateInvoice(order, client, companySettings, invoiceNumber);
         toast.success(t('orderDetail.invoiceGeneratedSuccess'));
       } catch (error) {
-        console.error('Error generating invoice:', error);
+        logger.error('Error generating invoice', error);
         toast.error(t('orderDetail.invoiceGenerationFailed'));
       } finally {
         setGeneratingInvoice(false);
@@ -646,7 +647,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         await generatePurchaseOrder(order, client, companySettings, poNumber);
         toast.success(t('orderDetail.poGeneratedSuccess'));
       } catch (error) {
-        console.error('Error generating PO:', error);
+        logger.error('Error generating PO', error);
         toast.error(t('orderDetail.poGenerationFailed'));
       } finally {
         setGeneratingPO(false);
@@ -678,7 +679,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         await generateSpecification(order, client, companySettings, specificationNumber);
         toast.success(t('orderDetail.specificationGeneratedSuccess'));
       } catch (error) {
-        console.error('Error generating specification:', error);
+        logger.error('Error generating specification', error);
         toast.error(t('orderDetail.specificationGenerationFailed'));
       } finally {
         setGeneratingSpecification(false);

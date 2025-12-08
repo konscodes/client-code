@@ -1,5 +1,6 @@
 // Status pill component for order statuses
 import { useTranslation } from 'react-i18next';
+import { logger } from '../lib/logger';
 import type { OrderStatus } from '../lib/types';
 
 interface StatusPillProps {
@@ -28,7 +29,7 @@ export function StatusPill({ status }: StatusPillProps) {
   
   // Fallback to default styling if config is missing
   if (!config) {
-    console.warn(`StatusPill: Missing config for status "${status}"`);
+    logger.warn(`StatusPill: Missing config for status "${status}"`);
     return (
       <span
         className="inline-flex items-center px-3 py-1 rounded-md bg-[#F2F4F4] text-[#7C8085] font-medium"

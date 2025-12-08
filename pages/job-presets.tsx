@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { generateId } from '../lib/utils';
+import { logger } from '../lib/logger';
 import { Plus, Edit, Trash2, Layers, Search, Loader2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -179,7 +180,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
       
       handleClose();
     } catch (error: any) {
-      console.error('Error saving preset:', error);
+      logger.error('Error saving preset', error);
       toast.error(error?.message || t('jobPresets.saveFailed') || 'Failed to save preset');
     } finally {
       setIsSaving(false);
