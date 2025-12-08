@@ -3,7 +3,7 @@
  * XML to Supabase Migration Script
  * 
  * This script migrates data from servicemk3.xml to Supabase database.
- * Follows the mapping rules defined in XML_MIGRATION_GUIDE.md
+ * Follows the mapping rules defined in docs/XML_MIGRATION_GUIDE.md
  */
 
 import { XMLParser } from 'fast-xml-parser';

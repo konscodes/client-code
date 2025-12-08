@@ -13,8 +13,7 @@ A complete, production-ready CRM and job management application designed specifi
 5. **Order Detail/Builder** - Core workspace for creating and editing orders
 6. **Job Catalog** - Manage reusable job templates with pricing
 7. **Job Presets** - Create bundles of commonly-used jobs
-8. **Document Templates** - Configure invoice and PO templates
-9. **Settings** - Company information and application preferences
+8. **Settings** - Company information and application preferences
 
 ### Reusable Components (10+)
 - AppLayout (sidebar navigation, header)
@@ -121,13 +120,11 @@ Surface:   #FFFFFF
   order-detail.tsx
   job-catalog.tsx
   job-presets.tsx
-  document-templates.tsx
   settings.tsx
 
 /lib
   app-context.tsx - Global state
   types.ts - TypeScript definitions
-  mock-data.ts - Sample data
   utils.ts - Helper functions
 ```
 
@@ -138,7 +135,6 @@ Surface:   #FFFFFF
 - **JobTemplate** - Reusable job definitions
 - **JobPreset** - Bundles of jobs
 - **CompanySettings** - Business configuration
-- **DocumentTemplate** - Invoice/PO templates
 
 ### Accessibility Features (WCAG AA)
 
@@ -205,10 +201,9 @@ The application loads with realistic sample data:
 ### Documentation Provided
 
 1. **README.md** - Project overview, features, architecture
-2. **USAGE_GUIDE.md** - Step-by-step workflows and tips
-3. **FEATURES.md** - Complete feature checklist
-4. **PROJECT_SUMMARY.md** - This comprehensive summary
-5. **Inline Code Comments** - Throughout the codebase
+2. **docs/USAGE_GUIDE.md** - Step-by-step workflows and tips
+3. **docs/PROJECT_SUMMARY.md** - This comprehensive summary
+4. **Inline Code Comments** - Throughout the codebase
 
 ## What's Ready for Production
 

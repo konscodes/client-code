@@ -190,7 +190,7 @@ If you have XML data to migrate:
    npm run migrate
    ```
 
-See [XML_MIGRATION_GUIDE.md](./XML_MIGRATION_GUIDE.md) for detailed migration instructions.
+See [XML_MIGRATION_GUIDE.md](./docs/XML_MIGRATION_GUIDE.md) for detailed migration instructions.
 
 ### Production Deployment
 
@@ -231,7 +231,6 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
 /lib
   app-context.tsx - Global state management
   types.ts - TypeScript type definitions
-  mock-data.ts - Sample data
   utils.ts - Helper functions
 ```
 
