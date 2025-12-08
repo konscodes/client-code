@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1F744F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#165B3C;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#grad)"/>
+  <!-- CC Monogram -->
+  <g fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <!-- First C -->
+    <path d="M 16 20 Q 12 20 12 24 L 12 40 Q 12 44 16 44" />
+    <!-- Second C -->
+    <path d="M 36 20 Q 40 20 40 24 L 40 40 Q 40 44 36 44" />
+  </g>
+</svg>
+
