@@ -12,8 +12,14 @@ import { config } from 'dotenv';
 // Load environment variables
 config({ path: '.env.local' });
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://yjmnehvlpxzqmtmemkdv.supabase.co';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL) {
+  console.error('❌ Error: VITE_SUPABASE_URL environment variable is required');
+  console.error('   Make sure it\'s set in .env.local');
+  process.exit(1);
+}
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
   console.error('❌ Error: SUPABASE_SERVICE_ROLE_KEY environment variable is required');
