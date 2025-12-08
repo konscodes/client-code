@@ -145,10 +145,10 @@ LEFT JOIN LATERAL (
 | `OrderClientID` | `tblOrders` | `clientId` | Map to client ID (e.g., 'client-10001') |
 | `OrderDate` | `tblOrders` | `createdAt` | Parse as Date object |
 | `OrderAddTime` | `tblOrders` | `updatedAt` | Parse as Date object, fallback to `OrderDate` if empty |
-| `OrderID` + `OrderType` + `OrderComments` | `tblOrders` | `notesInternal` | Concatenate with ' \| ' separator |
-| `OrderName` | `tblOrders` | `notesPublic` | Order description/name |
+| `OrderType` | `tblOrders` | `orderType` | Order type (e.g., "Ремонтные работы", "Поставка") |
+| `OrderName` | `tblOrders` | `orderTitle` | Order description/name |
 | `OrderStatus` | `tblOrders` | `status` | Map Russian status to English (see Status Mapping) |
-| - | - | `taxRate` | Default: 8.5 |
+| - | - | `taxRate` | Default: 8.5 (can be set to 0 if needed) |
 | - | - | `globalMarkup` | Default: 20 |
 | - | - | `currency` | Default: 'USD' |
 
@@ -263,8 +263,8 @@ SELECT
   END as status,
   o.OrderDate::timestamp as "createdAt",
   COALESCE(o.OrderAddTime::timestamp, o.OrderDate::timestamp) as "updatedAt",
-  CONCAT_WS(' | ', o.OrderID, o.OrderType, o.OrderComments) as "notesInternal",
-  o.OrderName as "notesPublic",
+  o.OrderType as "orderType",
+  o.OrderName as "orderTitle",
   8.5 as "taxRate",
   20 as "globalMarkup",
   'USD' as currency
@@ -370,7 +370,47 @@ The migration script (`scripts/migrate-xml-to-supabase.ts`) includes:
 - **Order Jobs**: Inserted in batches of 100
 - **Job Fetching**: All order_jobs for a batch of orders are fetched in a single query using `.in()` operator
 
-## Troubleshooting
+## Common Issues and Solutions
+
+### ⚠️ Field Name Mismatch (CRITICAL)
+
+**Issue**: The database schema uses `orderType` and `orderTitle`, NOT `notesInternal` and `notesPublic`.
+
+**Solution**: Always use the correct field names:
+- `OrderType` → `orderType` (NOT `notesInternal`)
+- `OrderName` → `orderTitle` (NOT `notesPublic`)
+
+**Verification**: After migration, verify orders have titles:
+```bash
+npx tsx scripts/check-order-titles.ts
+```
+
+**Fix Script**: If orders are missing titles:
+```bash
+npx tsx scripts/fix-order-titles.ts
+```
+
+### ⚠️ XML Parser Returns Arrays
+
+**Issue**: The XML parser (`fast-xml-parser`) may return arrays instead of strings for single-value fields.
+
+**Example**: `OrderName` might be `["Ремонт кузова"]` instead of `"Ремонт кузова"`
+
+**Solution**: The `cleanString` helper function must handle arrays:
+```typescript
+function cleanString(value: string | string[] | undefined): string {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    return value[0] ? String(value[0]).trim() : '';
+  }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  return String(value).trim();
+}
+```
+
+**Always test** with a few orders first to verify parsing works correctly.
 
 ### Status Mismatches
 
@@ -384,6 +424,20 @@ If some orders are missing:
 1. Check XML file for parsing errors
 2. Verify client IDs exist in the database
 3. Check migration script logs for skipped orders
+4. Run comparison script to find missing orders:
+   ```bash
+   npx tsx scripts/compare-xml-to-supabase.ts
+   ```
+
+### Missing Order Titles
+
+If orders are missing `orderTitle` or `orderType`:
+1. Verify XML contains `OrderName` and `OrderType` fields
+2. Check if XML parser is handling arrays correctly
+3. Run fix script:
+   ```bash
+   npx tsx scripts/fix-order-titles.ts
+   ```
 
 ### Performance Issues
 
@@ -406,28 +460,59 @@ Before full migration:
 
 After running the migration script, verify the data:
 
-1. **Status Distribution Check**:
+1. **Compare XML to Supabase**:
+   ```bash
+   # Compare all clients and orders to find missing records
+   npx tsx scripts/compare-xml-to-supabase.ts
+   ```
+   This will show:
+   - Missing clients (should be 0)
+   - Missing orders (should be 0)
+
+2. **Verify Order Titles**:
+   ```bash
+   # Check if orders have orderTitle and orderType populated
+   npx tsx scripts/check-order-titles.ts
+   ```
+   Or check specific orders:
+   ```bash
+   # Fix missing titles for specific orders
+   # Edit scripts/fix-order-titles.ts to set TARGET_ORDER_IDS
+   npx tsx scripts/fix-order-titles.ts
+   ```
+
+3. **Status Distribution Check**:
    ```bash
    # Run the comparison script to verify all statuses match XML
    npx tsx scripts/compare-order-statuses.ts
    ```
 
-2. **Expected Status Counts** (from XML):
+4. **Expected Status Counts** (from XML):
    - `completed`: ~1,779 orders (Выполнен)
    - `in-progress`: ~352 orders (Принят)
    - `canceled`: ~271 orders (Отменен)
    - `proposal`: ~231 orders (Предложение)
 
-3. **Fix Statuses if Needed**:
+5. **Fix Statuses if Needed**:
    ```bash
    # If statuses don't match, run the fix script
    npx tsx scripts/fix-order-statuses.ts
    ```
 
+6. **Sample Data Verification**:
+   - Open the app and check a few orders
+   - Verify order titles are displayed correctly
+   - Verify order types are correct
+   - Check that order jobs are linked properly
+
 ## Important Notes
 
+- **Field Names**: Use `orderType` and `orderTitle` (NOT `notesInternal`/`notesPublic`)
 - **Status Mapping**: The status mapping has been updated. Old statuses (`draft`, `approved`, `billed`) are no longer used.
 - **Default Status**: Unknown statuses default to `proposal` (not `completed`).
 - **Batch Job Fetching**: The migration script now uses batch fetching for `order_jobs` to avoid N+1 query problems.
 - **Progressive Loading**: For large datasets, consider using progressive loading when fetching orders in the application.
+- **XML Parser Arrays**: Always handle arrays in XML parser output - single values may be returned as arrays
+- **Tax Rate**: Default is 8.5, but can be set to 0 if needed (update in migration script)
+- **Verification**: Always run comparison scripts after migration to catch missing data
 

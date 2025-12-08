@@ -690,6 +690,8 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests to generate DOCX documents"""
         try:
+            print(f"POST request received at {self.path}")
+            
             # Verify authentication
             auth_header = self.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
@@ -697,11 +699,22 @@ class handler(BaseHTTPRequestHandler):
                 return
             
             token = auth_header.replace('Bearer ', '').strip()
+            print(f"Token received: {token[:20]}...")
+            
+            # Check environment variables
+            supabase_url = os.environ.get('VITE_SUPABASE_URL')
+            supabase_key = os.environ.get('VITE_SUPABASE_ANON_KEY')
+            print(f"Supabase URL set: {bool(supabase_url)}")
+            print(f"Supabase key set: {bool(supabase_key)}")
+            
             user = verify_supabase_token(token)
             
             if not user:
-                self.send_error_response(401, 'Unauthorized: Invalid or expired token')
+                self.send_error_response(401, 'Unauthorized: Invalid or expired token', 
+                                       f'Supabase URL: {bool(supabase_url)}, Key: {bool(supabase_key)}')
                 return
+            
+            print(f"User authenticated: {user.get('id', 'unknown')}")
             
             # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
@@ -712,15 +725,18 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length)
             data = json.loads(body.decode('utf-8'))
             doc_type = data.get('type', 'po')
+            print(f"Generating document type: {doc_type}")
             
             # Generate document
             doc = generate_document(data, doc_type)
+            print("Document generated successfully")
             
             # Save to BytesIO
             doc_buffer = io.BytesIO()
             doc.save(doc_buffer)
             doc_buffer.seek(0)
             doc_bytes = doc_buffer.getvalue()
+            print(f"Document size: {len(doc_bytes)} bytes")
             
             # Generate filename
             filename = f"{doc_type}-{data.get('order', {}).get('id', 'document')}.docx"
@@ -733,11 +749,15 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(doc_bytes)))
             self.end_headers()
             self.wfile.write(doc_bytes)
+            print("Response sent successfully")
             
         except json.JSONDecodeError as e:
-            self.send_error_response(400, f'Invalid JSON: {str(e)}')
+            self.send_error_response(400, f'Invalid JSON: {str(e)}', e)
         except Exception as e:
-            self.send_error_response(500, f'Error generating document: {str(e)}')
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Exception occurred: {error_trace}")
+            self.send_error_response(500, f'Error generating document: {str(e)}', error_trace)
     
     def do_GET(self):
         """Handle GET requests for health check"""
@@ -753,9 +773,16 @@ class handler(BaseHTTPRequestHandler):
         else:
             self.send_error_response(404, 'Not Found')
     
-    def send_error_response(self, status_code, message):
+    def send_error_response(self, status_code, message, details=None):
         """Send error response with JSON body"""
-        error_response = json.dumps({'error': message}).encode('utf-8')
+        error_data = {'error': message}
+        if details:
+            error_data['details'] = str(details)
+        # Log error for debugging (Vercel will capture this)
+        print(f"ERROR [{status_code}]: {message}")
+        if details:
+            print(f"Details: {details}")
+        error_response = json.dumps(error_data).encode('utf-8')
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
         self.send_cors_headers()

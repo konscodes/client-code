@@ -84,8 +84,13 @@ function convertMarkup(ratio: string | undefined): number {
 }
 
 // Helper function to trim and clean string
-function cleanString(value: string | undefined): string {
+// ⚠️ IMPORTANT: XML parser may return arrays instead of strings for single values
+function cleanString(value: string | string[] | undefined): string {
   if (!value) return '';
+  // Handle arrays (XML parser may return ["value"] instead of "value")
+  if (Array.isArray(value)) {
+    return value[0] ? String(value[0]).trim() : '';
+  }
   // If value is already a string, use it directly
   if (typeof value === 'string') {
     return value.trim();
@@ -367,12 +372,8 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       taxRate: 8.5,
       globalMarkup: 20,
       currency: 'USD',
-      notesInternal: [
-        order.OrderID,
-        cleanString(order.OrderType),
-        cleanString(order.OrderComments),
-      ].filter(s => s).join(' | ') || '',
-      notesPublic: cleanString(order.OrderName) || '',
+      orderType: cleanString(order.OrderType) || '',
+      orderTitle: cleanString(order.OrderName) || '',
     };
     
     ordersToInsert.push(orderData);

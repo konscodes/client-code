@@ -143,6 +143,8 @@ async function downloadDocument(data: DocumentData): Promise<void> {
       'Authorization': `Bearer ${token}`,
     };
     
+    logger.debug(`Calling document generation service: ${PYTHON_SERVICE_URL}`);
+    
     const response = await fetch(PYTHON_SERVICE_URL, {
       method: 'POST',
       headers,
@@ -153,8 +155,28 @@ async function downloadDocument(data: DocumentData): Promise<void> {
       if (response.status === 401) {
         throw new Error('Authentication failed. Please log in again.');
       }
-      const errorText = await response.text().catch(() => response.statusText);
-      throw new Error(`Document generation failed: ${errorText || response.statusText}`);
+      
+      // Try to get error details from response
+      let errorMessage = response.statusText;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+        if (errorData.details) {
+          logger.error('Document generation error details', new Error(errorData.details));
+        }
+      } catch {
+        // If JSON parsing fails, try text
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch {
+          // Use status text as fallback
+        }
+      }
+      
+      logger.error(`Document generation failed: ${response.status} ${errorMessage}`, 
+        new Error(`HTTP ${response.status}: ${errorMessage}`));
+      throw new Error(`Document generation failed: ${errorMessage}`);
     }
     
     // Get the blob from response
