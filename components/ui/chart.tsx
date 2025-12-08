@@ -78,6 +78,17 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // SECURITY NOTE: dangerouslySetInnerHTML usage is safe here because:
+  // 1. The `id` is generated from React.useId() or a provided prop (not user input)
+  // 2. The `config` comes from ChartConfig type with controlled color/theme values
+  // 3. The generated CSS only creates CSS custom properties (--color-* variables)
+  // 4. CSS custom properties cannot execute JavaScript, limiting XSS risk
+  // 5. The `key` values come from Object.entries(config) - object keys, not user input
+  // 6. The `color` values are expected to be CSS color strings (hex, rgb, etc.)
+  // 
+  // This component is currently unused in the codebase (analytics uses Recharts directly),
+  // but is available for future use. If user input ever needs to control chart config,
+  // the color values should be validated/sanitized before being passed to this component.
   return (
     <style
       dangerouslySetInnerHTML={{
