@@ -828,24 +828,26 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     id="client"
                     variant="outline"
                     role="combobox"
-                    className={`w-full justify-between text-left font-normal h-9 ${
+                    className={`w-full justify-between text-left font-normal h-9 min-w-0 ${
                       clientValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''
                     }`}
                   >
-                    {selectedClient 
-                      ? (() => {
-                          const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
-                          const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                          if (hasName && hasCompany) {
-                            return `${selectedClient.name} - ${selectedClient.company}`;
-                          } else if (hasName) {
-                            return selectedClient.name;
-                          } else if (hasCompany) {
-                            return selectedClient.company;
-                          }
-                          return t('orderDetail.selectClient');
-                        })()
-                      : t('orderDetail.selectClient')}
+                    <span className="truncate flex-1 text-left">
+                      {selectedClient 
+                        ? (() => {
+                            const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
+                            const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
+                            if (hasName && hasCompany) {
+                              return `${selectedClient.name} - ${selectedClient.company}`;
+                            } else if (hasName) {
+                              return selectedClient.name;
+                            } else if (hasCompany) {
+                              return selectedClient.company;
+                            }
+                            return t('orderDetail.selectClient');
+                          })()
+                        : t('orderDetail.selectClient')}
+                    </span>
                     <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -1185,22 +1187,24 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                           id="client"
                           variant="outline"
                           role="combobox"
-                          className="w-full justify-between text-left font-normal h-9"
+                          className="w-full justify-between text-left font-normal h-9 min-w-0"
                         >
-                          {selectedClient 
-                            ? (() => {
-                                const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
-                                const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                                if (hasName && hasCompany) {
-                                  return `${selectedClient.name} - ${selectedClient.company}`;
-                                } else if (hasName) {
-                                  return selectedClient.name;
-                                } else if (hasCompany) {
-                                  return selectedClient.company;
-                                }
-                                return t('orderDetail.selectClient');
-                              })()
-                            : t('orderDetail.selectClient')}
+                          <span className="truncate flex-1 text-left">
+                            {selectedClient 
+                              ? (() => {
+                                  const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
+                                  const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
+                                  if (hasName && hasCompany) {
+                                    return `${selectedClient.name} - ${selectedClient.company}`;
+                                  } else if (hasName) {
+                                    return selectedClient.name;
+                                  } else if (hasCompany) {
+                                    return selectedClient.company;
+                                  }
+                                  return t('orderDetail.selectClient');
+                                })()
+                              : t('orderDetail.selectClient')}
+                          </span>
                           <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
