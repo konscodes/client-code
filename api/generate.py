@@ -271,9 +271,11 @@ def extract_order_number(order_id):
     return order_str
 
 def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', available_width=Inches(7.5)):
-    """Add document header (Смета № or КП №)"""
+    """Add document header (Смета №, КП №, or Спецификация №)"""
     if doc_type == 'invoice':
         doc_label = "Смета №"
+    elif doc_type == 'specification':
+        doc_label = "Спецификация №"
     else:  # po
         doc_label = "КП №"
     
@@ -331,7 +333,7 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     
     doc.add_paragraph()
 
-def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=30, available_width=Inches(7.5)):
+def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Inches(7.5)):
     """Add work description with table view for jobs"""
     if not jobs_data:
         doc.add_paragraph("Нет работ")
@@ -402,8 +404,12 @@ def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=3
     cost_para = doc.add_paragraph()
     if locale and locale.startswith('ru'):
         total_spelled = spell_money_russian(total)
-        # Text before amount (regular)
-        cost_run1 = cost_para.add_run("Стоимость работ по заказу составляет: ")
+        # Text before amount (regular) - different for specification
+        if doc_type == 'specification':
+            cost_text = "Стоимость поставки составляет: "
+        else:
+            cost_text = "Стоимость работ по заказу составляет: "
+        cost_run1 = cost_para.add_run(cost_text)
         set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
         # Amount (bold)
         cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
@@ -412,8 +418,12 @@ def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=3
         cost_run3 = cost_para.add_run(f" ({total_spelled}) Без НДС.")
         set_font_times_new_roman(cost_run3, size=12, bold=False, italic=False)
     else:
-        # Text before amount (regular)
-        cost_run1 = cost_para.add_run("Стоимость работ по заказу составляет: ")
+        # Text before amount (regular) - different for specification
+        if doc_type == 'specification':
+            cost_text = "Стоимость поставки составляет: "
+        else:
+            cost_text = "Стоимость работ по заказу составляет: "
+        cost_run1 = cost_para.add_run(cost_text)
         set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
         # Amount (bold)
         cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
@@ -422,16 +432,24 @@ def add_work_description(doc, jobs_data, order_data, locale='ru-RU', work_days=3
     # Add new line after cost line
     doc.add_paragraph()
     
-    # Work completion deadline
+    # Work completion deadline / Delivery deadline
     if locale and locale.startswith('ru'):
         days_spelled = spell_workdays_russian(work_days)
         deadline_para = doc.add_paragraph()
-        deadline_run = deadline_para.add_run(f"Срок выполнения работ – {work_days} ({days_spelled}) рабочих дней с момента внесения предоплаты и подписания сметы.")
+        if doc_type == 'specification':
+            deadline_text = f"Срок поставки – {work_days} ({days_spelled}) рабочих дней с момента подписания спецификации и внесения предоплаты."
+        else:
+            deadline_text = f"Срок выполнения работ – {work_days} ({days_spelled}) рабочих дней с момента внесения предоплаты и подписания сметы."
+        deadline_run = deadline_para.add_run(deadline_text)
         set_font_times_new_roman(deadline_run, size=12, bold=False, italic=False)
         
-        # Note about deadline extension
+        # Note about deadline extension / Delivery location
         note_para = doc.add_paragraph()
-        note_run = note_para.add_run("Сроки могут быть увеличены по согласованию сторон, в случае проведения дополнительных работ.")
+        if doc_type == 'specification':
+            note_text = "Место поставки – склад поставщика."
+        else:
+            note_text = "Сроки могут быть увеличены по согласованию сторон, в случае проведения дополнительных работ."
+        note_run = note_para.add_run(note_text)
         set_font_times_new_roman(note_run, size=12, bold=False, italic=False)
         
         # Add 2 new lines after note
@@ -447,8 +465,8 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_wi
     
     doc.add_paragraph()
     
-    if doc_type == 'invoice':
-        # For invoices: 2-column layout with signatures only
+    if doc_type == 'invoice' or doc_type == 'specification':
+        # For invoices and specifications: 2-column layout with signatures only
         footer_table = doc.add_table(rows=1, cols=2)
         # Extract inch value from Inches object
         width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
@@ -559,7 +577,7 @@ def generate_document(data, doc_type):
     add_document_header(doc, order_data, client_data, doc_type, locale, AVAILABLE_WIDTH)
     
     # 3. Work description with table view
-    add_work_description(doc, jobs_data, order_data, locale, work_days, AVAILABLE_WIDTH)
+    add_work_description(doc, jobs_data, order_data, doc_type, locale, work_days, AVAILABLE_WIDTH)
     
     # 4. Footer with signature and contact (3-column layout)
     add_footer_section(doc, company_data, doc_type, locale, AVAILABLE_WIDTH)

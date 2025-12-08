@@ -103,7 +103,7 @@ export interface CompanySettings {
 export interface DocumentTemplate {
   id: string;
   name: string;
-  type: 'invoice' | 'purchase-order';
+  type: 'invoice' | 'purchase-order' | 'specification';
   htmlContent: string;
   isDefault: boolean;
   lastUpdated: Date;

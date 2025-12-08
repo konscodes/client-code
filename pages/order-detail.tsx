@@ -11,7 +11,7 @@ import {
   generateDocumentNumber,
   extractIdNumbers
 } from '../lib/utils';
-import { generateInvoice, generatePurchaseOrder } from '../lib/document-generator';
+import { generateInvoice, generatePurchaseOrder, generateSpecification } from '../lib/document-generator';
 import { 
   ArrowLeft, 
   Plus, 
@@ -84,6 +84,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   };
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [generatingPO, setGeneratingPO] = useState(false);
+  const [generatingSpecification, setGeneratingSpecification] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   // Parse orderId to extract client ID from query string (e.g., "new?client=client-10328")
@@ -632,6 +633,38 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
+  const handleGenerateSpecification = async () => {
+    if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
+      toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
+      return;
+    }
+    
+    const client = clients.find(c => c.id === formData.clientId);
+    if (!client) {
+      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+      return;
+    }
+    
+    await handleGenerateDocument(async () => {
+      setGeneratingSpecification(true);
+      try {
+        const order = formData as Order;
+        const specificationNumber = generateDocumentNumber(
+          companySettings.invoicePrefix,
+          order.id,
+          order.createdAt || new Date()
+        );
+        await generateSpecification(order, client, companySettings, specificationNumber);
+        toast.success(t('orderDetail.specificationGeneratedSuccess'));
+      } catch (error) {
+        console.error('Error generating specification:', error);
+        toast.error(t('orderDetail.specificationGenerationFailed'));
+      } finally {
+        setGeneratingSpecification(false);
+      }
+    });
+  };
+  
   // Number formatting helpers
   const formatNumber = (value: number, locale?: string): string => {
     const finalLocale = locale || (i18n.language === 'ru' ? 'ru-RU' : 'en-US');
@@ -1045,7 +1078,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             <button
               onClick={() => setShowDocumentDropdown(!showDocumentDropdown)}
               className="flex items-center gap-2 px-4 py-2 bg-white text-[#1E2025] border border-[#E4E7E7] rounded-lg hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO}
+              disabled={!formData.clientId || !formData.jobs || formData.jobs.length === 0 || generatingInvoice || generatingPO || generatingSpecification}
             >
               <FileText size={20} aria-hidden="true" />
               {t('orderDetail.generateDocument')}
@@ -1060,7 +1093,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     setShowDocumentDropdown(false);
                   }}
                   className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={generatingInvoice || generatingPO}
+                  disabled={generatingInvoice || generatingPO || generatingSpecification}
                 >
                   {generatingInvoice ? (
                     <>
@@ -1080,7 +1113,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     setShowDocumentDropdown(false);
                   }}
                   className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={generatingInvoice || generatingPO}
+                  disabled={generatingInvoice || generatingPO || generatingSpecification}
                 >
                   {generatingPO ? (
                     <>
@@ -1091,6 +1124,26 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     <>
                       <FileText size={18} aria-hidden="true" />
                       {t('orderDetail.generatePO')}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    handleGenerateSpecification();
+                    setShowDocumentDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={generatingInvoice || generatingPO || generatingSpecification}
+                >
+                  {generatingSpecification ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                      {t('orderDetail.generating')}
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={18} aria-hidden="true" />
+                      {t('orderDetail.generateSpecification')}
                     </>
                   )}
                 </button>

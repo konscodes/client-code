@@ -8,7 +8,7 @@ const PYTHON_SERVICE_URL =
   (import.meta.env.DEV ? 'http://localhost:5001/generate' : '/api/generate');
 
 interface DocumentData {
-  type: 'invoice' | 'po';
+  type: 'invoice' | 'po' | 'specification';
   locale?: string;
   company: {
     name: string;
@@ -58,7 +58,7 @@ function formatDocumentData(
   order: Order,
   client: Client,
   companySettings: CompanySettings,
-  documentType: 'invoice' | 'po',
+  documentType: 'invoice' | 'po' | 'specification',
   documentNumber: string
 ): DocumentData {
   const totals = getOrderTotals(order);
@@ -117,8 +117,10 @@ function formatDocumentData(
   
   if (documentType === 'invoice') {
     orderData.order.invoiceNumber = documentNumber;
-  } else {
+  } else if (documentType === 'po') {
     orderData.order.poNumber = documentNumber;
+  } else if (documentType === 'specification') {
+    orderData.order.invoiceNumber = documentNumber; // Use invoiceNumber field for specification
   }
   
   return orderData;
@@ -173,6 +175,16 @@ export async function generatePurchaseOrder(
   poNumber: string
 ): Promise<void> {
   const data = formatDocumentData(order, client, companySettings, 'po', poNumber);
+  await downloadDocument(data);
+}
+
+export async function generateSpecification(
+  order: Order,
+  client: Client,
+  companySettings: CompanySettings,
+  specificationNumber: string
+): Promise<void> {
+  const data = formatDocumentData(order, client, companySettings, 'specification', specificationNumber);
   await downloadDocument(data);
 }
 
