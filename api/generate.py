@@ -9,6 +9,7 @@ import io
 import json
 from datetime import datetime
 import re
+import os
 
 # Russian number spelling dictionaries
 ONES = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять']
@@ -584,13 +585,65 @@ def generate_document(data, doc_type):
     
     return doc
 
+# CORS Configuration
+# Production domain
+PRODUCTION_DOMAIN = 'https://client-code-one.vercel.app'
+
+# Allowed origins list
+ALLOWED_ORIGINS = [
+    PRODUCTION_DOMAIN,
+    PRODUCTION_DOMAIN.rstrip('/'),  # With and without trailing slash
+]
+
+# For local development, allow localhost
+# Check if we're in production (Vercel sets VERCEL_ENV)
+if os.environ.get('VERCEL_ENV') != 'production':
+    ALLOWED_ORIGINS.extend([
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+    ])
+
+def normalize_origin(origin):
+    """Normalize origin by removing trailing slash"""
+    if not origin:
+        return None
+    return origin.rstrip('/')
+
+def is_origin_allowed(origin):
+    """Check if origin is in allowed list"""
+    if not origin:
+        return False
+    normalized = normalize_origin(origin)
+    normalized_allowed = [normalize_origin(o) for o in ALLOWED_ORIGINS]
+    return normalized in normalized_allowed
+
 class handler(BaseHTTPRequestHandler):
+    def get_cors_headers(self):
+        """Get CORS headers based on request origin"""
+        origin = self.headers.get('Origin')
+        headers = {}
+        
+        if origin and is_origin_allowed(origin):
+            headers['Access-Control-Allow-Origin'] = origin
+            headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET'
+            headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        return headers
+    
+    def send_cors_headers(self):
+        """Send CORS headers to response"""
+        cors_headers = self.get_cors_headers()
+        for key, value in cors_headers.items():
+            self.send_header(key, value)
+    
     def do_OPTIONS(self):
         """Handle CORS preflight requests"""
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_cors_headers()
+        self.send_header('Access-Control-Max-Age', '3600')
         self.end_headers()
     
     def do_POST(self):
@@ -622,7 +675,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
             self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_cors_headers()
             self.send_header('Content-Length', str(len(doc_bytes)))
             self.end_headers()
             self.wfile.write(doc_bytes)
@@ -639,7 +692,7 @@ class handler(BaseHTTPRequestHandler):
             response = json.dumps({'status': 'healthy'}).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_cors_headers()
             self.send_header('Content-Length', str(len(response)))
             self.end_headers()
             self.wfile.write(response)
@@ -651,7 +704,7 @@ class handler(BaseHTTPRequestHandler):
         error_response = json.dumps({'error': message}).encode('utf-8')
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_cors_headers()
         self.send_header('Content-Length', str(len(error_response)))
         self.end_headers()
         self.wfile.write(error_response)
