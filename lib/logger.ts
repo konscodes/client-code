@@ -91,19 +91,18 @@ export const logger = {
 
   /**
    * Log error messages
-   * In production, errors are sanitized to remove sensitive information
+   * In production, error messages are sanitized but error objects are always included
+   * for debugging purposes (stack traces, error types, etc.)
    */
   error: (message: string, error?: Error | unknown, ...args: any[]): void => {
     if (shouldLog('error')) {
       const sanitized = sanitizeError(message, isProduction);
       
       if (error instanceof Error) {
-        // In production, only log the message, not the full error object
-        if (isProduction) {
-          console.error(`[ERROR] ${sanitized}`, ...args);
-        } else {
-          console.error(`[ERROR] ${sanitized}`, error, ...args);
-        }
+        // Always include the error object for debugging, even in production
+        // The message is sanitized, but error objects contain valuable debugging info
+        // (stack traces, error types, etc.) that are essential for production debugging
+        console.error(`[ERROR] ${sanitized}`, error, ...args);
       } else if (error) {
         console.error(`[ERROR] ${sanitized}`, error, ...args);
       } else {
@@ -112,4 +111,3 @@ export const logger = {
     }
   },
 };
-
