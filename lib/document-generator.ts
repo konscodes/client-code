@@ -2,6 +2,7 @@
 import type { Order, Client, CompanySettings, OrderJob } from './types';
 import { getOrderTotals, formatDate } from './utils';
 import { logger } from './logger';
+import { supabase } from './supabase';
 
 // Use local Python service in development, Vercel serverless function in production
 const PYTHON_SERVICE_URL = 
@@ -129,16 +130,31 @@ function formatDocumentData(
 
 async function downloadDocument(data: DocumentData): Promise<void> {
   try {
+    // Get current session token for authentication
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+    
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+    
     const response = await fetch(PYTHON_SERVICE_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(data),
     });
     
     if (!response.ok) {
-      throw new Error(`Document generation failed: ${response.statusText}`);
+      if (response.status === 401) {
+        throw new Error('Authentication failed. Please log in again.');
+      }
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`Document generation failed: ${errorText || response.statusText}`);
     }
     
     // Get the blob from response

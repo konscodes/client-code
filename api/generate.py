@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 import re
 import os
+import urllib.request
+import urllib.parse
 
 # Russian number spelling dictionaries
 ONES = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять']
@@ -619,6 +621,45 @@ def is_origin_allowed(origin):
     normalized_allowed = [normalize_origin(o) for o in ALLOWED_ORIGINS]
     return normalized in normalized_allowed
 
+def verify_supabase_token(token):
+    """
+    Verify Supabase authentication token by calling Supabase auth API
+    Returns user data if token is valid, None otherwise
+    """
+    if not token:
+        return None
+    
+    try:
+        supabase_url = os.environ.get('VITE_SUPABASE_URL')
+        supabase_anon_key = os.environ.get('VITE_SUPABASE_ANON_KEY')
+        
+        if not supabase_url or not supabase_anon_key:
+            # In production, these should be set, but if not, we can't verify
+            # For local dev, we might not have them, so allow if token exists
+            if os.environ.get('VERCEL_ENV') != 'production':
+                return {'id': 'local-dev-user'}  # Allow in local dev
+            return None
+        
+        # Call Supabase auth API to verify token
+        # GET /auth/v1/user with Authorization header
+        url = f"{supabase_url.rstrip('/')}/auth/v1/user"
+        req = urllib.request.Request(url)
+        req.add_header('Authorization', f'Bearer {token}')
+        req.add_header('apikey', supabase_anon_key)
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                user_data = json.loads(response.read().decode('utf-8'))
+                return user_data
+            else:
+                return None
+    except Exception as e:
+        # If verification fails for any reason, return None
+        # Log error in development for debugging
+        if os.environ.get('VERCEL_ENV') != 'production':
+            print(f"Token verification error: {str(e)}")
+        return None
+
 class handler(BaseHTTPRequestHandler):
     def get_cors_headers(self):
         """Get CORS headers based on request origin"""
@@ -649,6 +690,19 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests to generate DOCX documents"""
         try:
+            # Verify authentication
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                self.send_error_response(401, 'Unauthorized: Authentication required')
+                return
+            
+            token = auth_header.replace('Bearer ', '').strip()
+            user = verify_supabase_token(token)
+            
+            if not user:
+                self.send_error_response(401, 'Unauthorized: Invalid or expired token')
+                return
+            
             # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
