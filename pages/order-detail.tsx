@@ -158,6 +158,9 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [touchedOrderTitle, setTouchedOrderTitle] = useState(false);
   const [showDocumentDropdown, setShowDocumentDropdown] = useState(false);
   const documentDropdownRef = useRef<HTMLDivElement>(null);
+  const [showTaxPopover, setShowTaxPopover] = useState(false);
+  const [showMarkupPopover, setShowMarkupPopover] = useState(false);
+  const [markupPopoverValue, setMarkupPopoverValue] = useState<string>('');
   
   // Resizable column width state
   const [jobColumnWidth, setJobColumnWidth] = useState(() => {
@@ -760,18 +763,23 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
-  const handleApplyGlobalMarkup = () => {
+  const handleApplyGlobalMarkup = (markupValue?: number) => {
     if (!formData.jobs) return;
+    
+    const markupToApply = markupValue !== undefined ? markupValue : (formData.globalMarkup || 0);
     
     setFormData({
       ...formData,
+      globalMarkup: markupToApply,
       jobs: formData.jobs.map(j => ({
         ...j,
-        lineMarkup: formData.globalMarkup || 0,
+        lineMarkup: markupToApply,
       })),
     });
     
-    toast.success(t('orderDetail.markupApplied'));
+    setShowMarkupPopover(false);
+    setMarkupPopoverValue('');
+    toast.success(t('orderDetail.markupApplied') || 'Markup applied to all jobs');
   };
   
   if (!isNewOrder && !existingOrder) {
@@ -1195,7 +1203,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
           {/* Order Info Card */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Section 1: Basic Order Information */}
+              {/* Section 1: Client and Order Title */}
               <div>
                 <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
                 <div className="space-y-4">
@@ -1307,6 +1315,40 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   </div>
                   
                   <div className="space-y-2">
+                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
+                    <Textarea
+                      id="orderTitle"
+                      value={formData.orderTitle || ''}
+                      onChange={(e) => {
+                        setFormData({ ...formData, orderTitle: e.target.value });
+                        if (orderTitleValidationError) {
+                          setOrderTitleValidationError('');
+                        }
+                      }}
+                      onBlur={() => {
+                        setTouchedOrderTitle(true);
+                        if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+                          setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+                        }
+                      }}
+                      rows={2}
+                      placeholder={t('orderDetail.orderTitlePlaceholder')}
+                      required
+                      aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
+                      className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
+                    />
+                    {touchedOrderTitle && orderTitleValidationError && (
+                      <p className="text-sm text-red-600">{orderTitleValidationError}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Section 2: Status and Order Type */}
+              <div>
+                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
                     <Label htmlFor="status">{t('orderDetail.status')}</Label>
                     <Select
                       value={formData.status || 'proposal'}
@@ -1342,80 +1384,6 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       </SelectContent>
                     </Select>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
-                    <Textarea
-                      id="orderTitle"
-                      value={formData.orderTitle || ''}
-                      onChange={(e) => {
-                        setFormData({ ...formData, orderTitle: e.target.value });
-                        if (orderTitleValidationError) {
-                          setOrderTitleValidationError('');
-                        }
-                      }}
-                      onBlur={() => {
-                        setTouchedOrderTitle(true);
-                        if (!formData.orderTitle || formData.orderTitle.trim() === '') {
-                          setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
-                        }
-                      }}
-                      rows={2}
-                      placeholder={t('orderDetail.orderTitlePlaceholder')}
-                      required
-                      aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
-                      className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
-                    />
-                    {touchedOrderTitle && orderTitleValidationError && (
-                      <p className="text-sm text-red-600">{orderTitleValidationError}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Section 2: Tax and Markup */}
-              <div>
-                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.markupAndTax')}</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="globalMarkup">{t('orderDetail.globalMarkup')}</Label>
-                    <Input
-                      id="globalMarkup"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={formData.globalMarkup || 0}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        globalMarkup: parseFloat(e.target.value) || 0 
-                      })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
-                  
-                  <button
-                    onClick={handleApplyGlobalMarkup}
-                    className="w-full px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
-                    disabled={!formData.jobs || formData.jobs.length === 0}
-                  >
-                    {t('orderDetail.applyToAllJobs')}
-                  </button>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="taxRate">{t('orderDetail.taxRate')}</Label>
-                    <Input
-                      id="taxRate"
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={formData.taxRate || 0}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        taxRate: parseFloat(e.target.value) || 0 
-                      })}
-                      onWheel={(e) => e.currentTarget.blur()}
-                    />
-                  </div>
                 </div>
               </div>
               
@@ -1427,10 +1395,58 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     <span>{t('orderDetail.subtotal')}</span>
                     <span>{formatCurrency(totals.subtotal)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[#555A60]">
-                    <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
-                    <span>{formatCurrency(totals.tax)}</span>
-                  </div>
+                  <Popover open={showTaxPopover} onOpenChange={setShowTaxPopover}>
+                    <PopoverTrigger asChild>
+                      {formData.taxRate === 0 ? (
+                        <div className="flex items-center justify-between text-[#555A60]">
+                          <span>{t('orderDetail.tax')}</span>
+                          <button
+                            className="text-[#7C8085] hover:text-[#1F744F] underline text-sm transition-colors cursor-pointer"
+                          >
+                            {t('orderDetail.addTax') || '+ Add tax'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-[#555A60] cursor-pointer hover:text-[#1F744F] transition-colors">
+                          <span>{t('orderDetail.tax')} ({formData.taxRate}%)</span>
+                          <span>{formatCurrency(totals.tax)}</span>
+                        </div>
+                      )}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="taxRateInput">{t('orderDetail.taxRate')}</Label>
+                          <Input
+                            id="taxRateInput"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={formData.taxRate || 0}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              taxRate: parseFloat(e.target.value) || 0 
+                            })}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowTaxPopover(false)}
+                          >
+                            {t('common.cancel') || 'Cancel'}
+                          </Button>
+                          <Button
+                            onClick={() => setShowTaxPopover(false)}
+                          >
+                            {t('common.save') || 'Save'}
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <div className="pt-3 border-t border-[#E4E7E7]">
                     <div className="flex items-center justify-between text-[#1E2025]">
                       <span>{t('orderDetail.total')}</span>
@@ -1618,7 +1634,57 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       </th>
                       <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.qty')}</th>
                       <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.unitPrice')}</th>
-                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.markup')}</th>
+                      <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">
+                        <Popover open={showMarkupPopover} onOpenChange={setShowMarkupPopover}>
+                          <PopoverTrigger asChild>
+                            <button
+                              className="w-full text-left hover:text-[#1F744F] transition-colors cursor-pointer"
+                              onClick={() => {
+                                setMarkupPopoverValue((formData.globalMarkup || 0).toString());
+                              }}
+                            >
+                              {t('orderDetail.markup')}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" align="start">
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="globalMarkupInput">{t('orderDetail.globalMarkup')}</Label>
+                                <Input
+                                  id="globalMarkupInput"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={markupPopoverValue}
+                                  onChange={(e) => setMarkupPopoverValue(e.target.value)}
+                                  onWheel={(e) => e.currentTarget.blur()}
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setShowMarkupPopover(false);
+                                    setMarkupPopoverValue('');
+                                  }}
+                                >
+                                  {t('common.cancel') || 'Cancel'}
+                                </Button>
+                                <Button
+                                  onClick={() => {
+                                    const markupValue = parseFloat(markupPopoverValue) || 0;
+                                    handleApplyGlobalMarkup(markupValue);
+                                  }}
+                                  disabled={!formData.jobs || formData.jobs.length === 0}
+                                >
+                                  {t('orderDetail.applyToAllJobs')}
+                                </Button>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
                       <th className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.lineTotal')}</th>
                       <th 
                         className="px-6 py-3 text-right text-[#555A60] border-b border-[#E4E7E7] sticky right-0 z-10 bg-white"

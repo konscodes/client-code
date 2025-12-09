@@ -374,6 +374,8 @@
     "total": "Total",
     "markupAndTax": "Markup & Tax",
     "applyToAllJobs": "Apply to All Jobs",
+    "addTax": "+ Add tax",
+    "markupApplied": "Markup applied to all jobs",
     "noLineItems": "No line items yet",
     "noLineItemsDescription": "Add jobs from the catalog or use a preset to get started",
     "selectJobToAdd": "Select a job to add:",
