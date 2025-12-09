@@ -859,12 +859,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                         ? (() => {
                             const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
                             const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                            if (hasName && hasCompany) {
-                              return `${selectedClient.name} - ${selectedClient.company}`;
+                            if (hasCompany) {
+                              return selectedClient.company;
                             } else if (hasName) {
                               return selectedClient.name;
-                            } else if (hasCompany) {
-                              return selectedClient.company;
                             }
                             return t('orderDetail.selectClient');
                           })()
@@ -1216,12 +1214,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                               ? (() => {
                                   const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
                                   const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                                  if (hasName && hasCompany) {
-                                    return `${selectedClient.name} - ${selectedClient.company}`;
+                                  if (hasCompany) {
+                                    return selectedClient.company;
                                   } else if (hasName) {
                                     return selectedClient.name;
-                                  } else if (hasCompany) {
-                                    return selectedClient.company;
                                   }
                                   return t('orderDetail.selectClient');
                                 })()
