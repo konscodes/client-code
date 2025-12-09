@@ -435,6 +435,33 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     toast.success(t('orderDetail.jobAdded', { jobName: job.name }) || `Added ${job.name}`);
   };
   
+  const handleAddEmptyJob = () => {
+    const newJob: OrderJob = {
+      id: generateId('job'),
+      jobId: '',
+      jobName: '',
+      description: '',
+      quantity: 1,
+      unitPrice: 0,
+      lineMarkup: formData.globalMarkup || 0,
+      taxApplicable: false,
+      position: formData.jobs?.length || 0,
+    };
+    
+    setFormData({
+      ...formData,
+      jobs: [...(formData.jobs || []), newJob],
+    });
+    
+    // Automatically start editing the job name
+    setTimeout(() => {
+      setEditingJobId(newJob.id);
+      setEditingJobName('');
+    }, 100);
+    
+    toast.success(t('orderDetail.emptyJobAdded') || 'Empty job line added');
+  };
+  
   const handleAddPreset = (presetId: string) => {
     const preset = jobPresets.find(p => p.id === presetId);
     if (!preset) return;
@@ -1490,6 +1517,13 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       setPresetSearchQuery('');
                     }
                   }}
+                  className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+                >
+                  <Search size={18} aria-hidden="true" />
+                  {t('orderDetail.addFromCatalog')}
+                </button>
+                <button
+                  onClick={handleAddEmptyJob}
                   className="flex items-center gap-2 px-3 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                 >
                   <Plus size={18} aria-hidden="true" />
@@ -1705,35 +1739,78 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       const lineTotal = calculateLineTotal(job);
                       
                       return (
-                        <tr key={job.id}>
+                        <tr key={job.id} data-job-id={job.id}>
                           <td 
                             className="px-6 py-4 border-b border-[#E4E7E7] border-r border-[#D2D6D6] overflow-hidden"
                             style={{ width: `${jobColumnWidth}px`, minWidth: `${jobColumnWidth}px`, maxWidth: `${jobColumnWidth}px` }}
                           >
-                            {editingJobId === job.id ? (
+                            {editingJobId === job.id || !job.jobName ? (
                               <div className="flex items-center gap-2">
                                 <Input
-                                  value={editingJobName}
-                                  onChange={(e) => setEditingJobName(e.target.value)}
+                                  value={editingJobId === job.id ? editingJobName : (job.jobName || '')}
+                                  onChange={(e) => {
+                                    if (editingJobId === job.id) {
+                                      setEditingJobName(e.target.value);
+                                    } else {
+                                      handleUpdateJob(job.id, { jobName: e.target.value });
+                                    }
+                                  }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
-                                      handleSaveJobName(job.id);
+                                      if (editingJobId === job.id) {
+                                        handleSaveJobName(job.id);
+                                      } else if (job.jobName) {
+                                        // If job has a name, exit edit mode
+                                        setEditingJobId(null);
+                                        setEditingJobName('');
+                                      }
                                     } else if (e.key === 'Escape') {
-                                      handleCancelEditJobName();
+                                      if (editingJobId === job.id) {
+                                        handleCancelEditJobName();
+                                      } else {
+                                        // Cancel editing empty job - could remove the job or keep it empty
+                                        // For now, just clear the editing state
+                                        handleUpdateJob(job.id, { jobName: '' });
+                                      }
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (editingJobId === job.id) {
+                                      handleSaveJobName(job.id);
+                                    } else if (!job.jobName) {
+                                      // If job name is still empty after blur, keep it in edit mode
+                                      // Don't do anything, let it stay in edit mode
                                     }
                                   }}
                                   className="flex-1 min-w-[200px]"
-                                  autoFocus
+                                  autoFocus={!job.jobName || editingJobId === job.id}
+                                  placeholder={t('orderDetail.jobNamePlaceholder') || 'Enter job name...'}
                                 />
                                 <button
-                                  onClick={() => handleSaveJobName(job.id)}
+                                  onClick={() => {
+                                    if (editingJobId === job.id) {
+                                      handleSaveJobName(job.id);
+                                    } else if (job.jobName) {
+                                      // Exit edit mode if job has a name
+                                      setEditingJobId(null);
+                                      setEditingJobName('');
+                                    }
+                                  }}
                                   className="p-1.5 text-[#1F744F] hover:bg-[#E8F5E9] rounded transition-colors cursor-pointer"
                                   aria-label="Save"
                                 >
                                   <Check size={16} />
                                 </button>
                                 <button
-                                  onClick={handleCancelEditJobName}
+                                  onClick={() => {
+                                    if (editingJobId === job.id) {
+                                      handleCancelEditJobName();
+                                    } else {
+                                      // For empty jobs, cancel means we could remove it or keep it empty
+                                      // For now, just keep it empty but exit edit mode
+                                      handleUpdateJob(job.id, { jobName: '' });
+                                    }
+                                  }}
                                   className="p-1.5 text-[#7C8085] hover:bg-[#F7F8F8] rounded transition-colors cursor-pointer"
                                   aria-label="Cancel"
                                 >
