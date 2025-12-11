@@ -37,7 +37,7 @@
     "settings": "Настройки"
   },
   "login": {
-    "title": "Premium Welding CRM",
+    "title": "Client Code CRM",
     "description": "Введите email и пароль для доступа к аккаунту",
     "email": "Email",
     "password": "Пароль",

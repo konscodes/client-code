@@ -14,7 +14,7 @@ export function localeToLanguage(locale: string): string {
 
 // Get initial language from localStorage if available
 function getInitialLanguage(): string {
-  if (typeof window === 'undefined') return 'en';
+  if (typeof window === 'undefined') return 'ru';
   
   // Try to get saved locale from localStorage
   const savedLocale = localStorage.getItem('company_locale');
@@ -22,7 +22,7 @@ function getInitialLanguage(): string {
     return localeToLanguage(savedLocale);
   }
   
-  return 'en';
+  return 'ru';
 }
 
 // Initialize i18n
@@ -39,7 +39,7 @@ i18n
       },
     },
     lng: getInitialLanguage(), // Set initial language from localStorage
-    fallbackLng: 'en',
+    fallbackLng: 'ru',
     defaultNS: 'translation',
     interpolation: {
       escapeValue: false, // React already escapes values
