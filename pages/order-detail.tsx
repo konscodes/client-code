@@ -211,7 +211,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   // Sync jobs when they load (even if formData was already initialized)
   // This handles the case where jobs load after formData was initialized
   useEffect(() => {
-    if (!isNewOrder && existingOrder && jobsLoaded && formData.jobs.length === 0) {
+    if (!isNewOrder && existingOrder && jobsLoaded && (formData.jobs?.length ?? 0) === 0) {
       // Jobs just loaded, sync them to formData
       // Only sync if formData.jobs is empty (to avoid overwriting user deletions)
       if (existingOrder.jobs.length > 0) {
@@ -221,7 +221,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         }));
       }
     }
-  }, [isNewOrder, existingOrder, jobsLoaded, formData.jobs.length]);
+  }, [isNewOrder, existingOrder, jobsLoaded, formData.jobs?.length]);
   
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
@@ -280,7 +280,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // Edge case: Jobs loaded but formData.jobs is empty (sync hasn't happened yet)
     // Use existingOrder.jobs if available as fallback
-    if (jobsLoaded && formData.jobs.length === 0 && existingOrder && existingOrder.jobs.length > 0) {
+    if (jobsLoaded && (formData.jobs?.length ?? 0) === 0 && existingOrder && existingOrder.jobs.length > 0) {
       return getOrderTotals(existingOrder);
     }
     
