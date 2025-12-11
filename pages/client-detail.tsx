@@ -26,9 +26,10 @@ import type { Client } from '../lib/types';
 interface ClientDetailProps {
   clientId: string;
   onNavigate: (page: string, id?: string) => void;
+  previousPage?: { page: string; id?: string } | null;
 }
 
-export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
+export function ClientDetail({ clientId, onNavigate, previousPage }: ClientDetailProps) {
   const { t } = useTranslation();
   const { formatCurrency, formatDate } = useFormatting();
   const { clients, orders, addClient, updateClient } = useApp();
@@ -270,7 +271,13 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
       <div className="text-center py-12">
         <p className="text-[#7C8085] mb-4">{t('clientDetail.clientNotFound')}</p>
         <button
-          onClick={() => onNavigate('clients')}
+          onClick={() => {
+            if (previousPage) {
+              onNavigate(previousPage.page, previousPage.id);
+            } else {
+              onNavigate('clients');
+            }
+          }}
           className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
         >
           {t('clientDetail.backToClients')}
@@ -285,7 +292,13 @@ export function ClientDetail({ clientId, onNavigate }: ClientDetailProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => onNavigate('clients')}
+            onClick={() => {
+              if (previousPage) {
+                onNavigate(previousPage.page, previousPage.id);
+              } else {
+                onNavigate('clients');
+              }
+            }}
             className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
             aria-label={t('clientDetail.backToClients')}
           >

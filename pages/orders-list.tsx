@@ -31,10 +31,20 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const { formatCurrency, formatDate } = useFormatting();
   const { orders, clients, loading, ensureOrderJobsLoaded } = useApp();
   
-  // Parse client filter from pageId query string (e.g., "?client=client-10328")
-  const clientFilterId = pageId?.includes('?client=') 
-    ? pageId.split('?client=')[1]?.split('&')[0] 
-    : null;
+  // Parse filters from pageId query string (e.g., "?client=client-10328&status=in-progress")
+  const parseQueryParams = (queryString: string | undefined) => {
+    if (!queryString || !queryString.includes('?')) return { client: null, status: null };
+    
+    const params = new URLSearchParams(queryString.split('?')[1]);
+    return {
+      client: params.get('client'),
+      status: params.get('status') as OrderStatus | 'all' | null,
+    };
+  };
+  
+  const queryParams = parseQueryParams(pageId);
+  const clientFilterId = queryParams.client || null;
+  const initialStatusFilter = queryParams.status || null;
   
   // Get the filtered client
   const filteredClient = clientFilterId ? clients.find(c => c.id === clientFilterId) : null;
@@ -101,8 +111,12 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Filter states - load from localStorage
+  // Filter states - load from localStorage or initial query param
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>(() => {
+    // If status is provided in URL, use it (don't override with localStorage)
+    if (initialStatusFilter) {
+      return initialStatusFilter === 'all' ? 'all' : (initialStatusFilter as OrderStatus);
+    }
     const stored = loadFromStorage<{ statusFilter?: OrderStatus | 'all'; dateStart?: string; dateEnd?: string }>(STORAGE_KEYS.filters, {});
     return stored.statusFilter || 'all';
   });
@@ -671,22 +685,51 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
         </button>
       </div>
       
-      {/* Client Filter Pill */}
-      {filteredClient && (
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#E3F2FD] text-[#1976D2] border border-[#1976D2]/20">
-            <span className="text-sm font-medium whitespace-nowrap">
-              {t('orders.filteredByClient')}: {filteredClient.company || filteredClient.name || `Client #${extractIdNumbers(filteredClient.id)}`}
-            </span>
-            <button
-              onClick={() => onNavigate('orders')}
-              className="ml-1 hover:bg-[#1976D2]/10 rounded-full p-0.5 transition-colors cursor-pointer flex-shrink-0"
-              aria-label={t('orders.clearClientFilter')}
-              type="button"
-            >
-              <XIcon size={14} />
-            </button>
-          </div>
+      {/* Active Filters Pills */}
+      {(filteredClient || statusFilter !== 'all') && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Client Filter Pill */}
+          {filteredClient && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#E3F2FD] text-[#1976D2] border border-[#1976D2]/20">
+              <span className="text-sm font-medium whitespace-nowrap">
+                {t('orders.filteredByClient')}: {filteredClient.company || filteredClient.name || `Client #${extractIdNumbers(filteredClient.id)}`}
+              </span>
+              <button
+                onClick={() => {
+                  // Clear client filter, preserve status filter if exists
+                  const newPageId = statusFilter !== 'all' ? `?status=${statusFilter}` : undefined;
+                  onNavigate('orders', newPageId);
+                }}
+                className="ml-1 hover:bg-[#1976D2]/10 rounded-full p-0.5 transition-colors cursor-pointer flex-shrink-0"
+                aria-label={t('orders.clearClientFilter')}
+                type="button"
+              >
+                <XIcon size={14} />
+              </button>
+            </div>
+          )}
+          
+          {/* Status Filter Pill */}
+          {statusFilter !== 'all' && (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#E8F5E9] text-[#1F744F] border border-[#1F744F]/20">
+              <span className="text-sm font-medium whitespace-nowrap">
+                {t('orders.status')}: {statusFilter === 'in-progress' ? t('orders.inProgress') : statusFilter === 'completed' ? t('orders.completed') : statusFilter === 'proposal' ? t('orders.proposal') : statusFilter === 'canceled' ? t('orders.canceled') : statusFilter}
+              </span>
+              <button
+                onClick={() => {
+                  // Clear status filter only, preserve client and date filters if they exist
+                  const newPageId = filteredClient ? `?client=${filteredClient.id}` : undefined;
+                  setStatusFilter('all');
+                  onNavigate('orders', newPageId);
+                }}
+                className="ml-1 hover:bg-[#1F744F]/10 rounded-full p-0.5 transition-colors cursor-pointer flex-shrink-0"
+                aria-label={t('orders.clearStatusFilter') || 'Clear status filter'}
+                type="button"
+              >
+                <XIcon size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
       

@@ -127,7 +127,7 @@ function AppContent() {
         return <ClientsList onNavigate={handleNavigate} />;
       
       case 'client-detail':
-        return <ClientDetail clientId={pageId || 'new'} onNavigate={handleNavigate} />;
+        return <ClientDetail clientId={pageId || 'new'} onNavigate={handleNavigate} previousPage={previousPage} />;
       
       case 'orders':
         return <OrdersList onNavigate={handleNavigate} pageId={pageId} />;

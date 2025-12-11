@@ -26,7 +26,8 @@ import {
   Edit2,
   Check,
   X,
-  ChevronDown
+  ChevronDown,
+  Eraser
 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -542,6 +543,12 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       ...formData,
       jobs: [...(formData.jobs || []), duplicatedJob],
     });
+    
+    // Enter edit mode for the duplicated job's title
+    setTimeout(() => {
+      setEditingJobId(duplicatedJob.id);
+      setEditingJobName(duplicatedJob.jobName || '');
+    }, 0);
   };
   
   const handleStartEditJobName = (jobId: string) => {
@@ -1102,7 +1109,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => onNavigate('orders')}
+            onClick={handleCancel}
             className="p-2 hover:bg-[#E4E7E7] rounded-lg transition-colors cursor-pointer"
             aria-label="Back to orders"
           >
@@ -1796,10 +1803,11 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                                       }
                                     } else if (e.key === 'Escape') {
                                       if (editingJobId === job.id) {
-                                        handleCancelEditJobName();
+                                        // Clear the input text on Escape but keep edit mode active
+                                        setEditingJobName('');
+                                        e.currentTarget.focus();
                                       } else {
-                                        // Cancel editing empty job - could remove the job or keep it empty
-                                        // For now, just clear the editing state
+                                        // Clear the job name
                                         handleUpdateJob(job.id, { jobName: '' });
                                       }
                                     }
@@ -1826,25 +1834,37 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                                       setEditingJobName('');
                                     }
                                   }}
-                                  className="p-1.5 text-[#1F744F] hover:bg-[#E8F5E9] rounded transition-colors cursor-pointer"
+                                  className="p-1 text-[#7C8085] hover:text-[#1F744F] hover:bg-[#F7F8F8] rounded transition-all cursor-pointer"
                                   aria-label="Save"
                                 >
                                   <Check size={16} />
                                 </button>
                                 <button
-                                  onClick={() => {
+                                  onMouseDown={(e) => {
+                                    // Prevent input from losing focus when clicking erase button
+                                    e.preventDefault();
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
                                     if (editingJobId === job.id) {
-                                      handleCancelEditJobName();
+                                      // Clear the input text but keep edit mode active
+                                      setEditingJobName('');
+                                      // Focus the input after clearing
+                                      const input = e.currentTarget.parentElement?.querySelector('input');
+                                      if (input) {
+                                        setTimeout(() => (input as HTMLInputElement).focus(), 0);
+                                      }
                                     } else {
-                                      // For empty jobs, cancel means we could remove it or keep it empty
-                                      // For now, just keep it empty but exit edit mode
+                                      // Clear the job name when not in edit mode
                                       handleUpdateJob(job.id, { jobName: '' });
                                     }
                                   }}
-                                  className="p-1.5 text-[#7C8085] hover:bg-[#F7F8F8] rounded transition-colors cursor-pointer"
-                                  aria-label="Cancel"
+                                  className="p-1 text-[#7C8085] hover:text-[#E5484D] hover:bg-[#F7F8F8] rounded transition-all cursor-pointer"
+                                  aria-label={t('orderDetail.clearJobName') || 'Clear job name'}
+                                  type="button"
                                 >
-                                  <X size={16} />
+                                  <Eraser size={16} />
                                 </button>
                               </div>
                             ) : (

@@ -126,19 +126,19 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 title={t('dashboard.openOrders')}
                 value={kpiData.openOrders}
                 icon={FileText}
-                onClick={() => onNavigate('orders')}
+                onClick={() => onNavigate('orders', '?status=in-progress')}
               />
               <KPICard
                 title={t('dashboard.completedOrders')}
                 value={kpiData.completedOrders}
                 icon={CheckCircle2}
-                onClick={() => onNavigate('orders')}
+                onClick={() => onNavigate('orders', '?status=completed')}
               />
               <KPICard
                 title={t('dashboard.proposalOrders')}
                 value={kpiData.proposalOrders}
                 icon={FileText}
-                onClick={() => onNavigate('orders')}
+                onClick={() => onNavigate('orders', '?status=proposal')}
               />
               <KPICard
                 title={t('dashboard.thisMonthRevenue')}
