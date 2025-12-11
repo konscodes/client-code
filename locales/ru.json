@@ -47,7 +47,19 @@
     "signingIn": "Вход...",
     "loginFailed": "Ошибка входа",
     "invalidCredentials": "Неверный email или пароль",
-    "loggedInSuccess": "Успешный вход"
+    "loggedInSuccess": "Успешный вход",
+    "errors": {
+      "Invalid login credentials": "Неверный email или пароль",
+      "Email not confirmed": "Пожалуйста, подтвердите ваш email перед входом",
+      "User not found": "Аккаунт с таким email не найден",
+      "Too many requests": "Слишком много попыток входа. Пожалуйста, попробуйте позже",
+      "Network error": "Ошибка сети. Пожалуйста, проверьте подключение и попробуйте снова"
+    },
+    "validation": {
+      "emailRequired": "Email обязателен",
+      "emailInvalid": "Пожалуйста, введите действительный email",
+      "passwordRequired": "Пароль обязателен"
+    }
   },
   "dashboard": {
     "welcomeBack": "С возвращением",

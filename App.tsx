@@ -154,7 +154,6 @@ function AppContent() {
       <AppLayout currentPage={currentPage} onNavigate={handleNavigate}>
         {renderPage()}
       </AppLayout>
-      <Toaster position="bottom-right" />
       
       {/* Unsaved Changes Dialog */}
       <AlertDialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
@@ -192,6 +191,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AppContent />
+        <Toaster position="bottom-right" />
       </AuthProvider>
     </QueryClientProvider>
   );

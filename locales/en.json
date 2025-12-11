@@ -47,7 +47,19 @@
     "signingIn": "Signing in...",
     "loginFailed": "Login failed",
     "invalidCredentials": "Invalid email or password",
-    "loggedInSuccess": "Logged in successfully"
+    "loggedInSuccess": "Logged in successfully",
+    "errors": {
+      "Invalid login credentials": "Invalid email or password",
+      "Email not confirmed": "Please confirm your email address before signing in",
+      "User not found": "No account found with this email address",
+      "Too many requests": "Too many login attempts. Please try again later",
+      "Network error": "Network error. Please check your connection and try again"
+    },
+    "validation": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "passwordRequired": "Password is required"
+    }
   },
   "dashboard": {
     "welcomeBack": "Welcome back",
