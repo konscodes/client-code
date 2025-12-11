@@ -148,23 +148,48 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     }
   }, [isNewOrder, existingOrder, companySettings]);
 
-  // Ensure jobs are loaded for the current order (if viewing existing order)
-  useEffect(() => {
-    if (!isNewOrder && parsedOrderId) {
-      ensureOrderJobsLoaded([parsedOrderId]).catch(error => {
-        logger.error('Error ensuring order jobs are loaded', error);
-      });
-    }
-  }, [isNewOrder, parsedOrderId, ensureOrderJobsLoaded]);
-
   // Track if we've initialized formData from existingOrder to prevent overwriting user changes
   const [hasInitializedFromOrder, setHasInitializedFromOrder] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   
-  // Reset initialization flag when order changes
+  // Track jobs loading state to distinguish between "not loaded" and "loaded but empty"
+  const [jobsLoaded, setJobsLoaded] = useState(false);
+  const [jobsLoading, setJobsLoading] = useState(false);
+
+  // Load jobs with priority when order is opened (if not already loaded)
+  useEffect(() => {
+    if (!isNewOrder && parsedOrderId && existingOrder) {
+      // If order has denormalized fields but no jobs, jobs haven't been loaded yet
+      const hasDenormalizedData = existingOrder.total !== undefined || 
+                                   existingOrder.subtotal !== undefined;
+      const jobsNotLoaded = existingOrder.jobs.length === 0 && hasDenormalizedData;
+      
+      if (jobsNotLoaded && !jobsLoaded && !jobsLoading) {
+        setJobsLoading(true);
+        ensureOrderJobsLoaded([parsedOrderId])
+          .then(() => {
+            setJobsLoaded(true);
+            setJobsLoading(false);
+          })
+          .catch(error => {
+            logger.error('Error loading jobs', error);
+            setJobsLoading(false);
+            // If loading fails, mark as loaded to avoid infinite retry
+            setJobsLoaded(true);
+          });
+      } else if (existingOrder.jobs.length > 0) {
+        // Jobs are already loaded
+        setJobsLoaded(true);
+      }
+    }
+  }, [isNewOrder, parsedOrderId, existingOrder, ensureOrderJobsLoaded, jobsLoaded, jobsLoading]);
+  
+  // Reset initialization flag and jobs loaded state when order changes
   useEffect(() => {
     if (parsedOrderId !== lastOrderId) {
       setHasInitializedFromOrder(false);
+      setJobsLoaded(false);
+      setJobsLoading(false);
       setLastOrderId(parsedOrderId || null);
     }
   }, [parsedOrderId, lastOrderId]);
@@ -182,6 +207,21 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       setHasInitializedFromOrder(true);
     }
   }, [existingOrder, isNewOrder, hasInitializedFromOrder]);
+
+  // Sync jobs when they load (even if formData was already initialized)
+  // This handles the case where jobs load after formData was initialized
+  useEffect(() => {
+    if (!isNewOrder && existingOrder && jobsLoaded && formData.jobs.length === 0) {
+      // Jobs just loaded, sync them to formData
+      // Only sync if formData.jobs is empty (to avoid overwriting user deletions)
+      if (existingOrder.jobs.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          jobs: existingOrder.jobs
+        }));
+      }
+    }
+  }, [isNewOrder, existingOrder, jobsLoaded, formData.jobs.length]);
   
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
@@ -215,10 +255,39 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     [clients, formData.clientId]
   );
   
-  const totals = useMemo(() => 
-    getOrderTotals(formData as Order),
-    [formData]
-  );
+  const totals = useMemo(() => {
+    const order = formData as Order;
+    
+    // Edge case 1: New order - always calculate from jobs (will be 0)
+    if (isNewOrder) {
+      return getOrderTotals(order);
+    }
+    
+    // Edge case 2: Jobs not loaded yet - use denormalized from existingOrder
+    const shouldUseDenormalized = 
+      !jobsLoaded && 
+      existingOrder && 
+      existingOrder.jobs.length === 0 &&
+      (existingOrder.total !== undefined || existingOrder.subtotal !== undefined);
+    
+    if (shouldUseDenormalized) {
+      return {
+        subtotal: existingOrder.subtotal ?? 0,
+        tax: (existingOrder.total ?? 0) - (existingOrder.subtotal ?? 0),
+        total: existingOrder.total ?? 0,
+      };
+    }
+    
+    // Edge case: Jobs loaded but formData.jobs is empty (sync hasn't happened yet)
+    // Use existingOrder.jobs if available as fallback
+    if (jobsLoaded && formData.jobs.length === 0 && existingOrder && existingOrder.jobs.length > 0) {
+      return getOrderTotals(existingOrder);
+    }
+    
+    // Edge cases 3 & 4: Jobs loaded (or user deleted all) - calculate from jobs
+    // This will return 0 if jobs array is empty
+    return getOrderTotals(order);
+  }, [formData, isNewOrder, existingOrder, jobsLoaded]);
   
   const filteredJobs = useMemo(() => {
     if (!jobSearchQuery.trim()) return [];

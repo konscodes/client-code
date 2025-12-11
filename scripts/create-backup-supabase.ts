@@ -80,7 +80,6 @@ async function createBackup() {
       'job_templates',
       'job_presets',
       'preset_jobs',
-      'document_templates',
       'company_settings',
       'orders_backup_before_rename'
     ];

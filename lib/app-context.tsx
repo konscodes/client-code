@@ -1,7 +1,7 @@
 // Global application context for state management
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings, DocumentTemplate } from './types';
+import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings } from './types';
 import { supabase } from './supabase';
 import { normalizePhoneNumber } from './utils';
 import { localeToLanguage } from './i18n';
@@ -13,7 +13,6 @@ interface AppContextType {
   jobTemplates: JobTemplate[];
   jobPresets: JobPreset[];
   companySettings: CompanySettings;
-  documentTemplates: DocumentTemplate[];
   loading: boolean;
   error: string | null;
   
@@ -42,19 +41,12 @@ interface AppContextType {
   // Settings methods
   updateCompanySettings: (settings: Partial<CompanySettings>) => Promise<void>;
   
-  // Document template methods
-  addDocumentTemplate: (template: DocumentTemplate) => Promise<void>;
-  updateDocumentTemplate: (id: string, template: Partial<DocumentTemplate>) => Promise<void>;
-  deleteDocumentTemplate: (id: string) => Promise<void>;
-  
   // Refresh methods
   refreshClients: () => Promise<void>;
   refreshOrders: () => Promise<void>;
   refreshJobTemplates: () => Promise<void>;
   refreshJobPresets: () => Promise<void>;
   refreshCompanySettings: () => Promise<void>;
-  refreshDocumentTemplates: () => Promise<void>;
-  
   // Progressive loading methods
   ensureOrderJobsLoaded: (orderIds: string[]) => Promise<void>;
 }
@@ -235,17 +227,6 @@ function dbRowToCompanySettings(row: any): CompanySettings {
   };
 }
 
-// Helper function to convert database row to DocumentTemplate
-function dbRowToDocumentTemplate(row: any): DocumentTemplate {
-  return {
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    htmlContent: row.htmlContent,
-    isDefault: row.isDefault,
-    lastUpdated: new Date(row.lastUpdated),
-  };
-}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -265,7 +246,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     invoicePrefix: 'INV',
     poPrefix: 'PO',
   });
-  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -513,20 +493,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOtherDataLoading(true);
     setError(null);
     try {
-      // Add minimum delay to ensure loading state is visible
+      // Step 1: Load essential data first (clients + company settings)
       await Promise.all([
-        Promise.all([
-          refreshClients(),
-          refreshJobPresets(),
-          refreshCompanySettings(),
-          refreshDocumentTemplates(),
-        ]),
+        refreshClients(),           // Essential for search
+        refreshCompanySettings(),   // Essential for defaults
         new Promise(resolve => setTimeout(resolve, 500)), // Minimum 500ms loading time
       ]);
+      
+      // Step 2: Essential data loaded, unblock UI
+      setOtherDataLoading(false);
+      
+      // Step 3: Load background data (non-blocking, doesn't affect loading state)
+      refreshJobPresets().catch(err => {
+        logger.error('Error loading job presets in background', err);
+        // Don't set error state - background loading failures are non-critical
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-      logger.error('Error loading data', err);
-    } finally {
+      setError(err instanceof Error ? err.message : 'Failed to load essential data');
+      logger.error('Error loading essential data', err);
       setOtherDataLoading(false);
     }
   };
@@ -535,8 +519,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [otherDataLoading, setOtherDataLoading] = useState(true);
   
   useEffect(() => {
-    setLoading(ordersLoading || jobTemplatesLoading || otherDataLoading);
-  }, [ordersLoading, jobTemplatesLoading, otherDataLoading]);
+    // Only block on essential data and orders
+    // jobTemplatesLoading removed - job templates load in background (non-blocking)
+    setLoading(ordersLoading || otherDataLoading);
+  }, [ordersLoading, otherDataLoading]);
 
   // Refresh methods
   const refreshClients = useCallback(async () => {
@@ -595,15 +581,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refreshDocumentTemplates = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('document_templates')
-      .select('*')
-      .order('name');
-    
-    if (err) throw err;
-    setDocumentTemplates((data || []).map(dbRowToDocumentTemplate));
-  }, []);
 
   // Client methods
   const addClient = useCallback(async (client: Client): Promise<string> => {
@@ -1018,46 +995,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refreshCompanySettings();
   }, [companySettings, refreshCompanySettings]);
 
-  // Document template methods
-  const addDocumentTemplate = useCallback(async (template: DocumentTemplate) => {
-    const { error: err } = await supabase
-      .from('document_templates')
-      .insert({
-        id: template.id,
-        name: template.name,
-        type: template.type,
-        htmlContent: template.htmlContent,
-        isDefault: template.isDefault,
-        lastUpdated: template.lastUpdated.toISOString(),
-      });
-    
-    if (err) throw err;
-    await refreshDocumentTemplates();
-  }, [refreshDocumentTemplates]);
-
-  const updateDocumentTemplate = useCallback(async (id: string, updates: Partial<DocumentTemplate>) => {
-    const updateData: any = { ...updates };
-    if (updates.lastUpdated) updateData.lastUpdated = updates.lastUpdated.toISOString();
-    updateData.lastUpdated = new Date().toISOString();
-    
-    const { error: err } = await supabase
-      .from('document_templates')
-      .update(updateData)
-      .eq('id', id);
-    
-    if (err) throw err;
-    await refreshDocumentTemplates();
-  }, [refreshDocumentTemplates]);
-
-  const deleteDocumentTemplate = useCallback(async (id: string) => {
-    const { error: err } = await supabase
-      .from('document_templates')
-      .delete()
-      .eq('id', id);
-    
-    if (err) throw err;
-    await refreshDocumentTemplates();
-  }, [refreshDocumentTemplates]);
 
   // On-demand job loading for orders list (check and load if missing)
   const ensureOrderJobsLoaded = useCallback(async (
@@ -1102,7 +1039,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     jobTemplates,
     jobPresets,
     companySettings,
-    documentTemplates,
     loading,
     error,
     
@@ -1126,17 +1062,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     updateCompanySettings,
     
-    addDocumentTemplate,
-    updateDocumentTemplate,
-    deleteDocumentTemplate,
-    
     refreshClients,
     refreshOrders,
     refreshJobTemplates,
     refreshJobPresets,
     refreshCompanySettings,
-    refreshDocumentTemplates,
-    
     ensureOrderJobsLoaded,
   };
   

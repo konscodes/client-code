@@ -104,11 +104,3 @@ export interface CompanySettings {
   directorName?: string; // Technical Director name
 }
 
-export interface DocumentTemplate {
-  id: string;
-  name: string;
-  type: 'invoice' | 'purchase-order' | 'specification';
-  htmlContent: string;
-  isDefault: boolean;
-  lastUpdated: Date;
-}

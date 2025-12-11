@@ -67,8 +67,7 @@ async function testConnection() {
       'job_templates',
       'job_presets',
       'preset_jobs',
-      'company_settings',
-      'document_templates'
+      'company_settings'
     ];
     
     for (const table of tables) {

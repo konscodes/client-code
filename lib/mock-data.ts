@@ -1,5 +1,5 @@
 // Mock data for the CRM application
-import type { Client, JobTemplate, Order, JobPreset, CompanySettings, DocumentTemplate } from './types';
+import type { Client, JobTemplate, Order, JobPreset, CompanySettings } from './types';
 
 export const mockClients: Client[] = [
   {
@@ -561,21 +561,3 @@ export const mockCompanySettings: CompanySettings = {
   poPrefix: 'PO',
 };
 
-export const mockDocumentTemplates: DocumentTemplate[] = [
-  {
-    id: 'template-1',
-    name: 'Standard Invoice',
-    type: 'invoice',
-    htmlContent: '<div>Invoice template content</div>',
-    isDefault: true,
-    lastUpdated: new Date('2024-09-01'),
-  },
-  {
-    id: 'template-2',
-    name: 'Standard Purchase Order',
-    type: 'purchase-order',
-    htmlContent: '<div>PO template content</div>',
-    isDefault: true,
-    lastUpdated: new Date('2024-09-01'),
-  },
-];
