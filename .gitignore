@@ -25,9 +25,17 @@ servicemk3.xml
 # Database backups
 backup_before_*.sql
 *.sql.backup
+supabase_backup_*.sql
+supabase_backup_*.sql.gz
+*.sql.gz
+
+# Temporary migration files
+client_dates_from_xml.json
+timestamp-differences.json
 
 # Supabase local files
 .supabase
+supabase/
 
 # Python service
 python-service/venv/
