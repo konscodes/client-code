@@ -29,7 +29,7 @@ type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | '
 export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const { t } = useTranslation();
   const { formatCurrency, formatDate } = useFormatting();
-  const { orders, clients, loading } = useApp();
+  const { orders, clients, loading, ensureOrderJobsLoaded } = useApp();
   
   // Parse client filter from pageId query string (e.g., "?client=client-10328")
   const clientFilterId = pageId?.includes('?client=') 
@@ -301,6 +301,16 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, dateStart, dateEnd, itemsPerPage, sortBy, sortDirection]);
+
+  // Ensure jobs are loaded for visible orders (on-demand loading)
+  useEffect(() => {
+    if (!loading && paginatedOrders.length > 0) {
+      const visibleOrderIds = paginatedOrders.map(o => o.id);
+      ensureOrderJobsLoaded(visibleOrderIds).catch(error => {
+        logger.error('Error ensuring order jobs are loaded', error);
+      });
+    }
+  }, [paginatedOrders, loading, ensureOrderJobsLoaded]);
   
   // Get ordered visible columns
   const orderedVisibleColumns = useMemo(() => {
@@ -454,6 +464,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     if (!visibleColumns[columnKey]) return null;
     
     const { subtotal, total } = getOrderTotals(order);
+    const jobCount = order.job_count !== undefined ? order.job_count : order.jobs.length;
     const isRightAlign = columnKey === 'total' || columnKey === 'subtotal';
     const isFirstColumn = index === 0;
     const hasOpenPanel = filtersOpen || settingsOpen;
@@ -544,7 +555,11 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
               background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : { minWidth: '100px' }}
           >
-            <p className="text-[#555A60] whitespace-nowrap">{order.jobs.length}</p>
+            {order.job_count === undefined && order.jobs.length === 0 ? (
+              <Skeleton className="h-4 w-8 mx-auto" />
+            ) : (
+              <p className="text-[#555A60] whitespace-nowrap">{jobCount}</p>
+            )}
           </td>
         );
       case 'total':
@@ -561,7 +576,11 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
               background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
-            <p className="text-[#1E2025]">{formatCurrency(total)}</p>
+            {order.total === undefined && order.jobs.length === 0 ? (
+              <Skeleton className="h-4 w-20 ml-auto" />
+            ) : (
+              <p className="text-[#1E2025]">{formatCurrency(total)}</p>
+            )}
           </td>
         );
       case 'subtotal':
@@ -578,7 +597,11 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
               background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
             } : undefined}
           >
-            <p className="text-[#1E2025]">{formatCurrency(subtotal)}</p>
+            {order.subtotal === undefined && order.jobs.length === 0 ? (
+              <Skeleton className="h-4 w-20 ml-auto" />
+            ) : (
+              <p className="text-[#1E2025]">{formatCurrency(subtotal)}</p>
+            )}
           </td>
         );
       case 'orderType':

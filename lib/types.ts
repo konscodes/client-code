@@ -58,6 +58,10 @@ export interface Order {
   orderType: string;
   orderTitle: string;
   jobs: OrderJob[];
+  // Denormalized fields (from database)
+  total?: number;      // Calculated total (with tax)
+  subtotal?: number;   // Subtotal (before tax)
+  job_count?: number;  // Number of jobs
 }
 
 export interface JobPreset {

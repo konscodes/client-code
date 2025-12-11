@@ -103,12 +103,30 @@ export function calculateOrderTax(subtotal: number, taxRate: number): number {
 }
 
 export function calculateOrderTotal(order: Order): number {
+  // Use denormalized total if available (faster)
+  if (order.total !== undefined && order.total !== null) {
+    return order.total;
+  }
+  
+  // Fallback to calculation from jobs (for backward compatibility)
   const subtotal = calculateOrderSubtotal(order.jobs);
   const tax = calculateOrderTax(subtotal, order.taxRate);
   return subtotal + tax;
 }
 
 export function getOrderTotals(order: Order) {
+  // Use denormalized fields if available (faster)
+  if (order.subtotal !== undefined && order.subtotal !== null && 
+      order.total !== undefined && order.total !== null) {
+    const tax = order.total - order.subtotal;
+    return {
+      subtotal: order.subtotal,
+      tax,
+      total: order.total,
+    };
+  }
+  
+  // Fallback to calculation from jobs (for backward compatibility)
   const subtotal = calculateOrderSubtotal(order.jobs);
   const tax = calculateOrderTax(subtotal, order.taxRate);
   const total = subtotal + tax;

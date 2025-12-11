@@ -54,6 +54,9 @@ interface AppContextType {
   refreshJobPresets: () => Promise<void>;
   refreshCompanySettings: () => Promise<void>;
   refreshDocumentTemplates: () => Promise<void>;
+  
+  // Progressive loading methods
+  ensureOrderJobsLoaded: (orderIds: string[]) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -117,6 +120,10 @@ function dbRowToOrder(row: any, jobsByOrderId: Map<string, OrderJob[]>): Order {
     orderType: row.orderType || '',
     orderTitle: row.orderTitle || '',
     jobs,
+    // Denormalized fields (from database)
+    total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : undefined,
+    subtotal: row.subtotal !== undefined && row.subtotal !== null ? parseFloat(row.subtotal) : undefined,
+    job_count: row.job_count !== undefined && row.job_count !== null ? parseInt(row.job_count, 10) : undefined,
   };
 }
 
@@ -127,7 +134,8 @@ async function fetchOrderJobsBatch(orderIds: string[]): Promise<Map<string, Orde
   }
 
   // Supabase .in() has a limit, so we need to batch if there are too many
-  const batchSize = 1000;
+  // Set to 200 to avoid URI length limits (414 errors) - 200 IDs ≈ 7KB encoded
+  const batchSize = 200;
   const jobsMap = new Map<string, OrderJob[]>();
 
   for (let i = 0; i < orderIds.length; i += batchSize) {
@@ -261,11 +269,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch a page of orders with batch job fetching
-  const fetchOrdersPage = useCallback(async (from: number, to: number): Promise<Order[]> => {
+  // Fetch a page of orders with optional selective job fetching
+  const fetchOrdersPage = useCallback(async (
+    from: number, 
+    to: number, 
+    options: { 
+      includeJobs?: boolean;
+      jobsDateFilter?: { startDate: Date; endDate: Date }; // For dashboard: last 30 days
+    } = {}
+  ): Promise<Order[]> => {
+    const { includeJobs = false, jobsDateFilter } = options;
+    
     const { data, error: err } = await supabase
       .from('orders')
-      .select('*')
+      .select('*, total, subtotal, job_count')  // Select denormalized fields
       .order('createdAt', { ascending: false })
       .range(from, to);
     
@@ -275,17 +292,68 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [];
     }
     
-    // Batch fetch all order_jobs for these orders
-    const orderIds = data.map(row => row.id);
-    const jobsByOrderId = await fetchOrderJobsBatch(orderIds);
+    // Only fetch jobs if requested
+    if (includeJobs) {
+      let orderIdsToFetch = data.map(row => row.id);
+      
+      // If date filter provided, only fetch jobs for orders in that date range
+      if (jobsDateFilter) {
+        orderIdsToFetch = data
+          .filter(row => {
+            const orderDate = new Date(row.createdAt);
+            return orderDate >= jobsDateFilter.startDate && 
+                   orderDate <= jobsDateFilter.endDate;
+          })
+          .map(row => row.id);
+      }
+      
+      if (orderIdsToFetch.length > 0) {
+        const jobsByOrderId = await fetchOrderJobsBatch(orderIdsToFetch);
+        return data.map(row => dbRowToOrder(row, jobsByOrderId));
+      }
+    }
     
-    // Convert rows to Order objects with pre-fetched jobs
-    return data.map(row => dbRowToOrder(row, jobsByOrderId));
+    // Return orders with empty jobs array (fast)
+    return data.map(row => dbRowToOrder(row, new Map()));
   }, []);
 
-  // Progressive loading: fetch first page immediately, then load remaining in background
+  // Background job loading function (non-blocking)
+  const loadRemainingOrderJobsInBackground = useCallback(async (orders: Order[]) => {
+    // Load jobs in batches of 200 order IDs
+    const batchSize = 200;
+    const orderIds = orders.map(o => o.id);
+    
+    for (let i = 0; i < orderIds.length; i += batchSize) {
+      const batch = orderIds.slice(i, i + batchSize);
+      
+      try {
+        const jobsByOrderId = await fetchOrderJobsBatch(batch);
+        
+        // Update React Query cache with loaded jobs
+        queryClient.setQueryData(['orders'], (oldOrders: Order[] = []) => {
+          return oldOrders.map(order => {
+            const jobs = jobsByOrderId.get(order.id);
+            if (jobs && jobs.length > 0) {
+              return { ...order, jobs };
+            }
+            return order;
+          });
+        });
+      } catch (error) {
+        logger.error('Error loading jobs in background', error);
+        // Continue with next batch even if this one fails
+      }
+      
+      // Small delay between batches to avoid overwhelming the server
+      if (i + batchSize < orderIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+  }, [queryClient]);
+
+  // Progressive loading: fast initial load, dashboard priority, background jobs
   const fetchAllOrdersProgressive = useCallback(async (): Promise<Order[]> => {
-    // First, get total count
+    // Step 1: Get total count
     const { count, error: countErr } = await supabase
       .from('orders')
       .select('*', { count: 'exact', head: true });
@@ -293,29 +361,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (countErr) throw countErr;
     const totalCount = count || 0;
     
-    // Load first page immediately (100 orders)
+    // Step 2: Load first page WITHOUT jobs (fast initial render)
     const initialPageSize = 100;
-    const initialOrders = await fetchOrdersPage(0, initialPageSize - 1);
+    const initialOrders = await fetchOrdersPage(0, initialPageSize - 1, { 
+      includeJobs: false 
+    });
     
-    // If there are more orders, load them in background batches
+    // Step 3: Calculate date range for dashboard (last 30 days)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Step 4: Load jobs for dashboard needs:
+    // - Completed orders from past 30 days (for month revenue KPI)
+    // - Recent 5 orders (for displaying totals in recent orders list)
+    const completedRecentOrderIds = initialOrders
+      .filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return order.status === 'completed' &&
+               orderDate >= thirtyDaysAgo &&
+               orderDate <= now;
+      })
+      .map(order => order.id);
+    
+    // Get recent 5 orders (sorted by createdAt desc, take first 5)
+    const recent5OrderIds = [...initialOrders]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5)
+      .map(order => order.id);
+    
+    // Combine both sets (remove duplicates)
+    const dashboardOrderIds = Array.from(new Set([...completedRecentOrderIds, ...recent5OrderIds]));
+    
+    // Load jobs for these orders
+    let dashboardJobsMap = new Map<string, OrderJob[]>();
+    if (dashboardOrderIds.length > 0) {
+      try {
+        dashboardJobsMap = await fetchOrderJobsBatch(dashboardOrderIds);
+      } catch (error) {
+        logger.error('Error loading dashboard jobs', error);
+      }
+    }
+    
+    // Merge jobs into initial orders
+    const ordersWithDashboardJobs = initialOrders.map(order => ({
+      ...order,
+      jobs: dashboardJobsMap.get(order.id) || []
+    }));
+    
+    // Step 5: Load remaining orders in background (without jobs)
+    let remainingOrdersPromise: Promise<Order[]> = Promise.resolve([]);
     if (totalCount > initialPageSize) {
-      const batchSize = 1000;
+      const batchSize = 500; // Pagination batch size (offset/limit, no URI length issues)
       const batches: Promise<Order[]>[] = [];
       
       for (let from = initialPageSize; from < totalCount; from += batchSize) {
         const to = Math.min(from + batchSize - 1, totalCount - 1);
-        batches.push(fetchOrdersPage(from, to));
+        batches.push(fetchOrdersPage(from, to, { includeJobs: false }));
       }
       
-      // Load all batches in parallel
-      const remainingBatches = await Promise.all(batches);
-      const remainingOrders = remainingBatches.flat();
-      
-      return [...initialOrders, ...remainingOrders];
+      remainingOrdersPromise = Promise.all(batches).then(batches => batches.flat());
     }
     
-    return initialOrders;
-  }, [fetchOrdersPage]);
+    // Step 6: Wait for remaining orders
+    const remainingOrders = await remainingOrdersPromise;
+    
+    // Step 7: Start background job loading for remaining orders (don't await - non-blocking)
+    if (remainingOrders.length > 0) {
+      // Load jobs in background batches (non-blocking)
+      loadRemainingOrderJobsInBackground(remainingOrders).catch(error => {
+        logger.error('Background job loading failed', error);
+      });
+    }
+    
+    return [...ordersWithDashboardJobs, ...remainingOrders];
+  }, [fetchOrdersPage, loadRemainingOrderJobsInBackground]);
 
   // Fetch a page of job templates
   const fetchJobTemplatesPage = useCallback(async (from: number, to: number): Promise<JobTemplate[]> => {
@@ -350,7 +470,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // If there are more jobs, load them in background batches
     if (totalCount > initialPageSize) {
-      const batchSize = 1000;
+      const batchSize = 500; // Pagination batch size (offset/limit, no URI length issues)
       const batches: Promise<JobTemplate[]>[] = [];
       
       for (let from = initialPageSize; from < totalCount; from += batchSize) {
@@ -939,6 +1059,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refreshDocumentTemplates();
   }, [refreshDocumentTemplates]);
 
+  // On-demand job loading for orders list (check and load if missing)
+  const ensureOrderJobsLoaded = useCallback(async (
+    orderIds: string[]
+  ): Promise<void> => {
+    // Get current orders from cache
+    const currentOrders = queryClient.getQueryData<Order[]>(['orders']) || [];
+    
+    // Find orders that need jobs loaded
+    const ordersNeedingJobs = orderIds.filter(orderId => {
+      const order = currentOrders.find(o => o.id === orderId);
+      return order && order.jobs.length === 0;
+    });
+    
+    if (ordersNeedingJobs.length === 0) {
+      return; // All jobs already loaded
+    }
+    
+    // Load jobs for missing orders (priority load)
+    try {
+      const jobsByOrderId = await fetchOrderJobsBatch(ordersNeedingJobs);
+      
+      // Update cache
+      queryClient.setQueryData(['orders'], (oldOrders: Order[] = []) => {
+        return oldOrders.map(order => {
+          const jobs = jobsByOrderId.get(order.id);
+          if (jobs && jobs.length > 0) {
+            return { ...order, jobs };
+          }
+          return order;
+        });
+      });
+    } catch (error) {
+      logger.error('Error loading jobs on demand', error);
+    }
+  }, [queryClient]);
+
   const value: AppContextType = {
     clients,
     orders,
@@ -979,6 +1135,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshJobPresets,
     refreshCompanySettings,
     refreshDocumentTemplates,
+    
+    ensureOrderJobsLoaded,
   };
   
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
