@@ -93,3 +93,8 @@ CREATE TRIGGER orders_tax_update_trigger
 BEFORE UPDATE OF "taxRate" ON orders
 FOR EACH ROW EXECUTE FUNCTION update_order_total_on_tax_change();
 
+
+
+
+
+

@@ -2,3 +2,8 @@
 -- Target: Yandex Cloud self-hosted Supabase instance (supabase.service-mk.ru)
 DROP TABLE IF EXISTS document_templates CASCADE;
 
+
+
+
+
+
