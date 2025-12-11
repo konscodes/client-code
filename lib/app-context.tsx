@@ -135,7 +135,7 @@ async function fetchOrderJobsBatch(orderIds: string[]): Promise<Map<string, Orde
 
   // Supabase .in() has a limit, so we need to batch if there are too many
   // Set to 200 to avoid URI length limits (414 errors) - 200 IDs ≈ 7KB encoded
-  const batchSize = 200;
+      const batchSize = 1000; // With increased NGINX header buffers (16 128k)
   const jobsMap = new Map<string, OrderJob[]>();
 
   for (let i = 0; i < orderIds.length; i += batchSize) {
@@ -320,7 +320,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Background job loading function (non-blocking)
   const loadRemainingOrderJobsInBackground = useCallback(async (orders: Order[]) => {
     // Load jobs in batches of 200 order IDs
-    const batchSize = 200;
+      const batchSize = 1000; // With increased NGINX header buffers (16 128k)
     const orderIds = orders.map(o => o.id);
     
     for (let i = 0; i < orderIds.length; i += batchSize) {
