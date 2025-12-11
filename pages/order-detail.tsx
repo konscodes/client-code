@@ -157,21 +157,31 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     }
   }, [isNewOrder, parsedOrderId, ensureOrderJobsLoaded]);
 
-  // Sync formData when existingOrder updates (e.g., when jobs are loaded)
+  // Track if we've initialized formData from existingOrder to prevent overwriting user changes
+  const [hasInitializedFromOrder, setHasInitializedFromOrder] = useState(false);
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  
+  // Reset initialization flag when order changes
   useEffect(() => {
-    if (!isNewOrder && existingOrder) {
-      // Only update if formData jobs are empty (jobs just loaded) or if order was just loaded
-      const jobsJustLoaded = existingOrder.jobs.length > 0 && (!formData.jobs || formData.jobs.length === 0);
-      if (jobsJustLoaded) {
-        // Strip denormalized fields when syncing so totals are always calculated from jobs during editing
-        const { total, subtotal, job_count, ...orderWithoutDenormalized } = existingOrder;
-        setFormData(prev => ({
-          ...prev,
-          ...orderWithoutDenormalized
-        }));
-      }
+    if (parsedOrderId !== lastOrderId) {
+      setHasInitializedFromOrder(false);
+      setLastOrderId(parsedOrderId || null);
     }
-  }, [existingOrder, isNewOrder, formData.jobs]);
+  }, [parsedOrderId, lastOrderId]);
+  
+  // Sync formData when existingOrder updates (e.g., when jobs are loaded for the first time)
+  useEffect(() => {
+    if (!isNewOrder && existingOrder && !hasInitializedFromOrder) {
+      // Only sync on initial load when formData hasn't been initialized yet
+      // This prevents overwriting user changes (like deleted jobs)
+      const { total, subtotal, job_count, ...orderWithoutDenormalized } = existingOrder;
+      setFormData(prev => ({
+        ...prev,
+        ...orderWithoutDenormalized
+      }));
+      setHasInitializedFromOrder(true);
+    }
+  }, [existingOrder, isNewOrder, hasInitializedFromOrder]);
   
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
@@ -632,6 +642,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         setFormData({ ...formData, ...orderData, id: generatedOrderId });
       } else {
         await updateOrder(orderData.id, orderData);
+        
+        // Optimistically update the query cache so existingOrder updates immediately
+        queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+          return oldOrders.map(order => 
+            order.id === orderData.id ? orderData : order
+          );
+        });
+        
         toast.success(t('orderDetail.orderUpdatedSuccess'));
         // Update formData to reflect saved state
         setFormData({ ...formData, ...orderData });

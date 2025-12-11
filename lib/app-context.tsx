@@ -1084,7 +1084,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(['orders'], (oldOrders: Order[] = []) => {
         return oldOrders.map(order => {
           const jobs = jobsByOrderId.get(order.id);
-          if (jobs && jobs.length > 0) {
+          if (jobs !== undefined) {
+            // Update jobs array even if empty (to properly reflect deleted jobs)
             return { ...order, jobs };
           }
           return order;
