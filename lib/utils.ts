@@ -10,10 +10,15 @@ export function formatCurrency(
   const finalCurrency = currency || 'USD';
   const finalLocale = locale || 'en-US';
   
+  // Round to integer (no cents/kopecks)
+  const roundedAmount = Math.round(amount);
+  
   return new Intl.NumberFormat(finalLocale, {
     style: 'currency',
     currency: finalCurrency,
-  }).format(amount);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(roundedAmount);
 }
 
 /**

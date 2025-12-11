@@ -74,8 +74,8 @@ function formatDocumentData(
       name: job.jobName || job.description || 'Job Item',
       qty: job.quantity.toString(),
       unit: 'unit', // Could be enhanced to use unitOfMeasure from job template
-      unitPrice: job.unitPrice.toFixed(2),
-      lineTotal: lineTotal.toFixed(2),
+      unitPrice: Math.round(job.unitPrice).toString(),
+      lineTotal: Math.round(lineTotal).toString(),
     };
   });
   
@@ -108,9 +108,9 @@ function formatDocumentData(
     order: {
       id: order.id,
       date: formatDate(order.createdAt),
-      subtotal: totals.subtotal.toFixed(2),
-      tax: totals.tax.toFixed(2),
-      total: totals.total.toFixed(2),
+      subtotal: Math.round(totals.subtotal).toString(),
+      tax: Math.round(totals.tax).toString(),
+      total: Math.round(totals.total).toString(),
       orderTitle: order.orderTitle,
     },
     jobs,

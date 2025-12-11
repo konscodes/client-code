@@ -757,10 +757,12 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   // Number formatting helpers
   const formatNumber = (value: number, locale?: string): string => {
     const finalLocale = locale || (i18n.language === 'ru' ? 'ru-RU' : 'en-US');
+    // Round to integer (no cents/kopecks)
+    const roundedValue = Math.round(value);
     return new Intl.NumberFormat(finalLocale, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value);
+      maximumFractionDigits: 0,
+    }).format(roundedValue);
   };
   
   const parseFormattedNumber = (value: string): number => {

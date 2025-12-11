@@ -28,20 +28,18 @@ WORKDAYS = ['рабочий день', 'рабочих дня', 'рабочих 
 MONTHS_RU = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
 def format_number_russian(num):
-    """Format number with Russian formatting: space as thousands separator, comma as decimal"""
-    num_str = f"{num:.2f}"
-    parts = num_str.split('.')
-    integer_part = parts[0]
-    decimal_part = parts[1] if len(parts) > 1 else '00'
+    """Format number with Russian formatting: space as thousands separator, no decimals"""
+    # Round to integer (no cents/kopecks)
+    num_int = int(round(num))
     
     # Add space as thousands separator
     integer_formatted = ''
-    for i, digit in enumerate(reversed(integer_part)):
+    for i, digit in enumerate(reversed(str(num_int))):
         if i > 0 and i % 3 == 0:
             integer_formatted = ' ' + integer_formatted
         integer_formatted = digit + integer_formatted
     
-    return f"{integer_formatted},{decimal_part}"
+    return integer_formatted
 
 def get_declension(num, forms):
     """Get proper Russian declension based on number"""
@@ -107,21 +105,14 @@ def spell_number_russian(num, feminine=False):
     return ' '.join(result)
 
 def spell_money_russian(amount):
-    """Convert money amount to Russian words"""
-    rubles = int(amount)
-    kopecks = int(round((amount - rubles) * 100))
+    """Convert money amount to Russian words (no kopecks)"""
+    # Round to integer (no cents/kopecks)
+    rubles = int(round(amount))
     
     rubles_text = spell_number_russian(rubles, False)
     rubles_form = get_declension(rubles, RUBLES)
     
     result = f"{rubles_text.capitalize()} {rubles_form}"
-    
-    if kopecks > 0:
-        kopecks_text = spell_number_russian(kopecks, True)
-        kopecks_form = get_declension(kopecks, KOPECKS)
-        result += f" {kopecks_text} {kopecks_form}"
-    else:
-        result += " 00 копеек"
     
     return result
 
@@ -336,6 +327,102 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     
     doc.add_paragraph()
 
+def calculate_column_widths(jobs_data, available_width):
+    """
+    Calculate column widths based on content while respecting available width.
+    Returns a list of widths in inches for each column.
+    """
+    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+    
+    # Headers
+    headers = ['№', 'Наименование', 'Кол-во', 'Цена за единицу', 'Стоимость']
+    
+    # Collect all content for each column to find maximum width needed
+    max_lengths = [len(header) for header in headers]
+    
+    # Analyze job data to find maximum content length in each column
+    for idx, job in enumerate(jobs_data, start=1):
+        # Column 0: № (row number)
+        max_lengths[0] = max(max_lengths[0], len(str(idx)))
+        
+        # Column 1: Наименование (job name)
+        job_name = job.get('name', '')
+        max_lengths[1] = max(max_lengths[1], len(job_name))
+        
+        # Column 2: Кол-во (quantity)
+        job_qty = job.get('qty', '0')
+        max_lengths[2] = max(max_lengths[2], len(str(job_qty)))
+        
+        # Column 3: Цена за единицу (unit price)
+        job_total = float(job.get('lineTotal', '0.00'))
+        job_qty_float = float(job.get('qty', '1'))
+        job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
+        price_text = format_number_russian(job_price_after_markup)
+        max_lengths[3] = max(max_lengths[3], len(price_text))
+        
+        # Column 4: Стоимость (total cost)
+        total_text = format_number_russian(job_total)
+        max_lengths[4] = max(max_lengths[4], len(total_text))
+    
+    # Approximate character width in inches (Times New Roman 12pt: ~0.08 inches per character for average)
+    # Add padding: 0.2 inches minimum per column for readability
+    char_width = 0.08
+    min_padding = 0.2
+    min_widths = [0.3, 1.0, 0.75, 0.8, 1.0]  # Minimum widths for each column in inches (Кол-во increased to prevent header wrapping)
+    
+    # Calculate content-based widths
+    content_widths = []
+    for i, max_len in enumerate(max_lengths):
+        # Calculate width based on content, but respect minimum
+        content_based = max_len * char_width + min_padding
+        content_widths.append(max(content_based, min_widths[i]))
+    
+    # Calculate total needed width
+    total_needed = sum(content_widths)
+    
+    # If content fits within available width, use content-based widths
+    # Otherwise, scale proportionally while respecting minimums
+    if total_needed <= width_val:
+        # Distribute extra space to Наименование column (usually needs most space)
+        extra_space = width_val - total_needed
+        content_widths[1] += extra_space
+    else:
+        # Scale down proportionally, but keep minimums
+        min_total = sum(min_widths)
+        excess_content = total_needed - min_total
+        
+        if excess_content <= 0:
+            # All columns are at minimum, just distribute evenly
+            content_widths = min_widths.copy()
+            # Distribute remaining space to Наименование
+            remaining = width_val - min_total
+            if remaining > 0:
+                content_widths[1] += remaining
+        else:
+            # Scale down the excess proportionally
+            available_excess = width_val - min_total
+            if available_excess <= 0:
+                # Not enough space even for minimums, use minimums anyway
+                content_widths = min_widths.copy()
+            else:
+                scale_factor = available_excess / excess_content
+                scaled_widths = []
+                for i, content_width in enumerate(content_widths):
+                    if content_width > min_widths[i]:
+                        scaled = min_widths[i] + (content_width - min_widths[i]) * scale_factor
+                        scaled_widths.append(scaled)
+                    else:
+                        scaled_widths.append(min_widths[i])
+                
+                # Ensure total equals available width (adjust Наименование if needed)
+                total_scaled = sum(scaled_widths)
+                if abs(total_scaled - width_val) > 0.001:  # Allow small floating point differences
+                    scaled_widths[1] += (width_val - total_scaled)
+                
+                content_widths = scaled_widths
+    
+    return content_widths
+
 def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Inches(7.5)):
     """Add work description with table view for jobs"""
     if not jobs_data:
@@ -345,14 +432,11 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     # Create jobs table with 5 columns - use full available width
     jobs_table = doc.add_table(rows=1, cols=5)
     jobs_table.style = 'Table Grid'
-    # Extract inch value from Inches object
-    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
-    # Proportional widths: № (5%), Наименование (50%), Кол-во (10%), Цена за единицу (15%), Стоимость (20%)
-    jobs_table.columns[0].width = Inches(width_val * 0.05)  # №
-    jobs_table.columns[1].width = Inches(width_val * 0.50)  # Наименование
-    jobs_table.columns[2].width = Inches(width_val * 0.10)  # Кол-во
-    jobs_table.columns[3].width = Inches(width_val * 0.15)  # Цена за единицу
-    jobs_table.columns[4].width = Inches(width_val * 0.20)  # Стоимость
+    
+    # Calculate column widths based on content
+    column_widths = calculate_column_widths(jobs_data, available_width)
+    for i, width in enumerate(column_widths):
+        jobs_table.columns[i].width = Inches(width)
     
     # Header row
     header_cells = jobs_table.rows[0].cells
