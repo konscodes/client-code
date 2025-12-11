@@ -62,7 +62,7 @@ The XML database contains 15 tables with Russian-language data from a ServiceMK3
 | `ContactEmail` | `tblContacts` | `email` | Fallback to `ClientEmail` from `tblMain` if empty |
 | `ClientAddressReg` | `tblMain` | `address` | Full registered address |
 | `ClientComments` | `tblMain` | `notes` | Base notes from client record |
-| `ContactAddTime` | `tblContacts` | `createdAt` | Parse as Date object |
+| `ClientAddTime` | `tblMain` | `createdAt` | **CRITICAL**: Use `ClientAddTime` from `tblMain`, NOT `ContactAddTime` from `tblContacts`. This is the actual client creation date. Fallback to `ContactAddTime` only if `ClientAddTime` is missing. |
 | `ClientInn` | `tblMain` | `inn` | Russian Tax ID (ИНН) |
 | `ClientKpp` | `tblMain` | `kpp` | Russian Registration Code (КПП) |
 | `ClientOgrn` | `tblMain` | `ogrn` | Russian State Registration Number (ОГРН) |
@@ -87,6 +87,33 @@ The XML database contains 15 tables with Russian-language data from a ServiceMK3
    - Format: `"Additional contact: Name (phone, email)"` or `"Additional contacts: Name1 (phone1, email1), Name2 (phone2, email2)"`
    - Only include phone/email if they are not empty
    - Example: `"Additional contact: Мюнц Владимир Константинович (+7(903)2221694, munz1@ya.ru)"`
+
+### ⚠️ CRITICAL: Client createdAt Timestamp
+
+**IMPORTANT**: The `createdAt` timestamp must use `ClientAddTime` from `tblMain`, NOT `ContactAddTime` from `tblContacts`.
+
+**Correct Logic**:
+```typescript
+// Priority 1: Use ClientAddTime from tblMain (actual client creation date)
+const createdAt = client.ClientAddTime 
+  ? parseDate(client.ClientAddTime)
+  : // Priority 2: Fallback to most recent contact's ContactAddTime
+    (primaryContact?.ContactAddTime 
+      ? parseDate(primaryContact.ContactAddTime)
+      : new Date()); // Last resort: current date
+```
+
+**Why This Matters**:
+- `ClientAddTime` represents when the client record was created in the original system
+- `ContactAddTime` represents when a contact person was added (which may be later)
+- Using `ContactAddTime` incorrectly sets creation dates to when contacts were added, not when clients were created
+- This causes historical data to show incorrect creation dates
+
+**Example**:
+- Client created: `2015-11-05 19:57:00` (ClientAddTime)
+- Contact added: `2016-01-18 22:45:00` (ContactAddTime)
+- **Correct createdAt**: `2015-11-05 19:57:00` (use ClientAddTime)
+- **Incorrect createdAt**: `2016-01-18 22:45:00` (using ContactAddTime would be wrong)
 
 ### Date Parsing
 
@@ -119,7 +146,7 @@ SELECT
     c.ClientComments,
     additional_contacts_text
   ) as notes,
-  contact.ContactAddTime::timestamp as "createdAt"
+  COALESCE(c.ClientAddTime::timestamp, contact.ContactAddTime::timestamp, NOW()) as "createdAt"
 FROM tblMain c
 LEFT JOIN LATERAL (
   SELECT * FROM tblContacts 
@@ -515,4 +542,23 @@ After running the migration script, verify the data:
 - **XML Parser Arrays**: Always handle arrays in XML parser output - single values may be returned as arrays
 - **Tax Rate**: Default is 8.5, but can be set to 0 if needed (update in migration script)
 - **Verification**: Always run comparison scripts after migration to catch missing data
+- **Client createdAt**: **CRITICAL** - Always use `ClientAddTime` from `tblMain` for `createdAt`, NOT `ContactAddTime` from `tblContacts`. This was corrected in December 2025 after discovering incorrect timestamps in production data.
+
+## Migration History & Corrections
+
+### December 2025 - createdAt Timestamp Correction
+
+**Issue Discovered**: Initial migration used `ContactAddTime` from `tblContacts` instead of `ClientAddTime` from `tblMain`, causing incorrect creation dates for many clients.
+
+**Impact**: 
+- 316 out of 317 clients had incorrect `createdAt` timestamps
+- Many clients showed migration date (2025-11-28) instead of original creation dates
+- Some clients showed contact addition dates instead of client creation dates
+
+**Correction Applied**:
+- Updated migration script to use `ClientAddTime` from `tblMain` as primary source
+- Fallback to `ContactAddTime` only if `ClientAddTime` is missing
+- Updated all existing client records in production database with correct timestamps from XML backup
+
+**Lesson Learned**: Always verify timestamps match source data after migration. The `ClientAddTime` field in `tblMain` represents the actual client creation date, while `ContactAddTime` represents when a contact person was added (which may be much later).
 

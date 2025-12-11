@@ -218,9 +218,13 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
       const clientEmail = client.ClientEmail;
       email = typeof clientEmail === 'string' ? clientEmail.trim() : '';
     }
-    const createdAt = primaryContact?.ContactAddTime 
-      ? parseDate(primaryContact.ContactAddTime)
-      : new Date();
+    // CRITICAL: Use ClientAddTime from tblMain (actual client creation date)
+    // Fallback to ContactAddTime only if ClientAddTime is missing
+    const createdAt = client.ClientAddTime 
+      ? parseDate(client.ClientAddTime)
+      : (primaryContact?.ContactAddTime 
+          ? parseDate(primaryContact.ContactAddTime)
+          : new Date());
     
     // Build notes with additional contacts
     let notes = cleanString(client.ClientComments);

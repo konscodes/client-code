@@ -11,3 +11,5 @@ ADD COLUMN IF NOT EXISTS correspondent_account TEXT,
 ADD COLUMN IF NOT EXISTS bank_bik TEXT,
 ADD COLUMN IF NOT EXISTS director_name TEXT;
 
+
+
