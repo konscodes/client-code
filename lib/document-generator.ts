@@ -83,11 +83,11 @@ function formatDocumentData(
   // Determine document prefix based on type
   let documentPrefix = '';
   if (documentType === 'invoice') {
-    documentPrefix = companySettings.invoicePrefix.toLowerCase();
+    documentPrefix = (companySettings.invoicePrefix || 'invoice').toLowerCase();
   } else if (documentType === 'po') {
-    documentPrefix = companySettings.poPrefix.toLowerCase();
+    documentPrefix = (companySettings.poPrefix || 'po').toLowerCase();
   } else if (documentType === 'specification') {
-    documentPrefix = companySettings.specPrefix.toLowerCase();
+    documentPrefix = (companySettings.specPrefix || 'spec').toLowerCase();
   }
   
   const orderData: DocumentData = {
@@ -195,10 +195,14 @@ async function downloadDocument(data: DocumentData): Promise<void> {
     const blob = await response.blob();
     
     // Create download link
+    // Filename will be set from Content-Disposition header, but we set a fallback
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${data.type}-${data.order.id}.docx`;
+    // Fallback filename (actual filename comes from Content-Disposition header)
+    const orderNumbers = data.order.id.replace(/\D/g, '');
+    const fallbackPrefix = data.documentPrefix || data.type;
+    link.download = `${fallbackPrefix}-${orderNumbers}.docx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -817,7 +817,10 @@ class handler(BaseHTTPRequestHandler):
             print(f"Document size: {len(doc_bytes)} bytes")
             
             # Generate filename using prefix from data and extract numbers from order ID
-            document_prefix = data.get('documentPrefix', doc_type)
+            document_prefix = data.get('documentPrefix') or doc_type
+            # Ensure prefix is not empty, use doc_type as fallback
+            if not document_prefix or document_prefix.strip() == '':
+                document_prefix = doc_type
             order_id = data.get('order', {}).get('id', 'document')
             # Extract numbers from order ID (e.g., 'order-22650' -> '22650')
             order_numbers = re.sub(r'\D', '', str(order_id))
