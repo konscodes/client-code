@@ -111,6 +111,7 @@ function dbRowToOrder(row: any, jobsByOrderId: Map<string, OrderJob[]>): Order {
     currency: row.currency,
     orderType: row.orderType || '',
     orderTitle: row.orderTitle || '',
+    timeEstimate: row.timeEstimate !== undefined && row.timeEstimate !== null ? parseInt(row.timeEstimate, 10) : undefined,
     jobs,
     // Denormalized fields (from database)
     total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : undefined,
@@ -676,6 +677,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           currency: order.currency,
           orderType: order.orderType,
           orderTitle: order.orderTitle,
+          timeEstimate: order.timeEstimate,
         });
       
       if (orderErr) throw orderErr;

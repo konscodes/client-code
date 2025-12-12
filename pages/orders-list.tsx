@@ -25,7 +25,7 @@ interface OrdersListProps {
   pageId?: string;
 }
 
-type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle';
+type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle' | 'timeEstimate';
 
 export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const { t } = useTranslation();
@@ -76,6 +76,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     subtotal: false,
     orderType: false,
     orderTitle: true,
+    timeEstimate: false,
   };
   
   const defaultColumnOrder: ColumnKey[] = [
@@ -88,6 +89,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     'total',
     'subtotal',
     'orderType',
+    'timeEstimate',
   ];
   
   // Load from localStorage on mount
@@ -131,15 +133,25 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     return stored.dateEnd ? new Date(stored.dateEnd) : null;
   });
   
-  // Column visibility state - load from localStorage
-  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() =>
-    loadFromStorage(STORAGE_KEYS.visibleColumns, defaultVisibleColumns)
-  );
+  // Column visibility state - load from localStorage and merge with defaults to include new columns
+  const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => {
+    const stored = loadFromStorage<Record<ColumnKey, boolean>>(STORAGE_KEYS.visibleColumns, defaultVisibleColumns);
+    // Merge stored visibility with defaults to ensure new columns are included
+    return { ...defaultVisibleColumns, ...stored };
+  });
   
-  // Column order state - load from localStorage
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() =>
-    loadFromStorage(STORAGE_KEYS.columnOrder, defaultColumnOrder)
-  );
+  // Column order state - load from localStorage and merge with defaults to include new columns
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => {
+    const stored = loadFromStorage<ColumnKey[]>(STORAGE_KEYS.columnOrder, defaultColumnOrder);
+    // Merge stored order with defaults to ensure new columns are included
+    const mergedOrder = [...stored];
+    defaultColumnOrder.forEach((col) => {
+      if (!mergedOrder.includes(col)) {
+        mergedOrder.push(col);
+      }
+    });
+    return mergedOrder;
+  });
   
   // Panel states
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -322,6 +334,11 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
         case 'orderType':
           comparison = a.orderType.localeCompare(b.orderType);
           break;
+        case 'timeEstimate':
+          const timeA = a.timeEstimate ?? 0;
+          const timeB = b.timeEstimate ?? 0;
+          comparison = timeA - timeB;
+          break;
         default:
           comparison = 0;
       }
@@ -409,6 +426,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     subtotal: t('orders.subtotal'),
     orderType: t('orders.orderType'),
     orderTitle: t('orders.orderTitle'),
+    timeEstimate: t('orderDetail.timeEstimate'),
   };
   
   // Helper function to render table header
@@ -416,11 +434,12 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     if (!visibleColumns[columnKey]) return null;
     
     const isRightAlign = columnKey === 'total' || columnKey === 'subtotal';
-    const isCenterAlign = columnKey === 'jobs';
+    const isCenterAlign = columnKey === 'jobs' || columnKey === 'timeEstimate';
     const isFirstColumn = index === 0;
     const isDateColumn = columnKey === 'date';
     const isJobsColumn = columnKey === 'jobs';
     const isStatusColumn = columnKey === 'status';
+    const isTimeEstimateColumn = columnKey === 'timeEstimate';
     const hasOpenPanel = filtersOpen || settingsOpen;
     
     // Handle special case: sortBy can be 'createdAt' but columnKey is 'date'
@@ -441,6 +460,9 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     }
     if (isStatusColumn) {
       headerStyle.minWidth = '120px';
+    }
+    if (isTimeEstimateColumn) {
+      headerStyle.minWidth = '100px';
     }
     
     const handleSortClick = (e: React.MouseEvent) => {
@@ -675,6 +697,23 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
             } : undefined}
           >
             <p className="text-[#1E2025] line-clamp-2">{order.orderTitle || '-'}</p>
+          </td>
+        );
+      case 'timeEstimate':
+        return (
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] text-center ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+            } : { minWidth: '100px' }}
+          >
+            <p className="text-[#555A60]">{order.timeEstimate ? `${order.timeEstimate}` : '-'}</p>
           </td>
         );
       default:
@@ -986,6 +1025,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
                           subtotal: 'w-20',
                           orderType: 'w-32',
                           orderTitle: 'w-32',
+                          timeEstimate: 'w-16',
                         };
                         return (
                           <td 
@@ -1195,6 +1235,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
                           <SelectItem value="jobs">{t('orders.jobs')}</SelectItem>
                           <SelectItem value="total">{t('orders.total')}</SelectItem>
                           <SelectItem value="subtotal">{t('orders.subtotal')}</SelectItem>
+                          <SelectItem value="timeEstimate">{t('orderDetail.timeEstimate')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

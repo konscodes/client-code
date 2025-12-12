@@ -114,7 +114,7 @@ function formatDocumentData(
       orderTitle: order.orderTitle,
     },
     jobs,
-    workCompletionDays: 30, // Default to 30 days, can be made configurable
+    workCompletionDays: order.timeEstimate ?? 30, // Use order's timeEstimate, default to 30 days if not set
   };
   
   if (documentType === 'invoice') {

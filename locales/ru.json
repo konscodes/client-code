@@ -366,6 +366,8 @@
     "orderTypePlaceholder": "Выберите тип заказа...",
     "orderTitle": "Название заказа",
     "orderTitlePlaceholder": "Введите название заказа...",
+    "timeEstimate": "Срок",
+    "timeEstimateCustom": "Другое",
     "lineItems": "Позиции заказа",
     "addJob": "Добавить работу",
     "addFromCatalog": "Добавить из каталога",

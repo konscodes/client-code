@@ -89,6 +89,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [generatingPO, setGeneratingPO] = useState(false);
   const [generatingSpecification, setGeneratingSpecification] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [timeEstimateMode, setTimeEstimateMode] = useState<'preset' | 'custom'>('preset');
+  const [customTimeEstimate, setCustomTimeEstimate] = useState<string>('');
+  const [originalTimeEstimate, setOriginalTimeEstimate] = useState<number | undefined>(undefined);
+  const customTimeEstimateInputRef = useRef<HTMLInputElement>(null);
   
   // Parse orderId to extract client ID from query string (e.g., "new?client=client-10328")
   const parsedOrderId = orderId?.includes('?') ? orderId.split('?')[0] : orderId;
@@ -117,6 +121,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       currency: 'USD',
       orderType: 'Ремонтные работы',
       orderTitle: '',
+      timeEstimate: 10, // Default to 10 days
       jobs: [],
     };
   });
@@ -206,8 +211,34 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         ...orderWithoutDenormalized
       }));
       setHasInitializedFromOrder(true);
+      
+      // Initialize time estimate mode - always start in preset mode
+      // Only switch to custom when user explicitly selects "custom" option
+      const currentValue = orderWithoutDenormalized.timeEstimate ?? 10;
+      const presetValues = [2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
+      
+      // Always start in preset mode, preserve the actual value
+      setTimeEstimateMode('preset');
+      setCustomTimeEstimate('');
+      // Store original value only if it's not a preset (for when user switches to custom)
+      if (!presetValues.includes(currentValue)) {
+        setOriginalTimeEstimate(currentValue);
+      } else {
+        setOriginalTimeEstimate(undefined);
+      }
     }
   }, [existingOrder, isNewOrder, hasInitializedFromOrder]);
+  
+  // Auto-focus and select input when switching to custom mode
+  useEffect(() => {
+    if (timeEstimateMode === 'custom' && customTimeEstimateInputRef.current) {
+      // Use setTimeout to ensure the input is fully rendered
+      setTimeout(() => {
+        customTimeEstimateInputRef.current?.focus();
+        customTimeEstimateInputRef.current?.select();
+      }, 0);
+    }
+  }, [timeEstimateMode]);
 
   // Sync jobs when they load (even if formData was already initialized)
   // This handles the case where jobs load after formData was initialized
@@ -379,6 +410,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         formData.taxRate !== existingOrder.taxRate ||
         formData.globalMarkup !== existingOrder.globalMarkup ||
         formData.currency !== existingOrder.currency ||
+        formData.timeEstimate !== existingOrder.timeEstimate ||
         jobsChanged
       );
     }
@@ -390,7 +422,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // For orders that don't exist yet, no unsaved changes
     return false;
-  }, [isOrderSaved, existingOrder, isNewOrder, formData.clientId, formData.status, formData.orderType, formData.orderTitle, formData.taxRate, formData.globalMarkup, formData.currency, formData.jobs]);
+  }, [isOrderSaved, existingOrder, isNewOrder, formData.clientId, formData.status, formData.orderType, formData.orderTitle, formData.taxRate, formData.globalMarkup, formData.currency, formData.timeEstimate, formData.jobs]);
   
   // Notify parent component about unsaved changes state
   useEffect(() => {
@@ -452,6 +484,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         currency: formData.currency || 'USD',
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
+        timeEstimate: formData.timeEstimate ?? 10,
         jobs: [],
       };
       
@@ -469,6 +502,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         currency: orderData.currency,
         orderType: orderData.orderType,
         orderTitle: orderData.orderTitle,
+        timeEstimate: orderData.timeEstimate,
         jobs: [], // New orders have no jobs
       };
       
@@ -518,6 +552,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         currency: formData.currency || 'USD',
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
+        timeEstimate: formData.timeEstimate ?? 10,
         jobs: formData.jobs || [],
       };
       
@@ -1024,189 +1059,252 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         
         {/* Basic Order Information Card */}
         <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-          <h2 className="text-[#1E2025] mb-4">{t('orderDetail.orderInformation')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
-              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="client"
-                    variant="outline"
-                    role="combobox"
-                    className={`w-full justify-between text-left font-normal h-9 min-w-0 ${
-                      clientValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''
-                    }`}
+            {/* Left Column: Client and Order Title */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
+                <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="client"
+                      variant="outline"
+                      role="combobox"
+                      className={`w-full justify-between text-left font-normal h-9 min-w-0 ${
+                        clientValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''
+                      }`}
+                    >
+                      <span className="truncate flex-1 text-left">
+                        {selectedClient 
+                          ? (() => {
+                              const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
+                              const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
+                              if (hasCompany) {
+                                return selectedClient.company;
+                              } else if (hasName) {
+                                return selectedClient.name;
+                              }
+                              return t('orderDetail.selectClient');
+                            })()
+                          : t('orderDetail.selectClient')}
+                      </span>
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="!w-[400px] !max-w-[400px] !min-w-[400px] p-0 overflow-hidden" 
+                    align="start"
+                    style={{ width: '400px', maxWidth: '400px', minWidth: '400px' }}
                   >
-                    <span className="truncate flex-1 text-left">
-                      {selectedClient 
-                        ? (() => {
-                            const hasName = selectedClient.name && selectedClient.name !== 'Unknown' && selectedClient.name.trim() !== '';
-                            const hasCompany = selectedClient.company && selectedClient.company.trim() !== '';
-                            if (hasCompany) {
-                              return selectedClient.company;
-                            } else if (hasName) {
-                              return selectedClient.name;
-                            }
-                            return t('orderDetail.selectClient');
-                          })()
-                        : t('orderDetail.selectClient')}
-                    </span>
-                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent 
-                  className="!w-[400px] !max-w-[400px] !min-w-[400px] p-0 overflow-hidden" 
-                  align="start"
-                  style={{ width: '400px', maxWidth: '400px', minWidth: '400px' }}
-                >
-                  <div className="w-full overflow-hidden" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
-                    <div className="p-4 border-b border-[#E4E7E7]">
-                      <div className="relative">
-                        <Search 
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
-                          size={18}
-                          aria-hidden="true"
-                        />
-                        <Input
-                          type="search"
-                          placeholder={t('orderDetail.searchClientsPlaceholder') || 'Search clients...'}
-                          value={clientSearchQuery}
-                          onChange={(e) => {
-                            setClientSearchQuery(e.target.value);
-                            if (clientValidationError) {
-                              setClientValidationError('');
-                            }
-                          }}
-                          className="pl-10 w-full"
-                          style={{ maxWidth: '100%', boxSizing: 'border-box' }}
-                          aria-label={t('orderDetail.searchClientsLabel') || 'Search clients'}
-                        />
+                    <div className="w-full overflow-hidden" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                      <div className="p-4 border-b border-[#E4E7E7]">
+                        <div className="relative">
+                          <Search 
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7C8085]" 
+                            size={18}
+                            aria-hidden="true"
+                          />
+                          <Input
+                            type="search"
+                            placeholder={t('orderDetail.searchClientsPlaceholder') || 'Search clients...'}
+                            value={clientSearchQuery}
+                            onChange={(e) => {
+                              setClientSearchQuery(e.target.value);
+                              if (clientValidationError) {
+                                setClientValidationError('');
+                              }
+                            }}
+                            className="pl-10 w-full"
+                            style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                            aria-label={t('orderDetail.searchClientsLabel') || 'Search clients'}
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto w-full" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
+                        {filteredClients.length === 0 ? (
+                          <div className="p-4 text-center text-[#7C8085]">
+                            {clientSearchQuery.trim() 
+                              ? (t('orderDetail.noClientsFound') || 'No clients found')
+                              : (t('orderDetail.startTypingToSearchClients') || 'Start typing to search for clients')}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="p-2">
+                              {displayedClients.map(client => (
+                              <button
+                                key={client.id}
+                                onClick={() => {
+                                  setFormData({ ...formData, clientId: client.id });
+                                  setClientPickerOpen(false);
+                                  setClientSearchQuery('');
+                                  setClientValidationError('');
+                                }}
+                                className="w-full p-3 text-left rounded-lg hover:bg-[#F7F8F8] transition-colors cursor-pointer overflow-hidden"
+                                style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                              >
+                                {client.company && client.company.trim() !== '' ? (
+                                  <>
+                                    <p className="text-[#1E2025] font-medium truncate">
+                                      {client.company}
+                                    </p>
+                                    {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                      <p className="text-[#7C8085] text-sm truncate">{client.name}</p>
+                                    )}
+                                  </>
+                                ) : (
+                                  client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                                    <p className="text-[#1E2025] font-medium truncate">{client.name}</p>
+                                  )
+                                )}
+                                {client.email && typeof client.email === 'string' && client.email.trim() !== '' && (
+                                  <p className="text-[#7C8085] text-sm truncate">{client.email}</p>
+                                )}
+                              </button>
+                            ))}
+                            </div>
+                            {hasMoreClients && (
+                              <div className="p-3 border-t border-[#E4E7E7] text-center">
+                                <p className="text-[#7C8085] text-sm">
+                                  {t('orderDetail.moreClientsAvailable', { count: filteredClients.length - 5 }) || `Continue typing to see ${filteredClients.length - 5} more result${filteredClients.length - 5 === 1 ? '' : 's'}`}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="max-h-[300px] overflow-y-auto w-full" style={{ width: '400px', maxWidth: '400px', boxSizing: 'border-box' }}>
-                      {filteredClients.length === 0 ? (
-                        <div className="p-4 text-center text-[#7C8085]">
-                          {clientSearchQuery.trim() 
-                            ? (t('orderDetail.noClientsFound') || 'No clients found')
-                            : (t('orderDetail.startTypingToSearchClients') || 'Start typing to search for clients')}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="p-2">
-                            {displayedClients.map(client => (
-                            <button
-                              key={client.id}
-                              onClick={() => {
-                                setFormData({ ...formData, clientId: client.id });
-                                setClientPickerOpen(false);
-                                setClientSearchQuery('');
-                                setClientValidationError('');
-                              }}
-                              className="w-full p-3 text-left rounded-lg hover:bg-[#F7F8F8] transition-colors cursor-pointer overflow-hidden"
-                              style={{ maxWidth: '100%', boxSizing: 'border-box' }}
-                            >
-                              {client.company && client.company.trim() !== '' ? (
-                                <>
-                                  <p className="text-[#1E2025] font-medium truncate">
-                                    {client.company}
-                                  </p>
-                                  {client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
-                                    <p className="text-[#7C8085] text-sm truncate">{client.name}</p>
-                                  )}
-                                </>
-                              ) : (
-                                client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
-                                  <p className="text-[#1E2025] font-medium truncate">{client.name}</p>
-                                )
-                              )}
-                              {client.email && typeof client.email === 'string' && client.email.trim() !== '' && (
-                                <p className="text-[#7C8085] text-sm truncate">{client.email}</p>
-                              )}
-                            </button>
-                          ))}
-                          </div>
-                          {hasMoreClients && (
-                            <div className="p-3 border-t border-[#E4E7E7] text-center">
-                              <p className="text-[#7C8085] text-sm">
-                                {t('orderDetail.moreClientsAvailable', { count: filteredClients.length - 5 }) || `Continue typing to see ${filteredClients.length - 5} more result${filteredClients.length - 5 === 1 ? '' : 's'}`}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              {clientValidationError && (
-                <p className="text-sm text-red-600">{clientValidationError}</p>
-              )}
+                  </PopoverContent>
+                </Popover>
+                {clientValidationError && (
+                  <p className="text-sm text-red-600">{clientValidationError}</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
+                <Textarea
+                  id="orderTitle"
+                  value={formData.orderTitle || ''}
+                  onChange={(e) => {
+                    setFormData({ ...formData, orderTitle: e.target.value });
+                    if (orderTitleValidationError) {
+                      setOrderTitleValidationError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    setTouchedOrderTitle(true);
+                    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+                      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+                    }
+                  }}
+                  rows={2}
+                  placeholder={t('orderDetail.orderTitlePlaceholder')}
+                  required
+                  aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
+                  className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
+                />
+                {touchedOrderTitle && orderTitleValidationError && (
+                  <p className="text-sm text-red-600">{orderTitleValidationError}</p>
+                )}
+              </div>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="status">{t('orderDetail.status')}</Label>
-              <Select
-                value={formData.status || 'proposal'}
-                onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
-              >
-                <SelectTrigger id="status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
-                  <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
-                  <SelectItem value="completed">{t('orders.completed')}</SelectItem>
-                  <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
-              <Select
-                value={formData.orderType || ''}
-                onValueChange={(value) => setFormData({ ...formData, orderType: value })}
-              >
-                <SelectTrigger id="orderType">
-                  <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORDER_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {getOrderTypeLabel(type.value)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="orderTitle">{t('orderDetail.orderTitle')} *</Label>
-              <Textarea
-                id="orderTitle"
-                value={formData.orderTitle || ''}
-                onChange={(e) => {
-                  setFormData({ ...formData, orderTitle: e.target.value });
-                  if (orderTitleValidationError) {
-                    setOrderTitleValidationError('');
-                  }
-                }}
-                onBlur={() => {
-                  setTouchedOrderTitle(true);
-                  if (!formData.orderTitle || formData.orderTitle.trim() === '') {
-                    setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
-                  }
-                }}
-                rows={2}
-                placeholder={t('orderDetail.orderTitlePlaceholder')}
-                required
-                aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
-                className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
-              />
-              {touchedOrderTitle && orderTitleValidationError && (
-                <p className="text-sm text-red-600">{orderTitleValidationError}</p>
-              )}
+            {/* Right Column: Status, Type, and Estimate */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="status">{t('orderDetail.status')}</Label>
+                <Select
+                  value={formData.status || 'proposal'}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
+                    <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                    <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                    <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
+                <Select
+                  value={formData.orderType || ''}
+                  onValueChange={(value) => setFormData({ ...formData, orderType: value })}
+                >
+                  <SelectTrigger id="orderType">
+                    <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORDER_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {getOrderTypeLabel(type.value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
+                {timeEstimateMode === 'preset' ? (
+                  <Select
+                    value={(formData.timeEstimate ?? 10).toString()}
+                        onValueChange={(value) => {
+                          if (value === 'custom') {
+                            setTimeEstimateMode('custom');
+                            // Restore original value if it exists, otherwise use current formData value
+                            const valueToShow = originalTimeEstimate !== undefined 
+                              ? originalTimeEstimate.toString() 
+                              : (formData.timeEstimate ?? 10).toString();
+                            setCustomTimeEstimate(valueToShow);
+                            setFormData({ ...formData, timeEstimate: originalTimeEstimate ?? formData.timeEstimate ?? 10 });
+                            // Focus the input after a short delay to ensure it's rendered
+                            setTimeout(() => {
+                              customTimeEstimateInputRef.current?.focus();
+                              customTimeEstimateInputRef.current?.select();
+                            }, 0);
+                          } else {
+                            const numValue = parseInt(value, 10);
+                            setFormData({ ...formData, timeEstimate: numValue });
+                            // Clear original value since user selected a preset
+                            setOriginalTimeEstimate(undefined);
+                          }
+                        }}
+                  >
+                    <SelectTrigger id="timeEstimate">
+                      <SelectValue>
+                        {formData.timeEstimate ?? 10}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30].map((days) => (
+                        <SelectItem key={days} value={days.toString()}>
+                          {days}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">{t('orderDetail.timeEstimateCustom')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+              ) : (
+                  <Input
+                    ref={customTimeEstimateInputRef}
+                    type="number"
+                    min="1"
+                    value={customTimeEstimate}
+                    onChange={(e) => {
+                      setCustomTimeEstimate(e.target.value);
+                      const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                      setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                    }}
+                    placeholder="10"
+                    className="w-full"
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1379,12 +1477,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
           {/* Order Info Card */}
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Section 1: Client and Order Title */}
-              <div>
+              {/* Section 1: Order Information (spans 2 columns on desktop) */}
+              <div className="md:col-span-2">
                 <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column: Client and Order Title */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
                     <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
                       <PopoverTrigger asChild>
                         <Button
@@ -1516,16 +1616,13 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     {touchedOrderTitle && orderTitleValidationError && (
                       <p className="text-sm text-red-600">{orderTitleValidationError}</p>
                     )}
+                    </div>
                   </div>
-                </div>
-              </div>
-              
-              {/* Section 2: Status and Order Type */}
-              <div>
-                <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="status">{t('orderDetail.status')}</Label>
+                  
+                  {/* Right Column: Status, Order Type, Time Estimate */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="status">{t('orderDetail.status')}</Label>
                     <Select
                       value={formData.status || 'proposal'}
                       onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
@@ -1560,10 +1657,69 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
+                    {timeEstimateMode === 'preset' ? (
+                      <Select
+                        value={(formData.timeEstimate ?? 10).toString()}
+                        onValueChange={(value) => {
+                          if (value === 'custom') {
+                            setTimeEstimateMode('custom');
+                            // Restore original value if it exists, otherwise use current formData value
+                            const valueToShow = originalTimeEstimate !== undefined 
+                              ? originalTimeEstimate.toString() 
+                              : (formData.timeEstimate ?? 10).toString();
+                            setCustomTimeEstimate(valueToShow);
+                            setFormData({ ...formData, timeEstimate: originalTimeEstimate ?? formData.timeEstimate ?? 10 });
+                            // Focus the input after a short delay to ensure it's rendered
+                            setTimeout(() => {
+                              customTimeEstimateInputRef.current?.focus();
+                              customTimeEstimateInputRef.current?.select();
+                            }, 0);
+                          } else {
+                            const numValue = parseInt(value, 10);
+                            setFormData({ ...formData, timeEstimate: numValue });
+                            // Clear original value since user selected a preset
+                            setOriginalTimeEstimate(undefined);
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="timeEstimate">
+                          <SelectValue>
+                            {formData.timeEstimate ?? 10}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30].map((days) => (
+                            <SelectItem key={days} value={days.toString()}>
+                              {days}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="custom">{t('orderDetail.timeEstimateCustom')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        ref={customTimeEstimateInputRef}
+                        type="number"
+                        min="1"
+                        value={customTimeEstimate}
+                        onChange={(e) => {
+                          setCustomTimeEstimate(e.target.value);
+                          const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                        }}
+                        placeholder="10"
+                        className="w-full"
+                      />
+                    )}
+                    </div>
+                  </div>
                 </div>
               </div>
               
-              {/* Section 3: Order Summary */}
+              {/* Section 2: Order Summary */}
               <div>
                 <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderSummary')}</h3>
                 <div className="space-y-3">

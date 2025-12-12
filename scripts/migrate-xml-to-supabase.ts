@@ -137,6 +137,7 @@ interface XMLOrder {
   OrderName?: string;
   OrderType?: string;
   OrderComments?: string;
+  OrderTime?: string;
 }
 
 interface XMLWork {
@@ -367,6 +368,16 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
     const createdAt = parseDate(order.OrderDate);
     const updatedAt = parseDate(order.OrderAddTime || order.OrderDate);
     
+    // Parse OrderTime to integer (time estimate in days)
+    // If OrderTime is not present or invalid, leave it undefined (frontend will handle default)
+    let timeEstimate: number | undefined;
+    if (order.OrderTime) {
+      const parsed = parseInt(order.OrderTime.toString().trim(), 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        timeEstimate = parsed;
+      }
+    }
+    
     const orderData: any = {
       id: supabaseOrderId,
       clientId: supabaseClientId,
@@ -379,6 +390,11 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       orderType: cleanString(order.OrderType) || '',
       orderTitle: cleanString(order.OrderName) || '',
     };
+    
+    // Only include timeEstimate if it was successfully parsed
+    if (timeEstimate !== undefined) {
+      orderData.timeEstimate = timeEstimate;
+    }
     
     ordersToInsert.push(orderData);
   }

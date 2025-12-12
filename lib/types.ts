@@ -57,6 +57,7 @@ export interface Order {
   currency: string;
   orderType: string;
   orderTitle: string;
+  timeEstimate?: number; // Time estimate in days
   jobs: OrderJob[];
   // Denormalized fields (from database)
   total?: number;      // Calculated total (with tax)

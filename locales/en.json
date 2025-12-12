@@ -367,6 +367,8 @@
     "orderTypePlaceholder": "Select order type...",
     "orderTitle": "Order Title",
     "orderTitlePlaceholder": "Enter order title...",
+    "timeEstimate": "Time Estimate",
+    "timeEstimateCustom": "Custom",
     "lineItems": "Line Items",
     "addJob": "Add Job",
     "addFromCatalog": "Add from Catalog",
