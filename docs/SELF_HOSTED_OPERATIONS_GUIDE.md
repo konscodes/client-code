@@ -1,10 +1,67 @@
-# Self-Hosted Supabase Operations Guide
+# Self-Hosted Operations Guide
 
-This document provides complete information about the self-hosted Supabase instance running on Yandex Cloud, including setup details, monitoring procedures, and maintenance tasks.
+This document provides complete information about the self-hosted Supabase instance and frontend application running on Yandex Cloud.
 
 ## Overview
 
-The application uses a **self-hosted Supabase instance** deployed on Yandex Cloud to ensure connectivity from Russia. The setup is optimized for limited resources (1.9GB RAM, 19GB disk) by disabling unused services.
+The application uses a **self-hosted Supabase instance** deployed on Yandex Cloud to ensure connectivity from Russia. The setup includes:
+- **Frontend**: React/Vite application served via NGINX
+- **Backend**: Supabase (PostgreSQL, GoTrue, PostgREST, etc.) running in Docker
+
+## Deployment
+
+### Quick Deployment
+
+To deploy the latest changes from the `main` branch to the Yandex VM:
+
+```bash
+ssh <SSH_HOST_ALIAS> "/opt/crm-app/deployment/deploy.sh"
+```
+
+This script automatically:
+1. Pulls the latest code from GitHub
+2. Installs/updates dependencies (if changed)
+3. Builds the frontend application
+4. Updates the served files
+5. Restarts `python-docx-service` (always) and reloads Nginx
+
+### Manual Deployment Steps
+
+If the automated script fails, you can perform these steps manually:
+
+1. **SSH into the VM**:
+   ```bash
+   ssh <SSH_HOST_ALIAS>
+   ```
+
+2. **Navigate to the repo**:
+   ```bash
+   cd /opt/crm-app/repo
+   ```
+
+3. **Pull changes**:
+   ```bash
+   git pull origin main
+   ```
+
+4. **Run build script**:
+   ```bash
+   sudo /opt/crm-app/repo/deployment/pull-and-build.sh
+   ```
+
+### Logs
+
+Deployment logs are stored in:
+```bash
+/opt/crm-app/logs/deployment.log
+```
+
+To view the last deployment log:
+```bash
+ssh <SSH_HOST_ALIAS> "tail -f /opt/crm-app/logs/deployment.log"
+```
+
+## Infrastructure
 
 ## Infrastructure
 
@@ -770,9 +827,14 @@ If resources become insufficient:
 
 ## Quick Reference
 
+### Quick Reference
+
 ### Essential Commands
 
 ```bash
+# Deploy latest changes
+ssh <SSH_HOST_ALIAS> "/opt/crm-app/deployment/deploy.sh"
+
 # System status
 ssh <SSH_HOST_ALIAS> "~/system-status.sh"
 
@@ -802,6 +864,10 @@ ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && sudo docker compose exec -T db psq
 
 | Item | Location |
 |------|----------|
+| Repository | `/opt/crm-app/repo/` |
+| Frontend App | `/opt/crm-app/frontend/` |
+| Deployment Scripts | `/opt/crm-app/deployment/` |
+| Deployment Logs | `/opt/crm-app/logs/` |
 | Supabase config | `~/supabase/docker/` |
 | Environment variables | `~/supabase/docker/.env` |
 | Database data | `~/supabase/docker/volumes/db/` |
@@ -827,9 +893,9 @@ For issues or questions:
 - Configured monitoring and automated backups
 - Fixed client `createdAt` timestamps from XML backup
 - Updated migration guide with correct `ClientAddTime` logic
+- Added deployment scripts and documentation
 
 ---
 
-**Last Updated**: December 10, 2025  
+**Last Updated**: December 12, 2025
 **Maintained By**: Development Team
-
