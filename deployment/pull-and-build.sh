@@ -108,6 +108,50 @@ rm -rf "$FRONTEND_DIR"/*
 cp -r "$REPO_DIR/dist"/* "$FRONTEND_DIR/"
 print_success "Frontend files copied to $FRONTEND_DIR"
 
+# Copy Python service files
+print_info "Updating Python service files..."
+# Create directory if it doesn't exist (it should, but safety first)
+mkdir -p "$APP_DIR/python-service"
+# Copy files, excluding venv and __pycache__
+rsync -av --exclude 'venv' --exclude '__pycache__' --exclude '*.pyc' "$REPO_DIR/python-service/" "$APP_DIR/python-service/"
+# Ensure venv exists in target (if not created by setup script)
+if [ ! -d "$APP_DIR/python-service/venv" ]; then
+    print_info "Creating virtual environment..."
+    python3 -m venv "$APP_DIR/python-service/venv"
+    source "$APP_DIR/python-service/venv/bin/activate"
+    pip install -r "$APP_DIR/python-service/requirements.txt"
+else
+    # Update dependencies if requirements changed
+    if [ -f "$REPO_DIR/python-service/requirements.txt" ]; then
+        print_info "Checking/Updating Python dependencies..."
+        source "$APP_DIR/python-service/venv/bin/activate"
+        pip install -r "$APP_DIR/python-service/requirements.txt"
+    fi
+fi
+print_success "Python service files updated"
+
+# Copy Python service files
+print_info "Updating Python service files..."
+# Create directory if it doesn't exist (it should, but safety first)
+mkdir -p "$APP_DIR/python-service"
+# Copy files, excluding venv and __pycache__
+rsync -av --exclude 'venv' --exclude '__pycache__' --exclude '*.pyc' "$REPO_DIR/python-service/" "$APP_DIR/python-service/"
+# Ensure venv exists in target (if not created by setup script)
+if [ ! -d "$APP_DIR/python-service/venv" ]; then
+    print_info "Creating virtual environment..."
+    python3 -m venv "$APP_DIR/python-service/venv"
+    source "$APP_DIR/python-service/venv/bin/activate"
+    pip install -r "$APP_DIR/python-service/requirements.txt"
+else
+    # Update dependencies if requirements changed
+    if [ -f "$REPO_DIR/python-service/requirements.txt" ]; then
+        print_info "Checking/Updating Python dependencies..."
+        source "$APP_DIR/python-service/venv/bin/activate"
+        pip install -r "$APP_DIR/python-service/requirements.txt"
+    fi
+fi
+print_success "Python service files updated"
+
 # Restart Python service
 print_info "Restarting Python service..."
 if sudo systemctl restart python-docx-service; then

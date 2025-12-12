@@ -8,22 +8,35 @@ The application uses a **self-hosted Supabase instance** deployed on Yandex Clou
 - **Frontend**: React/Vite application served via NGINX
 - **Backend**: Supabase (PostgreSQL, GoTrue, PostgREST, etc.) running in Docker
 
+## Project Structure
+
+The deployment on the VM follows a separation of concerns:
+
+| Directory | Purpose | Notes |
+|-----------|---------|-------|
+| `/opt/crm-app/repo/` | **Git Repository** | Source of truth. `git pull` updates this folder. All builds happen here. |
+| `/opt/crm-app/frontend/` | **Live Frontend** | Static files served by Nginx. Copied from `repo/dist/` after build. |
+| `/opt/crm-app/python-service/` | **Live Python Service** | Running application. Copied from `repo/python-service/` during deployment. |
+| `/opt/crm-app/deployment/` | **Scripts** | Contains the deployment scripts. |
+
 ## Deployment
 
 ### Quick Deployment
 
-To deploy the latest changes from the `main` branch to the Yandex VM:
+To deploy the latest changes from the `main` branch:
 
 ```bash
 ssh <SSH_HOST_ALIAS> "/opt/crm-app/deployment/deploy.sh"
 ```
 
 This script automatically:
-1. Pulls the latest code from GitHub
-2. Installs/updates dependencies (if changed)
+1. Pulls the latest code from GitHub to `/opt/crm-app/repo`
+2. Installs/updates Node.js dependencies
 3. Builds the frontend application
-4. Updates the served files
-5. Restarts `python-docx-service` (always) and reloads Nginx
+4. Updates the served frontend files in `/opt/crm-app/frontend`
+5. Updates the Python service files in `/opt/crm-app/python-service`
+6. Installs/updates Python dependencies
+7. Restarts `python-docx-service` and reloads Nginx
 
 ### Manual Deployment Steps
 
