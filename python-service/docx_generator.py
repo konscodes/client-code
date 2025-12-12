@@ -369,10 +369,35 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     jobs_table = doc.add_table(rows=1, cols=5)
     jobs_table.style = 'Table Grid'
     
+    # Set table preferred width in mm to ensure Word uses metric units
+    width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
+    jobs_table.autofit = False
+    tbl = jobs_table._tbl
+    tblPr = tbl.tblPr
+    if tblPr is None:
+        tblPr = OxmlElement('w:tblPr')
+        tbl.insert(0, tblPr)
+    
+    # Set table width explicitly in mm (dxa units: 1mm = 56.7 twips, 1 inch = 1440 twips = 25.4mm)
+    tblW = OxmlElement('w:tblW')
+    tblW.set(qn('w:w'), str(int(width_val * 56.7)))  # Convert mm to twips (dxa)
+    tblW.set(qn('w:type'), 'dxa')
+    tblPr.append(tblW)
+    
     # Calculate column widths based on content
     column_widths = calculate_column_widths(jobs_data, available_width)
     for i, width in enumerate(column_widths):
-        jobs_table.columns[i].width = Mm(width)
+        col = jobs_table.columns[i]
+        col.width = Mm(width)
+        # Explicitly set width type to dxa (twips) to ensure Word uses absolute measurements
+        # 1mm = 56.7 twips (dxa units)
+        for cell in col.cells:
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(int(width * 56.7)))  # Convert mm to twips
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
     
     # Set minimum row height for all rows (8mm ≈ 0.3 inches)
     jobs_table.rows[0].height = Mm(8)
