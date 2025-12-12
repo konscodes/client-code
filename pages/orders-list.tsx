@@ -7,7 +7,7 @@ import { useFormatting } from '../lib/use-formatting';
 import { StatusPill } from '../components/status-pill';
 import { calculateOrderTotal, getOrderTotals, extractIdNumbers } from '../lib/utils';
 import { logger } from '../lib/logger';
-import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Table, LayoutGrid } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -17,6 +17,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { PaginationWithLinks } from '../components/ui/pagination-with-links';
 import { DateRangePicker } from '../components/date-range-picker';
+import { useIsMobile } from '../components/ui/use-mobile';
 import type { OrderStatus } from '../lib/types';
 
 interface OrdersListProps {
@@ -61,6 +62,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     itemsPerPage: `${STORAGE_KEY_PREFIX}itemsPerPage`,
     sortBy: `${STORAGE_KEY_PREFIX}sortBy`,
     sortDirection: `${STORAGE_KEY_PREFIX}sortDirection`,
+    view: `${STORAGE_KEY_PREFIX}view`,
   };
   
   // Default values
@@ -163,6 +165,29 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() =>
     loadFromStorage(STORAGE_KEYS.sortDirection, 'desc')
   );
+  
+  // View state - load from localStorage, default to card on mobile
+  const isMobile = useIsMobile();
+  const [view, setView] = useState<'table' | 'card'>(() => {
+    const stored = loadFromStorage(STORAGE_KEYS.view, null);
+    // Auto-switch to card on mobile if no preference stored
+    if (stored === null && isMobile) return 'card';
+    return stored || 'table';
+  });
+  
+  // Auto-switch to card view on mobile
+  useEffect(() => {
+    if (isMobile && view === 'table') {
+      setView('card');
+    }
+  }, [isMobile]);
+  
+  // Save view preference to localStorage
+  useEffect(() => {
+    if (!isMobile) {
+      saveToStorage(STORAGE_KEYS.view, view);
+    }
+  }, [view, isMobile]);
   
   // Save filters to localStorage when they change
   useEffect(() => {
@@ -668,10 +693,100 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     };
   }, [orders]);
   
+  // Card view rendering
+  const renderCardView = () => {
+    if (isLoading) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: Math.min(itemsPerPage, 6) }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-[#E4E7E7] p-4">
+              <Skeleton className="h-5 w-24 mb-2" />
+              <Skeleton className="h-4 w-32 mb-4" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    if (filteredOrders.length === 0) {
+      return null; // Empty state is handled above
+    }
+    
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {paginatedOrders.map(order => {
+          const client = clients.find(c => c.id === order.clientId);
+          const { total } = getOrderTotals(order);
+          const jobCount = order.job_count !== undefined ? order.job_count : order.jobs.length;
+          
+          return (
+            <button
+              key={order.id}
+              onClick={() => onNavigate('order-detail', order.id)}
+              className="bg-white rounded-xl border border-[#E4E7E7] p-4 hover:border-[#1F744F] transition-colors text-left cursor-pointer"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-[#1E2025] font-medium mb-1">
+                    {t('orders.orderNumberPrefix')}{extractIdNumbers(order.id)}
+                  </p>
+                  {order.orderTitle && (
+                    <p className="text-[#7C8085] text-sm line-clamp-2">{order.orderTitle}</p>
+                  )}
+                </div>
+                <StatusPill status={order.status} />
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                {visibleColumns.client && client && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('orders.client')}</span>
+                    <span className="text-[#1E2025]">{client.company || client.name}</span>
+                  </div>
+                )}
+                {visibleColumns.date && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('orders.date')}</span>
+                    <span className="text-[#1E2025]">{formatDate(order.createdAt)}</span>
+                  </div>
+                )}
+                {visibleColumns.jobs && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('orders.jobs')}</span>
+                    <span className="text-[#1E2025]">
+                      {order.job_count === undefined && order.jobs.length === 0 ? (
+                        <Skeleton className="h-4 w-8 inline-block" />
+                      ) : (
+                        jobCount
+                      )}
+                    </span>
+                  </div>
+                )}
+                {visibleColumns.total && (
+                  <div className="flex items-center justify-between pt-2 border-t border-[#E4E7E7]">
+                    <span className="text-[#7C8085] font-medium">{t('orders.total')}</span>
+                    <span className="text-[#1E2025] font-semibold">
+                      {order.total === undefined && order.jobs.length === 0 ? (
+                        <Skeleton className="h-4 w-20 inline-block" />
+                      ) : (
+                        formatCurrency(total)
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+  
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[#1E2025] mb-2">{t('orders.title')}</h1>
           <p className="text-[#555A60]">{t('orders.subtitle')}</p>
@@ -751,7 +866,34 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
           />
         </div>
         
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 ml-auto">
+          {/* View Switcher */}
+          {!isMobile && (
+            <div className="flex items-center gap-1 border border-[#E4E7E7] rounded-lg p-1 bg-white">
+              <button
+                onClick={() => setView('table')}
+                className={`p-1.5 rounded transition-colors ${
+                  view === 'table'
+                    ? 'bg-[#1F744F] text-white'
+                    : 'text-[#555A60] hover:bg-[#F7F8F8]'
+                }`}
+                aria-label={t('orders.tableView') || 'Table view'}
+              >
+                <Table size={16} />
+              </button>
+              <button
+                onClick={() => setView('card')}
+                className={`p-1.5 rounded transition-colors ${
+                  view === 'card'
+                    ? 'bg-[#1F744F] text-white'
+                    : 'text-[#555A60] hover:bg-[#F7F8F8]'
+                }`}
+                aria-label={t('orders.cardView') || 'Card view'}
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+          )}
           <Button
             variant="outline"
             onClick={() => setFiltersOpen(true)}
@@ -779,115 +921,152 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
         </div>
       </div>
       
-      {/* Orders table */}
-      <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
-        <div className="overflow-x-auto" style={{ position: 'relative' }}>
+      {/* Orders table or cards */}
+      {view === 'card' ? (
+        <>
           {isLoading ? (
-            // Loading state with skeleton rows
-            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
-                  <tr key={i}>
-                    {orderedVisibleColumns.map((col, colIndex) => {
-                      if (!visibleColumns[col]) return null;
-                      const isFirstColumn = colIndex === 0;
-                      const isRightAlign = col === 'total' || col === 'subtotal';
-                      const isCenterAlign = col === 'jobs';
-                      const skeletonWidths: Record<ColumnKey, string> = {
-                        orderId: 'w-24',
-                        client: 'w-20',
-                        date: 'w-24',
-                        status: 'w-16',
-                        jobs: 'w-16',
-                        total: 'w-20',
-                        subtotal: 'w-20',
-                        orderType: 'w-32',
-                        orderTitle: 'w-32',
-                      };
-                      return (
-                        <td 
-                          key={col} 
-                          className={`px-6 py-4 border-b border-[#E4E7E7] ${
-                            isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : ''
-                          } ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
-                          style={isFirstColumn ? { 
-                            position: 'sticky', 
-                            left: 0, 
-                            zIndex: (filtersOpen || settingsOpen) ? 0 : 10, 
-                            minWidth: '150px',
-                            background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
-                          } : undefined}
-                        >
-                          <Skeleton className={`h-4 ${skeletonWidths[col]} ${isRightAlign ? 'ml-auto' : isCenterAlign ? 'mx-auto' : ''}`} />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: Math.min(itemsPerPage, 6) }).map((_, i) => (
+                <div key={i} className="bg-white rounded-xl border border-[#E4E7E7] p-4">
+                  <Skeleton className="h-5 w-24 mb-2" />
+                  <Skeleton className="h-4 w-32 mb-4" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              ))}
+            </div>
           ) : filteredOrders.length === 0 ? (
-          <div className="px-6 py-12 text-center">
-            {searchQuery || statusFilter !== 'all' || dateStart || dateEnd ? (
-              <>
-                <p className="text-[#7C8085] mb-2">{t('orders.noOrders')}</p>
-                <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
-              </>
+            <div className="bg-white rounded-xl border border-[#E4E7E7] px-6 py-12 text-center">
+              {searchQuery || statusFilter !== 'all' || dateStart || dateEnd ? (
+                <>
+                  <p className="text-[#7C8085] mb-2">{t('orders.noOrders')}</p>
+                  <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[#7C8085] mb-4">{t('orders.noOrders')}</p>
+                  <button
+                    onClick={() => onNavigate('order-detail', 'new')}
+                    className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                  >
+                    {t('orders.createFirstOrder')}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            renderCardView()
+          )}
+        </>
+      ) : (
+        <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
+          <div className="overflow-x-auto" style={{ position: 'relative' }}>
+            {isLoading ? (
+              // Loading state with skeleton rows
+              <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
+                    <tr key={i}>
+                      {orderedVisibleColumns.map((col, colIndex) => {
+                        if (!visibleColumns[col]) return null;
+                        const isFirstColumn = colIndex === 0;
+                        const isRightAlign = col === 'total' || col === 'subtotal';
+                        const isCenterAlign = col === 'jobs';
+                        const skeletonWidths: Record<ColumnKey, string> = {
+                          orderId: 'w-24',
+                          client: 'w-20',
+                          date: 'w-24',
+                          status: 'w-16',
+                          jobs: 'w-16',
+                          total: 'w-20',
+                          subtotal: 'w-20',
+                          orderType: 'w-32',
+                          orderTitle: 'w-32',
+                        };
+                        return (
+                          <td 
+                            key={col} 
+                            className={`px-6 py-4 border-b border-[#E4E7E7] ${
+                              isRightAlign ? 'text-right' : isCenterAlign ? 'text-center' : ''
+                            } ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
+                            style={isFirstColumn ? { 
+                              position: 'sticky', 
+                              left: 0, 
+                              zIndex: (filtersOpen || settingsOpen) ? 0 : 10, 
+                              minWidth: '150px',
+                              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+                            } : undefined}
+                          >
+                            <Skeleton className={`h-4 ${skeletonWidths[col]} ${isRightAlign ? 'ml-auto' : isCenterAlign ? 'mx-auto' : ''}`} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : filteredOrders.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                {searchQuery || statusFilter !== 'all' || dateStart || dateEnd ? (
+                  <>
+                    <p className="text-[#7C8085] mb-2">{t('orders.noOrders')}</p>
+                    <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[#7C8085] mb-4">{t('orders.noOrders')}</p>
+                    <button
+                      onClick={() => onNavigate('order-detail', 'new')}
+                      className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                    >
+                      {t('orders.createFirstOrder')}
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
-              <>
-                <p className="text-[#7C8085] mb-4">{t('orders.noOrders')}</p>
-                <button
-                  onClick={() => onNavigate('order-detail', 'new')}
-                  className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
-                >
-                  {t('orders.createFirstOrder')}
-                </button>
-              </>
+              <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOrders.map(order => {
+                    const client = clients.find(c => c.id === order.clientId);
+                    
+                    return (
+                      <tr 
+                        key={order.id}
+                        onClick={() => onNavigate('order-detail', order.id)}
+                        className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                        onMouseEnter={(e) => {
+                          const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                          if (stickyCell) {
+                            stickyCell.style.background = 'linear-gradient(to left, rgba(247,248,248,0) 0%, rgba(247,248,248,1) 20px, rgba(247,248,248,1) 100%)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                          if (stickyCell) {
+                            stickyCell.style.background = 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)';
+                          }
+                        }}
+                      >
+                        {orderedVisibleColumns.map((colKey, index) => renderTableCell(colKey, order, client, index))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
-        ) : (
-            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedOrders.map(order => {
-                  const client = clients.find(c => c.id === order.clientId);
-                  
-                  return (
-                    <tr 
-                      key={order.id}
-                      onClick={() => onNavigate('order-detail', order.id)}
-                      className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
-                      onMouseEnter={(e) => {
-                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
-                        if (stickyCell) {
-                          stickyCell.style.background = 'linear-gradient(to left, rgba(247,248,248,0) 0%, rgba(247,248,248,1) 20px, rgba(247,248,248,1) 100%)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
-                        if (stickyCell) {
-                          stickyCell.style.background = 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)';
-                        }
-                      }}
-                    >
-                      {orderedVisibleColumns.map((colKey, index) => renderTableCell(colKey, order, client, index))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
         </div>
-      </div>
+      )}
       
       {filteredOrders.length > 0 && (
         <div className="flex items-center justify-between">

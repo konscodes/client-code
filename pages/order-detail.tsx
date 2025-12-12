@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
+import { useIsMobile } from '../components/ui/use-mobile';
 import { 
   calculateLineTotal,
   getOrderTotals,
@@ -249,6 +250,28 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     return saved ? parseInt(saved, 10) : 300; // Default 300px
   });
   const [isResizing, setIsResizing] = useState(false);
+  
+  // View state for jobs - auto-switch to card on small screens (tablets and phones)
+  const isMobile = useIsMobile();
+  const [isSmallScreen, setIsSmallScreen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024; // lg breakpoint (tablets and phones)
+  });
+  
+  // Detect screen size changes
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 1024);
+    };
+    
+    window.addEventListener('resize', checkScreenSize);
+    checkScreenSize();
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+  
+  // Automatically use card view on small screens, table view on larger screens
+  const jobsView: 'table' | 'card' = isSmallScreen ? 'card' : 'table';
   
   const selectedClient = useMemo(() => 
     formData.clientId ? clients.find(c => c.id === formData.clientId) : null,
@@ -954,7 +977,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
               onClick={handleCancel}
@@ -972,7 +995,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </h1>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 justify-end">
             <button
               onClick={handleCancel}
               className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
@@ -1195,7 +1218,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
             onClick={handleCancel}
@@ -1255,7 +1278,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             )}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3 justify-end">
           {/* Document Dropdown */}
           <div className="relative" ref={documentDropdownRef}>
             <button
@@ -1613,9 +1636,9 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
           
           {/* Line Items */}
           <div className="bg-white rounded-xl border border-[#E4E7E7]">
-            <div className="px-6 py-4 border-b border-[#E4E7E7] flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-[#E4E7E7] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <h2 className="text-[#1E2025]">{t('orderDetail.lineItems')}</h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 items-center justify-end sm:ml-auto">
                 <button
                   onClick={() => {
                     if (showPresetPicker) {
@@ -1749,11 +1772,192 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
             )}
             
-            {/* Line Items Table */}
+            {/* Line Items Table/Card */}
             {!formData.jobs || formData.jobs.length === 0 ? (
               <div className="px-6 py-12 text-center">
                 <p className="text-[#7C8085] mb-4">{t('orderDetail.noLineItems')}</p>
                 <p className="text-[#7C8085]">{t('orderDetail.noLineItemsDescription')}</p>
+              </div>
+            ) : jobsView === 'card' ? (
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {formData.jobs.map(job => {
+                    const lineTotal = calculateLineTotal(job);
+                    
+                    return (
+                      <div
+                        key={job.id}
+                        className="bg-[#F7F8F8] rounded-lg border border-[#E4E7E7] p-4"
+                      >
+                        <div className="mb-3">
+                          <div className="flex-1 min-w-0">
+                            {editingJobId === job.id || !job.jobName ? (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={editingJobId === job.id ? editingJobName : (job.jobName || '')}
+                                  onChange={(e) => {
+                                    if (editingJobId === job.id) {
+                                      setEditingJobName(e.target.value);
+                                    } else {
+                                      handleUpdateJob(job.id, { jobName: e.target.value });
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      if (editingJobId === job.id) {
+                                        handleSaveJobName(job.id);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      if (editingJobId === job.id) {
+                                        setEditingJobName('');
+                                      }
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (editingJobId === job.id) {
+                                      handleSaveJobName(job.id);
+                                    }
+                                  }}
+                                  className="flex-1 min-w-[200px]"
+                                  autoFocus={!job.jobName || editingJobId === job.id}
+                                  placeholder={t('orderDetail.jobNamePlaceholder') || 'Enter job name...'}
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (editingJobId === job.id) {
+                                      handleSaveJobName(job.id);
+                                    }
+                                  }}
+                                  className="p-1 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                  aria-label="Save"
+                                >
+                                  <Check size={16} />
+                                </button>
+                                <button
+                                  onMouseDown={(e) => {
+                                    // Prevent input from losing focus when clicking erase button
+                                    e.preventDefault();
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (editingJobId === job.id) {
+                                      // Clear the input text but keep edit mode active
+                                      setEditingJobName('');
+                                      // Focus the input after clearing
+                                      const input = e.currentTarget.parentElement?.querySelector('input');
+                                      if (input) {
+                                        setTimeout(() => (input as HTMLInputElement).focus(), 0);
+                                      }
+                                    } else {
+                                      // Clear the job name when not in edit mode
+                                      handleUpdateJob(job.id, { jobName: '' });
+                                    }
+                                  }}
+                                  className="p-1 text-[#7C8085] hover:text-[#E5484D] hover:bg-white rounded transition-all cursor-pointer"
+                                  aria-label={t('orderDetail.clearJobName') || 'Clear job name'}
+                                  type="button"
+                                >
+                                  <Eraser size={16} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 group min-w-0">
+                                <p 
+                                  className="text-[#1E2025] cursor-pointer hover:text-[#1F744F] transition-colors truncate flex-1 min-w-0"
+                                  onClick={() => handleStartEditJobName(job.id)}
+                                  title={job.jobName}
+                                >
+                                  {job.jobName}
+                                </p>
+                                <button
+                                  onClick={() => handleStartEditJobName(job.id)}
+                                  className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                  aria-label={t('orderDetail.editJobName')}
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-[#7C8085]">{t('orderDetail.qty')}</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={job.quantity}
+                                onChange={(e) => handleUpdateJob(job.id, { 
+                                  quantity: parseInt(e.target.value, 10) || 0 
+                                })}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                className="w-full"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-[#7C8085]">{t('orderDetail.unitPrice')}</Label>
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                value={focusedPriceInputs.has(job.id) 
+                                  ? (job.unitPrice === 0 ? '' : job.unitPrice.toString()) 
+                                  : (job.unitPrice === 0 ? '' : formatNumber(job.unitPrice))
+                                }
+                                onChange={(e) => {
+                                  const parsed = parseFormattedNumber(e.target.value);
+                                  handleUpdateJob(job.id, { unitPrice: parsed });
+                                }}
+                                onFocus={() => handlePriceFocus(job.id)}
+                                onBlur={(e) => handlePriceBlur(job.id, e.target.value)}
+                                className="w-full"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-[#7C8085]">{t('orderDetail.markup')}</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={job.lineMarkup}
+                              onChange={(e) => handleUpdateJob(job.id, { 
+                                lineMarkup: parseFloat(e.target.value) || 0 
+                              })}
+                              onWheel={(e) => e.currentTarget.blur()}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="pt-2 border-t border-[#E4E7E7]">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm text-[#7C8085]">{t('orderDetail.lineTotal')}</span>
+                              <span className="text-[#1E2025] font-semibold">{formatCurrency(lineTotal)}</span>
+                            </div>
+                            <div className="flex gap-1 justify-end">
+                              <button
+                                onClick={() => handleDuplicateJob(job.id)}
+                                className="p-2 text-[#555A60] hover:bg-white rounded-lg transition-colors cursor-pointer"
+                                aria-label={`Duplicate ${job.jobName}`}
+                              >
+                                <Copy size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveJob(job.id)}
+                                className="p-2 text-[#E5484D] hover:bg-white rounded-lg transition-colors cursor-pointer"
+                                aria-label={`Remove ${job.jobName}`}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto relative">

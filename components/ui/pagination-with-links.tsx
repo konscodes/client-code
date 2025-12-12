@@ -74,7 +74,7 @@ export function PaginationWithLinks({
     <nav
       role="navigation"
       aria-label="pagination"
-      className={cn("flex items-center justify-center gap-1", className)}
+      className={cn("flex flex-wrap items-center justify-center gap-1", className)}
     >
       {/* Previous Button */}
       <button

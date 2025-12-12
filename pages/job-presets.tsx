@@ -209,14 +209,14 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[#1E2025] mb-2">{t('jobPresets.title')}</h1>
           <p className="text-[#555A60]">{t('jobPresets.subtitle')}</p>
         </div>
         <button
           onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors cursor-pointer whitespace-nowrap"
         >
           <Plus size={20} aria-hidden="true" />
           {t('jobPresets.newPreset')}

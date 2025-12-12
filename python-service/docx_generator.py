@@ -1,7 +1,7 @@
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from flask import Flask, request, jsonify, send_file
@@ -320,110 +320,44 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     
     doc.add_paragraph()
 
-    # Order title (centered, bold)
+    # Order title (centered, not bold)
     if order_data.get('orderTitle'):
         title_para = doc.add_paragraph()
         title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title_run = title_para.add_run(order_data['orderTitle'])
-        set_font_times_new_roman(title_run, size=12, bold=True, italic=False)
+        set_font_times_new_roman(title_run, size=12, bold=False, italic=False)
     
     doc.add_paragraph()
 
 def calculate_column_widths(jobs_data, available_width):
     """
-    Calculate column widths based on content while respecting available width.
+    Calculate column widths with explicit fixed widths for consistent rendering
+    across Word Online and Word Desktop.
     Returns a list of widths in inches for each column.
     """
     width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
     
-    # Headers
-    headers = ['№', 'Наименование', 'Кол-во', 'Цена за единицу', 'Стоимость']
+    # Fixed widths for columns (in inches)
+    # Using explicit widths ensures consistent rendering across Word platforms
+    fixed_widths = [
+        0.4,   # Column 0: № (number)
+        0.0,   # Column 1: Наименование (name) - calculated as remaining space
+        0.8,   # Column 2: Кол-во (quantity)
+        1.05,  # Column 3: Цена за единицу (unit price)
+        1.05,  # Column 4: Стоимость (total)
+    ]
     
-    # Collect all content for each column to find maximum width needed
-    max_lengths = [len(header) for header in headers]
+    # Calculate remaining space for Наименование column
+    fixed_total = sum(fixed_widths)
+    remaining_space = width_val - fixed_total
     
-    # Analyze job data to find maximum content length in each column
-    for idx, job in enumerate(jobs_data, start=1):
-        # Column 0: № (row number)
-        max_lengths[0] = max(max_lengths[0], len(str(idx)))
-        
-        # Column 1: Наименование (job name)
-        job_name = job.get('name', '')
-        max_lengths[1] = max(max_lengths[1], len(job_name))
-        
-        # Column 2: Кол-во (quantity)
-        job_qty = job.get('qty', '0')
-        max_lengths[2] = max(max_lengths[2], len(str(job_qty)))
-        
-        # Column 3: Цена за единицу (unit price)
-        job_total = float(job.get('lineTotal', '0.00'))
-        job_qty_float = float(job.get('qty', '1'))
-        job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
-        price_text = format_number_russian(job_price_after_markup)
-        max_lengths[3] = max(max_lengths[3], len(price_text))
-        
-        # Column 4: Стоимость (total cost)
-        total_text = format_number_russian(job_total)
-        max_lengths[4] = max(max_lengths[4], len(total_text))
+    # Ensure minimum width for Наименование (at least 2 inches)
+    if remaining_space < 2.0:
+        remaining_space = 2.0
     
-    # Approximate character width in inches (Times New Roman 12pt: ~0.08 inches per character for average)
-    # Add padding: 0.2 inches minimum per column for readability
-    char_width = 0.08
-    min_padding = 0.2
-    min_widths = [0.3, 1.0, 0.75, 0.8, 1.0]  # Minimum widths for each column in inches (Кол-во increased to prevent header wrapping)
+    fixed_widths[1] = remaining_space
     
-    # Calculate content-based widths
-    content_widths = []
-    for i, max_len in enumerate(max_lengths):
-        # Calculate width based on content, but respect minimum
-        content_based = max_len * char_width + min_padding
-        content_widths.append(max(content_based, min_widths[i]))
-    
-    # Calculate total needed width
-    total_needed = sum(content_widths)
-    
-    # If content fits within available width, use content-based widths
-    # Otherwise, scale proportionally while respecting minimums
-    if total_needed <= width_val:
-        # Distribute extra space to Наименование column (usually needs most space)
-        extra_space = width_val - total_needed
-        content_widths[1] += extra_space
-    else:
-        # Scale down proportionally, but keep minimums
-        min_total = sum(min_widths)
-        excess_content = total_needed - min_total
-        
-        if excess_content <= 0:
-            # All columns are at minimum, just distribute evenly
-            content_widths = min_widths.copy()
-            # Distribute remaining space to Наименование
-            remaining = width_val - min_total
-            if remaining > 0:
-                content_widths[1] += remaining
-        else:
-            # Scale down the excess proportionally
-            available_excess = width_val - min_total
-            if available_excess <= 0:
-                # Not enough space even for minimums, use minimums anyway
-                content_widths = min_widths.copy()
-            else:
-                scale_factor = available_excess / excess_content
-                scaled_widths = []
-                for i, content_width in enumerate(content_widths):
-                    if content_width > min_widths[i]:
-                        scaled = min_widths[i] + (content_width - min_widths[i]) * scale_factor
-                        scaled_widths.append(scaled)
-                    else:
-                        scaled_widths.append(min_widths[i])
-                
-                # Ensure total equals available width (adjust Наименование if needed)
-                total_scaled = sum(scaled_widths)
-                if abs(total_scaled - width_val) > 0.001:  # Allow small floating point differences
-                    scaled_widths[1] += (width_val - total_scaled)
-                
-                content_widths = scaled_widths
-    
-    return content_widths
+    return fixed_widths
 
 def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Inches(7.5)):
     """Add work description with table view for jobs"""
@@ -440,6 +374,9 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     for i, width in enumerate(column_widths):
         jobs_table.columns[i].width = Inches(width)
     
+    # Set minimum row height for all rows
+    jobs_table.rows[0].height = Inches(0.3)
+    
     # Header row
     header_cells = jobs_table.rows[0].cells
     headers = ['№', 'Наименование', 'Кол-во', 'Цена за единицу', 'Стоимость']
@@ -448,6 +385,8 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         cell.text = header_text
         # Set grey background
         set_cell_shading(cell, 'D3D3D3')
+        # Set vertical alignment to center
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
                 set_font_times_new_roman(run, size=12, bold=True, italic=False)
@@ -455,20 +394,25 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     
     # Add job rows
     for idx, job in enumerate(jobs_data, start=1):
-        row_cells = jobs_table.add_row().cells
+        new_row = jobs_table.add_row()
+        new_row.height = Inches(0.3)
+        row_cells = new_row.cells
         
         # №
+        row_cells[0].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run0 = row_cells[0].paragraphs[0].add_run(str(idx))
         set_font_times_new_roman(run0, size=12, bold=False, italic=False)
         
         # Наименование
+        row_cells[1].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run1 = row_cells[1].paragraphs[0].add_run(job.get('name', ''))
         set_font_times_new_roman(run1, size=12, bold=False, italic=False)
         
         # Кол-во (without unit)
         job_qty = job.get('qty', '0')
+        row_cells[2].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run2 = row_cells[2].paragraphs[0].add_run(job_qty)
         set_font_times_new_roman(run2, size=12, bold=False, italic=False)
@@ -477,14 +421,39 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         job_total = float(job.get('lineTotal', '0.00'))
         job_qty_float = float(job.get('qty', '1'))
         job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
+        row_cells[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run3 = row_cells[3].paragraphs[0].add_run(format_number_russian(job_price_after_markup))
         set_font_times_new_roman(run3, size=12, bold=False, italic=False)
         
         # Стоимость
+        row_cells[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run4 = row_cells[4].paragraphs[0].add_run(format_number_russian(job_total))
         set_font_times_new_roman(run4, size=12, bold=False, italic=False)
+    
+    # Add subtotal row
+    subtotal_table_row = jobs_table.add_row()
+    subtotal_table_row.height = Inches(0.3)
+    subtotal_row = subtotal_table_row.cells
+    
+    # Empty cells for columns 0-2
+    for i in range(3):
+        subtotal_row[i].text = ''
+        subtotal_row[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    
+    # Column 3: "Итого:" label
+    subtotal_row[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    subtotal_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+    subtotal_run = subtotal_row[3].paragraphs[0].add_run('Итого:')
+    set_font_times_new_roman(subtotal_run, size=12, bold=True, italic=False)
+    
+    # Column 4: Total sum
+    total_sum = sum(float(job.get('lineTotal', '0.00')) for job in jobs_data)
+    subtotal_row[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    subtotal_row[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+    total_run = subtotal_row[4].paragraphs[0].add_run(format_number_russian(total_sum))
+    set_font_times_new_roman(total_run, size=12, bold=True, italic=False)
     
     doc.add_paragraph()
 
@@ -500,9 +469,9 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
             cost_text = "Стоимость работ по заказу составляет: "
         cost_run1 = cost_para.add_run(cost_text)
         set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
-        # Amount (bold)
+        # Amount (not bold)
         cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
-        set_font_times_new_roman(cost_run2, size=12, bold=True, italic=False)
+        set_font_times_new_roman(cost_run2, size=12, bold=False, italic=False)
         # Text after amount (regular)
         cost_run3 = cost_para.add_run(f" ({total_spelled}) Без НДС.")
         set_font_times_new_roman(cost_run3, size=12, bold=False, italic=False)
@@ -514,9 +483,9 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
             cost_text = "Стоимость работ по заказу составляет: "
         cost_run1 = cost_para.add_run(cost_text)
         set_font_times_new_roman(cost_run1, size=12, bold=False, italic=False)
-        # Amount (bold)
+        # Amount (not bold)
         cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
-        set_font_times_new_roman(cost_run2, size=12, bold=True, italic=False)
+        set_font_times_new_roman(cost_run2, size=12, bold=False, italic=False)
     
     # Add new line after cost line
     doc.add_paragraph()

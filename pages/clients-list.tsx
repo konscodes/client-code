@@ -6,7 +6,7 @@ import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { getClientOrders, formatPhoneNumber, extractIdNumbers } from '../lib/utils';
 import { logger } from '../lib/logger';
-import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Table, LayoutGrid } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -15,6 +15,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { PaginationWithLinks } from '../components/ui/pagination-with-links';
 import { DateRangePicker } from '../components/date-range-picker';
+import { useIsMobile } from '../components/ui/use-mobile';
 
 interface ClientsListProps {
   onNavigate: (page: string, id?: string) => void;
@@ -39,6 +40,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     itemsPerPage: `${STORAGE_KEY_PREFIX}itemsPerPage`,
     sortBy: `${STORAGE_KEY_PREFIX}sortBy`,
     sortDirection: `${STORAGE_KEY_PREFIX}sortDirection`,
+    view: `${STORAGE_KEY_PREFIX}view`,
   };
   
   // Default values
@@ -131,6 +133,29 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() =>
     loadFromStorage(STORAGE_KEYS.sortDirection, 'desc')
   );
+  
+  // View state - load from localStorage, default to card on mobile
+  const isMobile = useIsMobile();
+  const [view, setView] = useState<'table' | 'card'>(() => {
+    const stored = loadFromStorage(STORAGE_KEYS.view, null);
+    // Auto-switch to card on mobile if no preference stored
+    if (stored === null && isMobile) return 'card';
+    return stored || 'table';
+  });
+  
+  // Auto-switch to card view on mobile
+  useEffect(() => {
+    if (isMobile && view === 'table') {
+      setView('card');
+    }
+  }, [isMobile]);
+  
+  // Save view preference to localStorage
+  useEffect(() => {
+    if (!isMobile) {
+      saveToStorage(STORAGE_KEYS.view, view);
+    }
+  }, [view, isMobile]);
   
   // Save filters to localStorage when they change
   useEffect(() => {
@@ -380,6 +405,88 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
     lastOrder: t('clients.lastOrder'),
   };
   
+  // Card view rendering
+  const renderCardView = () => {
+    if (isLoading) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: Math.min(itemsPerPage, 6) }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-[#E4E7E7] p-4">
+              <Skeleton className="h-5 w-24 mb-2" />
+              <Skeleton className="h-4 w-32 mb-4" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    if (filteredClients.length === 0) {
+      return null; // Empty state is handled above
+    }
+    
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {paginatedClients.map(client => {
+          const clientOrders = getClientOrders(orders, client.id);
+          const lastOrder = clientOrders.length > 0 
+            ? clientOrders.reduce((latest, order) => 
+                order.createdAt > latest.createdAt ? order : latest
+              )
+            : null;
+          
+          return (
+            <button
+              key={client.id}
+              onClick={() => onNavigate('client-detail', client.id)}
+              className="bg-white rounded-xl border border-[#E4E7E7] p-4 hover:border-[#1F744F] transition-colors text-left cursor-pointer"
+            >
+              <div className="mb-3">
+                <p className="text-[#1E2025] font-medium mb-1">
+                  {client.company && client.company.trim() !== '' 
+                    ? client.company 
+                    : (client.name && client.name !== 'Unknown' && client.name.trim() !== '' ? client.name : `Client #${extractIdNumbers(client.id)}`)}
+                </p>
+                {client.company && client.company.trim() !== '' && client.name && client.name !== 'Unknown' && client.name.trim() !== '' && (
+                  <p className="text-[#7C8085] text-sm">{client.name}</p>
+                )}
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                {visibleColumns.email && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('clients.email')}</span>
+                    <span className="text-[#1E2025] truncate ml-2">{client.email}</span>
+                  </div>
+                )}
+                {visibleColumns.phone && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('clients.phone')}</span>
+                    <span className="text-[#1E2025]">{formatPhoneNumber(client.phone)}</span>
+                  </div>
+                )}
+                {visibleColumns.orders && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('clients.orders')}</span>
+                    <span className="text-[#1E2025]">{clientOrders.length}</span>
+                  </div>
+                )}
+                {visibleColumns.lastOrder && (
+                  <div className="flex items-center justify-between pt-2 border-t border-[#E4E7E7]">
+                    <span className="text-[#7C8085]">{t('clients.lastOrder')}</span>
+                    <span className="text-[#1E2025]">
+                      {lastOrder ? formatDate(lastOrder.createdAt) : t('clients.noOrders')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+  
   // Helper function to render table header
   const renderTableHeader = (columnKey: ColumnKey, index: number) => {
     if (!visibleColumns[columnKey]) return null;
@@ -588,7 +695,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[#1E2025] mb-2">{t('clients.title')}</h1>
           <p className="text-[#555A60]">{t('clients.subtitle')}</p>
@@ -620,7 +727,34 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
           />
         </div>
         
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 ml-auto">
+          {/* View Switcher */}
+          {!isMobile && (
+            <div className="flex items-center gap-1 border border-[#E4E7E7] rounded-lg p-1 bg-white">
+              <button
+                onClick={() => setView('table')}
+                className={`p-1.5 rounded transition-colors ${
+                  view === 'table'
+                    ? 'bg-[#1F744F] text-white'
+                    : 'text-[#555A60] hover:bg-[#F7F8F8]'
+                }`}
+                aria-label={t('clients.tableView') || 'Table view'}
+              >
+                <Table size={16} />
+              </button>
+              <button
+                onClick={() => setView('card')}
+                className={`p-1.5 rounded transition-colors ${
+                  view === 'card'
+                    ? 'bg-[#1F744F] text-white'
+                    : 'text-[#555A60] hover:bg-[#F7F8F8]'
+                }`}
+                aria-label={t('clients.cardView') || 'Card view'}
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+          )}
           <Button
             variant="outline"
             onClick={() => setFiltersOpen(true)}
@@ -648,54 +782,21 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
         </div>
       </div>
       
-      {/* Clients table */}
-      <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
-        <div className="overflow-x-auto" style={{ position: 'relative' }}>
+      {/* Clients table or cards */}
+      {view === 'card' ? (
+        <>
           {isLoading ? (
-            // Loading state with skeleton rows
-            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
-                  <tr key={i}>
-                    {orderedVisibleColumns.map((col, colIndex) => {
-                      if (!visibleColumns[col]) return null;
-                      const isFirstColumn = colIndex === 0;
-                      const isCenterAlign = col === 'orders';
-                      const skeletonWidths: Record<ColumnKey, string> = {
-                        clientId: 'w-24',
-                        client: 'w-24',
-                        email: 'w-24',
-                        phone: 'w-20',
-                        orders: 'w-16',
-                        lastOrder: 'w-24',
-                      };
-                      return (
-                        <td 
-                          key={col} 
-                          className={`px-6 py-4 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : ''} ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
-                          style={isFirstColumn ? { 
-                            position: 'sticky', 
-                            left: 0, 
-                            zIndex: (filtersOpen || settingsOpen) ? 0 : 10, 
-                            minWidth: '150px',
-                            background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
-                          } : undefined}
-                        >
-                          <Skeleton className={`h-4 ${skeletonWidths[col]} ${isCenterAlign ? 'mx-auto' : ''}`} />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: Math.min(itemsPerPage, 6) }).map((_, i) => (
+                <div key={i} className="bg-white rounded-xl border border-[#E4E7E7] p-4">
+                  <Skeleton className="h-5 w-24 mb-2" />
+                  <Skeleton className="h-4 w-32 mb-4" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              ))}
+            </div>
           ) : filteredClients.length === 0 ? (
-            <div className="px-6 py-12 text-center">
+            <div className="bg-white rounded-xl border border-[#E4E7E7] px-6 py-12 text-center">
               {searchQuery ? (
                 <>
                   <p className="text-[#7C8085] mb-2">{t('clients.noClients')}</p>
@@ -714,43 +815,113 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
               )}
             </div>
           ) : (
-            <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-              <thead>
-                <tr>
-                  {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedClients.map(client => {
-                  const clientOrders = getClientOrders(orders, client.id);
-                  
-                  return (
-                    <tr 
-                      key={client.id}
-                      onClick={() => onNavigate('client-detail', client.id)}
-                      className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
-                      onMouseEnter={(e) => {
-                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
-                        if (stickyCell) {
-                          stickyCell.style.background = 'linear-gradient(to left, rgba(247,248,248,0) 0%, rgba(247,248,248,1) 20px, rgba(247,248,248,1) 100%)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
-                        if (stickyCell) {
-                          stickyCell.style.background = 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)';
-                        }
-                      }}
-                    >
-                      {orderedVisibleColumns.map((columnKey, index) => renderTableCell(columnKey, client, clientOrders, index))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            renderCardView()
           )}
+        </>
+      ) : (
+        <div className={`bg-white rounded-xl border border-[#E4E7E7] overflow-hidden ${filtersOpen || settingsOpen ? 'relative' : ''}`} style={filtersOpen || settingsOpen ? { zIndex: 0, position: 'relative' } : undefined}>
+          <div className="overflow-x-auto" style={{ position: 'relative' }}>
+            {isLoading ? (
+              // Loading state with skeleton rows
+              <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: Math.min(itemsPerPage, 10) }).map((_, i) => (
+                    <tr key={i}>
+                      {orderedVisibleColumns.map((col, colIndex) => {
+                        if (!visibleColumns[col]) return null;
+                        const isFirstColumn = colIndex === 0;
+                        const isCenterAlign = col === 'orders';
+                        const skeletonWidths: Record<ColumnKey, string> = {
+                          clientId: 'w-24',
+                          client: 'w-24',
+                          email: 'w-24',
+                          phone: 'w-20',
+                          orders: 'w-16',
+                          lastOrder: 'w-24',
+                        };
+                        return (
+                          <td 
+                            key={col} 
+                            className={`px-6 py-4 border-b border-[#E4E7E7] ${isCenterAlign ? 'text-center' : ''} ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
+                            style={isFirstColumn ? { 
+                              position: 'sticky', 
+                              left: 0, 
+                              zIndex: (filtersOpen || settingsOpen) ? 0 : 10, 
+                              minWidth: '150px',
+                              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+                            } : undefined}
+                          >
+                            <Skeleton className={`h-4 ${skeletonWidths[col]} ${isCenterAlign ? 'mx-auto' : ''}`} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : filteredClients.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                {searchQuery ? (
+                  <>
+                    <p className="text-[#7C8085] mb-2">{t('clients.noClients')}</p>
+                    <p className="text-[#7C8085]">{t('common.tryAdjustingSearch')}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[#7C8085] mb-4">{t('clients.noClients')}</p>
+                    <button
+                      onClick={() => onNavigate('client-detail', 'new')}
+                      className="px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
+                    >
+                      {t('clients.addFirstClient')}
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <table className="w-full min-w-[800px]" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                <thead>
+                  <tr>
+                    {orderedVisibleColumns.map((col, index) => renderTableHeader(col, index))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedClients.map(client => {
+                    const clientOrders = getClientOrders(orders, client.id);
+                    
+                    return (
+                      <tr 
+                        key={client.id}
+                        onClick={() => onNavigate('client-detail', client.id)}
+                        className="group hover:bg-[#F7F8F8] cursor-pointer transition-colors"
+                        onMouseEnter={(e) => {
+                          const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                          if (stickyCell) {
+                            stickyCell.style.background = 'linear-gradient(to left, rgba(247,248,248,0) 0%, rgba(247,248,248,1) 20px, rgba(247,248,248,1) 100%)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          const stickyCell = e.currentTarget.querySelector('td[data-sticky="true"]') as HTMLElement;
+                          if (stickyCell) {
+                            stickyCell.style.background = 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)';
+                          }
+                        }}
+                      >
+                        {orderedVisibleColumns.map((columnKey, index) => renderTableCell(columnKey, client, clientOrders, index))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       
       {filteredClients.length > 0 && (
         <div className="flex items-center justify-between">

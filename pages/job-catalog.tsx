@@ -206,7 +206,7 @@ export function JobCatalog({ onNavigate }: JobCatalogProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[#1E2025] mb-2">{t('jobCatalog.title')}</h1>
           <p className="text-[#555A60]">{t('jobCatalog.subtitle')}</p>
