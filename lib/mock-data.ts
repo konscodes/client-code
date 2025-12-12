@@ -559,5 +559,6 @@ export const mockCompanySettings: CompanySettings = {
   defaultMarkup: 20,
   invoicePrefix: 'INV',
   poPrefix: 'PO',
+  specPrefix: 'SPEC',
 };
 
