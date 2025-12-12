@@ -341,8 +341,8 @@ def calculate_column_widths(jobs_data, available_width):
         10,  # Column 0: № (number)
         0,   # Column 1: Наименование (name) - calculated as remaining space
         20,  # Column 2: Кол-во (quantity)
-        27,  # Column 3: Цена за единицу (unit price)
-        27,  # Column 4: Стоимость (total)
+        27,  # Column 3: Стоимость (unit price)
+        27,  # Column 4: Сумма (total)
     ]
     
     # Calculate remaining space for Наименование column
@@ -402,7 +402,7 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     
     # Header row
     header_cells = jobs_table.rows[0].cells
-    headers = ['№', 'Наименование', 'Кол-во', 'Цена за единицу', 'Стоимость']
+    headers = ['№', 'Наименование', 'Кол-во', 'Стоимость', 'Сумма']
     for i, header_text in enumerate(headers):
         cell = header_cells[i]
         cell.text = header_text
