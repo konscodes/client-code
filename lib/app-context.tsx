@@ -216,6 +216,7 @@ function dbRowToCompanySettings(row: any): CompanySettings {
     defaultMarkup: parseFloat(row.defaultMarkup),
     invoicePrefix: row.invoicePrefix,
     poPrefix: row.poPrefix,
+    specPrefix: row.specPrefix || 'SPEC',
     // Russian banking/legal fields
     legalForm: row.legal_form,
     inn: row.inn,
@@ -246,6 +247,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultMarkup: 20,
     invoicePrefix: 'INV',
     poPrefix: 'PO',
+    specPrefix: 'SPEC',
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -968,6 +970,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       defaultMarkup: mergedSettings.defaultMarkup,
       invoicePrefix: mergedSettings.invoicePrefix,
       poPrefix: mergedSettings.poPrefix,
+      specPrefix: mergedSettings.specPrefix,
       // Convert new banking fields to snake_case
       legal_form: mergedSettings.legalForm,
       inn: mergedSettings.inn,

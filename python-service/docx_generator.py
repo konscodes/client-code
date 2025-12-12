@@ -682,8 +682,12 @@ def generate_docx():
         doc.save(doc_buffer)
         doc_buffer.seek(0)
         
-        # Return file
-        filename = f"{doc_type}-{data.get('order', {}).get('id', 'document')}.docx"
+        # Generate filename using prefix from data and extract numbers from order ID
+        document_prefix = data.get('documentPrefix', doc_type)
+        order_id = data.get('order', {}).get('id', 'document')
+        # Extract numbers from order ID (e.g., 'order-22650' -> '22650')
+        order_numbers = re.sub(r'\D', '', str(order_id))
+        filename = f"{document_prefix}-{order_numbers}.docx"
         return send_file(
             doc_buffer,
             as_attachment=True,

@@ -94,6 +94,7 @@ export interface CompanySettings {
   defaultMarkup: number;
   invoicePrefix: string;
   poPrefix: string;
+  specPrefix: string;
   // Russian banking/legal fields
   legalForm?: string; // ООО, ИП, etc.
   inn?: string; // ИНН - Taxpayer ID

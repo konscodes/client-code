@@ -12,6 +12,7 @@ const PYTHON_SERVICE_URL =
 interface DocumentData {
   type: 'invoice' | 'po' | 'specification';
   locale?: string;
+  documentPrefix?: string; // Prefix for filename (e.g., 'smeta', 'kp', 'spec')
   company: {
     name: string;
     address: string;
@@ -79,9 +80,20 @@ function formatDocumentData(
     };
   });
   
+  // Determine document prefix based on type
+  let documentPrefix = '';
+  if (documentType === 'invoice') {
+    documentPrefix = companySettings.invoicePrefix.toLowerCase();
+  } else if (documentType === 'po') {
+    documentPrefix = companySettings.poPrefix.toLowerCase();
+  } else if (documentType === 'specification') {
+    documentPrefix = companySettings.specPrefix.toLowerCase();
+  }
+  
   const orderData: DocumentData = {
     type: documentType,
     locale: companySettings.locale,
+    documentPrefix,
     company: {
       name: companySettings.name,
       address: companySettings.address,

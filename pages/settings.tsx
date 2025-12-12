@@ -345,6 +345,19 @@ export function Settings({ onNavigate }: SettingsProps) {
                     {t('settings.poPrefixExample', { prefix: formData.poPrefix })}
                   </p>
                 </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="specPrefix">{t('settings.specPrefix')}</Label>
+                  <Input
+                    id="specPrefix"
+                    value={formData.specPrefix}
+                    onChange={(e) => handleChange('specPrefix', e.target.value)}
+                    placeholder="e.g., SPEC"
+                  />
+                  <p className="text-[#7C8085]">
+                    {t('settings.specPrefixExample', { prefix: formData.specPrefix })}
+                  </p>
+                </div>
               </div>
               
               <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
