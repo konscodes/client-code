@@ -1,5 +1,5 @@
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches, Mm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement
@@ -201,7 +201,7 @@ def set_cell_border(cell, **kwargs):
             borders.append(element)
     tcPr.append(borders)
 
-def add_company_header(doc, company_data, locale='ru-RU', available_width=Inches(7.5)):
+def add_company_header(doc, company_data, locale='ru-RU', available_width=Mm(190)):
     """Add company information header in Russian format using a table with border"""
     # Create header table
     header_table = doc.add_table(rows=1, cols=1)
@@ -266,7 +266,7 @@ def add_company_header(doc, company_data, locale='ru-RU', available_width=Inches
     
     doc.add_paragraph()
 
-def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', available_width=Inches(7.5)):
+def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', available_width=Mm(190)):
     """Add document header (Смета №, КП №, or Спецификация №)"""
     if doc_type == 'invoice':
         doc_label = "Смета №"
@@ -288,10 +288,10 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     
     # Create table for alignment - use full width
     header_table = doc.add_table(rows=2, cols=2)
-    # Extract inch value from Inches object
-    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
-    header_table.columns[0].width = Inches(width_val * 0.65)  # 65% for left content
-    header_table.columns[1].width = Inches(width_val * 0.35)  # 35% for date
+    # Extract mm value from Mm object
+    width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
+    header_table.columns[0].width = Mm(width_val * 0.65)  # 65% for left content
+    header_table.columns[1].width = Mm(width_val * 0.35)  # 35% for date
     
     # Left column: Document number and client
     left_cell = header_table.cell(0, 0)
@@ -333,33 +333,33 @@ def calculate_column_widths(jobs_data, available_width):
     """
     Calculate column widths with explicit fixed widths for consistent rendering
     across Word Online and Word Desktop.
-    Returns a list of widths in inches for each column.
+    Returns a list of widths in mm for each column.
     """
-    width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
+    width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
     
-    # Fixed widths for columns (in inches)
-    # Using explicit widths ensures consistent rendering across Word platforms
+    # Fixed widths for columns (in millimeters)
+    # Using explicit widths in mm ensures consistent rendering across regional Word settings
     fixed_widths = [
-        0.4,   # Column 0: № (number)
-        0.0,   # Column 1: Наименование (name) - calculated as remaining space
-        0.8,   # Column 2: Кол-во (quantity)
-        1.05,  # Column 3: Цена за единицу (unit price)
-        1.05,  # Column 4: Стоимость (total)
+        10,  # Column 0: № (number)
+        0,   # Column 1: Наименование (name) - calculated as remaining space
+        20,  # Column 2: Кол-во (quantity)
+        27,  # Column 3: Цена за единицу (unit price)
+        27,  # Column 4: Стоимость (total)
     ]
     
     # Calculate remaining space for Наименование column
     fixed_total = sum(fixed_widths)
     remaining_space = width_val - fixed_total
     
-    # Ensure minimum width for Наименование (at least 2 inches)
-    if remaining_space < 2.0:
-        remaining_space = 2.0
+    # Ensure minimum width for Наименование (at least 50 mm)
+    if remaining_space < 50:
+        remaining_space = 50
     
     fixed_widths[1] = remaining_space
     
     return fixed_widths
 
-def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Inches(7.5)):
+def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Mm(190)):
     """Add work description with table view for jobs"""
     if not jobs_data:
         doc.add_paragraph("Нет работ")
@@ -372,10 +372,10 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     # Calculate column widths based on content
     column_widths = calculate_column_widths(jobs_data, available_width)
     for i, width in enumerate(column_widths):
-        jobs_table.columns[i].width = Inches(width)
+        jobs_table.columns[i].width = Mm(width)
     
-    # Set minimum row height for all rows
-    jobs_table.rows[0].height = Inches(0.3)
+    # Set minimum row height for all rows (8mm ≈ 0.3 inches)
+    jobs_table.rows[0].height = Mm(8)
     
     # Header row
     header_cells = jobs_table.rows[0].cells
@@ -395,7 +395,7 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     # Add job rows
     for idx, job in enumerate(jobs_data, start=1):
         new_row = jobs_table.add_row()
-        new_row.height = Inches(0.3)
+        new_row.height = Mm(8)
         row_cells = new_row.cells
         
         # №
@@ -434,7 +434,7 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     
     # Add subtotal row
     subtotal_table_row = jobs_table.add_row()
-    subtotal_table_row.height = Inches(0.3)
+    subtotal_table_row.height = Mm(8)
     subtotal_row = subtotal_table_row.cells
     
     # Empty cells for columns 0-2
@@ -516,7 +516,7 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     
     doc.add_paragraph()
 
-def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_width=Inches(7.5)):
+def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_width=Mm(190)):
     """Add footer section with signature and contact info"""
     if not (locale and locale.startswith('ru')):
         return
@@ -526,10 +526,10 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_wi
     if doc_type == 'invoice' or doc_type == 'specification':
         # For invoices and specifications: 2-column layout with signatures only
         footer_table = doc.add_table(rows=1, cols=2)
-        # Extract inch value from Inches object
-        width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
-        footer_table.columns[0].width = Inches(width_val * 0.5)  # Исполнитель
-        footer_table.columns[1].width = Inches(width_val * 0.5)  # Заказчик
+        # Extract mm value from Mm object
+        width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
+        footer_table.columns[0].width = Mm(width_val * 0.5)  # Исполнитель
+        footer_table.columns[1].width = Mm(width_val * 0.5)  # Заказчик
         
         # Left column: Исполнитель
         left_cell = footer_table.cell(0, 0)
@@ -561,10 +561,10 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_wi
     else:
         # For PO: 2-column layout - left: director info, right: contact info - use full width
         footer_table = doc.add_table(rows=1, cols=2)
-        # Extract inch value from Inches object
-        width_val = available_width.inches if hasattr(available_width, 'inches') else float(available_width)
-        footer_table.columns[0].width = Inches(width_val * 0.55)  # Director info (55%)
-        footer_table.columns[1].width = Inches(width_val * 0.45)  # Contact info (45%)
+        # Extract mm value from Mm object
+        width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
+        footer_table.columns[0].width = Mm(width_val * 0.55)  # Director info (55%)
+        footer_table.columns[1].width = Mm(width_val * 0.45)  # Contact info (45%)
         
         # Left column: Director info
         left_cell = footer_table.cell(0, 0)
@@ -598,16 +598,16 @@ def generate_document(data, doc_type):
     """Generate DOCX document from data"""
     doc = Document()
     
-    # Set narrow margins (0.5 inches on all sides)
+    # Set narrow margins (12.7mm ≈ 0.5 inches on all sides)
     sections = doc.sections
     for section in sections:
-        section.top_margin = Inches(0.5)
-        section.bottom_margin = Inches(0.5)
-        section.left_margin = Inches(0.5)
-        section.right_margin = Inches(0.5)
+        section.top_margin = Mm(12.7)
+        section.bottom_margin = Mm(12.7)
+        section.left_margin = Mm(12.7)
+        section.right_margin = Mm(12.7)
     
-    # Available width with narrow margins: 8.5" - 0.5" - 0.5" = 7.5"
-    AVAILABLE_WIDTH = Inches(7.5)
+    # Available width with narrow margins: 215.9mm (A4) - 12.7mm - 12.7mm = 190.5mm
+    AVAILABLE_WIDTH = Mm(190)
     
     # Set default font to Times New Roman, size 12
     style = doc.styles['Normal']
