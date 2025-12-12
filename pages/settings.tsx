@@ -8,10 +8,11 @@ import { PhoneInput } from '../components/ui/phone-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Save } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { localeToLanguage } from '../lib/i18n';
 import i18n from '../lib/i18n';
+import { logger } from '../lib/logger';
 import type { CompanySettings } from '../lib/types';
 
 interface SettingsProps {
@@ -23,6 +24,7 @@ export function Settings({ onNavigate }: SettingsProps) {
   const { companySettings, updateCompanySettings } = useApp();
   const [formData, setFormData] = useState<CompanySettings>(companySettings);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [localeOpen, setLocaleOpen] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
   
@@ -46,12 +48,22 @@ export function Settings({ onNavigate }: SettingsProps) {
   };
   
   const handleSave = async () => {
-    await updateCompanySettings(formData);
-    setHasChanges(false);
-    toast.success(t('settings.savedSuccessfully'));
+    if (isSaving) return; // Prevent double-clicking
     
-    // Update i18n language if locale changed
-    i18n.changeLanguage(localeToLanguage(formData.locale));
+    setIsSaving(true);
+    try {
+      await updateCompanySettings(formData);
+      setHasChanges(false);
+      toast.success(t('settings.savedSuccessfully'));
+      
+      // Update i18n language if locale changed
+      i18n.changeLanguage(localeToLanguage(formData.locale));
+    } catch (error) {
+      logger.error('Error saving settings', error);
+      toast.error(t('settings.saveFailed') || 'Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   return (
@@ -65,10 +77,20 @@ export function Settings({ onNavigate }: SettingsProps) {
         {hasChanges && (
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors whitespace-nowrap"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save size={20} aria-hidden="true" />
-            {t('common.saveChanges')}
+            {isSaving ? (
+              <>
+                <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+                {t('common.saving')}
+              </>
+            ) : (
+              <>
+                <Save size={20} aria-hidden="true" />
+                {t('common.saveChanges')}
+              </>
+            )}
           </button>
         )}
       </div>

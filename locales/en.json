@@ -146,6 +146,7 @@
     "jobLineItemVariables": "Job/Line Item Variables",
     "forEachJob": "For each job in the order:",
     "savedSuccessfully": "Settings saved successfully",
+    "saveFailed": "Failed to save settings",
     "banking": "Banking",
     "bankingInformation": "Banking Information",
     "legalForm": "Legal Form",
