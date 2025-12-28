@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * XML to Supabase Migration Script
+ * Selective Migration Script - Only Inserts Missing Records
  * 
- * This script migrates data from servicemk3.xml to Supabase database.
- * Follows the mapping rules defined in docs/XML_MIGRATION_GUIDE.md
+ * This script migrates only NEW clients and orders from XML that don't exist in the database.
+ * It does NOT update existing records - only inserts missing ones.
  */
 
 import { XMLParser } from 'fast-xml-parser';
@@ -46,7 +46,6 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 function mapStatus(russianStatus: string): string {
-  // Default to 'proposal' for unknown statuses instead of 'completed'
   return STATUS_MAP[russianStatus] || 'proposal';
 }
 
@@ -54,13 +53,10 @@ function mapStatus(russianStatus: string): string {
 function parseDate(dateStr: string | undefined): Date {
   if (!dateStr) return new Date();
   
-  // Handle formats: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD"
   const cleaned = dateStr.trim();
   if (cleaned.length === 10) {
-    // YYYY-MM-DD
     return new Date(cleaned + 'T00:00:00Z');
   } else if (cleaned.length >= 19) {
-    // YYYY-MM-DD HH:MM:SS
     return new Date(cleaned.replace(' ', 'T') + 'Z');
   }
   
@@ -74,35 +70,26 @@ function parseNumber(value: string | undefined): number {
 }
 
 // Helper function to convert markup ratio
-// XML format: WorksRatio = "1,5" means 1.5x multiplier = 50% markup
-// Supabase format: lineMarkup = 50 means 50% markup
 function convertMarkup(ratio: string | undefined): number {
   if (!ratio) return 0;
   const numRatio = parseNumber(ratio);
-  // Convert ratio (1.5) to percentage markup (50%)
   const markup = (numRatio - 1) * 100;
   // Round to 2 decimal places to avoid floating-point precision errors
   return Math.round(markup * 100) / 100;
 }
 
 // Helper function to trim and clean string
-// ⚠️ IMPORTANT: XML parser may return arrays instead of strings for single values
 function cleanString(value: string | string[] | undefined): string {
   if (!value) return '';
-  // Handle arrays (XML parser may return ["value"] instead of "value")
   if (Array.isArray(value)) {
     return value[0] ? String(value[0]).trim() : '';
   }
-  // If value is already a string, use it directly
   if (typeof value === 'string') {
     return value.trim();
   }
-  // If it's an object, return empty string (don't convert to [object Object])
   if (typeof value === 'object') {
-    console.warn('Warning: Attempted to clean an object as string, returning empty string');
     return '';
   }
-  // For other types, convert to string
   return String(value).trim();
 }
 
@@ -120,6 +107,7 @@ interface XMLClient {
   ClientBankRasSchet?: string;
   ClientBankKorSchet?: string;
   ClientBankBik?: string;
+  ClientAddTime?: string;
 }
 
 interface XMLContact {
@@ -138,7 +126,6 @@ interface XMLOrder {
   OrderStatus?: string;
   OrderName?: string;
   OrderType?: string;
-  OrderComments?: string;
   OrderTime?: string;
 }
 
@@ -153,10 +140,96 @@ interface XMLWork {
   ID?: string;
 }
 
-async function migrateClients(xmlData: any): Promise<Map<string, string>> {
-  console.log('\n=== Migrating Clients ===');
+// Fetch existing client IDs from database
+async function getExistingClientIds(): Promise<Set<string>> {
+  console.log('Fetching existing client IDs from database...');
+  const existingIds = new Set<string>();
+  let offset = 0;
+  const limit = 1000;
+
+  while (true) {
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('id')
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('Error fetching clients:', error);
+      break;
+    }
+
+    if (!clients || clients.length === 0) {
+      break;
+    }
+
+    for (const client of clients) {
+      const match = client.id.match(/^client-(\d+)$/);
+      if (match) {
+        existingIds.add(match[1]);
+      }
+    }
+
+    offset += limit;
+    if (clients.length < limit) {
+      break;
+    }
+  }
+
+  console.log(`Found ${existingIds.size} existing clients in database`);
+  return existingIds;
+}
+
+// Fetch existing order IDs from database
+async function getExistingOrderIds(): Promise<Set<string>> {
+  console.log('Fetching existing order IDs from database...');
+  const existingIds = new Set<string>();
+  let offset = 0;
+  const limit = 1000;
+
+  while (true) {
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('id')
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      break;
+    }
+
+    if (!orders || orders.length === 0) {
+      break;
+    }
+
+    for (const order of orders) {
+      const match = order.id.match(/(?:order-|ORD-XML-)(\d+)/);
+      if (match) {
+        existingIds.add(match[1]);
+      }
+    }
+
+    offset += limit;
+    if (orders.length < limit) {
+      break;
+    }
+  }
+
+  console.log(`Found ${existingIds.size} existing orders in database`);
+  return existingIds;
+}
+
+// Migrate only missing clients
+async function migrateMissingClients(xmlData: any, existingClientIds: Set<string>): Promise<Map<string, string>> {
+  console.log('\n=== Migrating Missing Clients ===');
   
-  // Handle both array and single object cases
+  // First, build clientIdMap with ALL existing clients from database
+  // This ensures orders can reference any client that exists in the database
+  const clientIdMap = new Map<string, string>();
+  for (const clientId of existingClientIds) {
+    clientIdMap.set(clientId, `client-${clientId}`);
+  }
+  console.log(`Added ${existingClientIds.size} existing clients to client ID map`);
+  
   let tblMain: XMLClient[] = [];
   if (xmlData?.dataroot?.tblMain) {
     tblMain = Array.isArray(xmlData.dataroot.tblMain) 
@@ -170,8 +243,6 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
       ? xmlData.dataroot.tblContacts
       : [xmlData.dataroot.tblContacts];
   }
-  
-  console.log(`Found ${tblMain.length} clients and ${tblContacts.length} contacts in XML`);
   
   // Group contacts by client ID
   const contactsByClient = new Map<string, XMLContact[]>();
@@ -192,26 +263,30 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
     });
   }
   
-  const clientIdMap = new Map<string, string>(); // XML ClientID → Supabase ID
   const clientsToInsert: any[] = [];
   
   for (const client of tblMain) {
-    const xmlClientId = client.ClientID;
+    const xmlClientId = client.ClientID?.toString();
+    if (!xmlClientId) continue;
+    
+    // Skip if client already exists (but it's already in clientIdMap)
+    if (existingClientIds.has(xmlClientId)) {
+      continue;
+    }
+    
+    // Add new client to map
     const supabaseClientId = `client-${xmlClientId}`;
     clientIdMap.set(xmlClientId, supabaseClientId);
     
     // Get most recent contact
     const contacts = contactsByClient.get(xmlClientId) || [];
     const primaryContact = contacts[0];
-    
-    // Get additional contacts (skip the first one)
     const additionalContacts = contacts.slice(1);
     
-    // Build name, phone, email from primary contact or fallback
+    // Build name, phone, email
     const name = cleanString(primaryContact?.ContactName) || '';
     const phone = cleanString(primaryContact?.ContactMobilePhone) || cleanString(client.ClientPhone) || '';
     
-    // Extract email more carefully - ensure it's a string
     let email = '';
     if (primaryContact?.ContactEmail) {
       const contactEmail = primaryContact.ContactEmail;
@@ -221,8 +296,8 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
       const clientEmail = client.ClientEmail;
       email = typeof clientEmail === 'string' ? clientEmail.trim() : '';
     }
-    // CRITICAL: Use ClientAddTime from tblMain (actual client creation date)
-    // Fallback to ContactAddTime only if ClientAddTime is missing
+    
+    // Use ClientAddTime from tblMain
     const createdAt = client.ClientAddTime 
       ? parseDate(client.ClientAddTime)
       : (primaryContact?.ContactAddTime 
@@ -278,31 +353,45 @@ async function migrateClients(xmlData: any): Promise<Map<string, string>> {
     clientsToInsert.push(clientData);
   }
   
-  // Insert clients in batches
+  if (clientsToInsert.length === 0) {
+    console.log('No new clients to insert');
+    return clientIdMap;
+  }
+  
+  console.log(`Prepared ${clientsToInsert.length} new clients to insert`);
+  
+  // Insert clients in batches using INSERT
   const batchSize = 100;
   let inserted = 0;
   for (let i = 0; i < clientsToInsert.length; i += batchSize) {
     const batch = clientsToInsert.slice(i, i + batchSize);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('clients')
-      .upsert(batch, { onConflict: 'id' });
+      .insert(batch)
+      .select();
     
     if (error) {
-      console.error(`Error inserting clients batch ${i / batchSize + 1}:`, error);
+      // If error is about duplicate, that's fine - we're using insert to avoid updates
+      if (error.code === '23505') { // Unique violation
+        console.log(`Batch ${i / batchSize + 1}: Some clients already exist (skipped)`);
+      } else {
+        console.error(`Error inserting clients batch ${i / batchSize + 1}:`, error);
+      }
     } else {
-      inserted += batch.length;
-      console.log(`Inserted ${inserted}/${clientsToInsert.length} clients`);
+      const count = data?.length || 0;
+      inserted += count;
+      console.log(`Inserted ${inserted}/${clientsToInsert.length} new clients (batch had ${count} inserted)`);
     }
   }
   
-  console.log(`✓ Migrated ${inserted} clients`);
+  console.log(`✓ Migrated ${inserted} new clients`);
   return clientIdMap;
 }
 
-async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xmlContent: string): Promise<void> {
-  console.log('\n=== Migrating Orders ===');
+// Migrate only missing orders
+async function migrateMissingOrders(xmlData: any, clientIdMap: Map<string, string>, existingOrderIds: Set<string>, xmlContent: string): Promise<void> {
+  console.log('\n=== Migrating Missing Orders ===');
   
-  // Handle both array and single object cases
   let tblOrders: XMLOrder[] = [];
   if (xmlData?.dataroot?.tblOrders) {
     tblOrders = Array.isArray(xmlData.dataroot.tblOrders)
@@ -317,15 +406,12 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       : [xmlData.dataroot.tblWorks];
   }
   
-  // If works not found in main parse, try parsing works section separately using regex
+  // If works not found, try regex fallback
   if (tblWorks.length === 0) {
     console.log('Works not found in main parse, extracting works section separately...');
     const worksMatch = xmlContent.match(/<tblWorks>[\s\S]*?<\/tblWorks>/g);
     
     if (worksMatch && worksMatch.length > 0) {
-      console.log(`Found ${worksMatch.length} tblWorks entries via regex`);
-      
-      // Extract works section and wrap in dataroot
       const worksSection = worksMatch.join('\n');
       const wrappedWorks = `<dataroot>${worksSection}</dataroot>`;
       
@@ -351,27 +437,35 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
     }
   }
   
-  console.log(`Found ${tblOrders.length} orders and ${tblWorks.length} works in XML`);
-  console.log(`Client ID map has ${clientIdMap.size} entries`);
-  
-  // First, insert orders
+  // Filter to only missing orders
   const ordersToInsert: any[] = [];
   
   for (const order of tblOrders) {
-    const xmlClientId = order.OrderClientID;
-    const supabaseClientId = clientIdMap.get(xmlClientId);
+    const xmlOrderId = order.OrderID?.toString();
+    if (!xmlOrderId) continue;
     
-    if (!supabaseClientId) {
-      console.warn(`Skipping order ${order.OrderID}: client ${xmlClientId} not found`);
+    // Skip if order already exists
+    if (existingOrderIds.has(xmlOrderId)) {
       continue;
     }
     
-    const supabaseOrderId = `order-${order.OrderID}`;
+    const xmlClientId = order.OrderClientID?.toString().trim();
+    if (!xmlClientId) {
+      console.warn(`Skipping order ${xmlOrderId}: missing client ID`);
+      continue;
+    }
+    
+    const supabaseClientId = clientIdMap.get(xmlClientId);
+    
+    if (!supabaseClientId) {
+      console.warn(`Skipping order ${xmlOrderId}: client ${xmlClientId} not found in clientIdMap (map has ${clientIdMap.size} entries)`);
+      continue;
+    }
+    
+    const supabaseOrderId = `order-${xmlOrderId}`;
     const createdAt = parseDate(order.OrderDate);
     const updatedAt = parseDate(order.OrderAddTime || order.OrderDate);
     
-    // Parse OrderTime to integer (time estimate in days)
-    // If OrderTime is not present or invalid, leave it undefined (frontend will handle default)
     let timeEstimate: number | undefined;
     if (order.OrderTime) {
       const parsed = parseInt(order.OrderTime.toString().trim(), 10);
@@ -393,13 +487,19 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       orderTitle: cleanString(order.OrderName) || '',
     };
     
-    // Only include timeEstimate if it was successfully parsed
     if (timeEstimate !== undefined) {
       orderData.timeEstimate = timeEstimate;
     }
     
     ordersToInsert.push(orderData);
   }
+  
+  if (ordersToInsert.length === 0) {
+    console.log('No new orders to insert');
+    return;
+  }
+  
+  console.log(`Prepared ${ordersToInsert.length} new orders to insert`);
   
   // Insert orders in batches
   const batchSize = 100;
@@ -408,66 +508,45 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
     const batch = ordersToInsert.slice(i, i + batchSize);
     const { error } = await supabase
       .from('orders')
-      .upsert(batch, { onConflict: 'id' });
+      .insert(batch)
+      .select();
     
     if (error) {
-      console.error(`Error inserting orders batch ${i / batchSize + 1}:`, error);
+      if (error.code === '23505') {
+        console.log(`Batch ${i / batchSize + 1}: Some orders already exist (skipped)`);
+      } else {
+        console.error(`Error inserting orders batch ${i / batchSize + 1}:`, error);
+      }
     } else {
       inserted += batch.length;
-      console.log(`Inserted ${inserted}/${ordersToInsert.length} orders`);
+      console.log(`Inserted ${inserted}/${ordersToInsert.length} new orders`);
     }
   }
   
-  console.log(`✓ Migrated ${inserted} orders`);
+  console.log(`✓ Migrated ${inserted} new orders`);
   
-  // Now migrate order jobs - need to fetch all orders to create mapping
-  if (tblWorks.length > 0) {
-    console.log('\n=== Migrating Order Jobs ===');
+  // Now migrate order jobs for the new orders
+  if (tblWorks.length > 0 && ordersToInsert.length > 0) {
+    console.log('\n=== Migrating Order Jobs for New Orders ===');
     
-    // Fetch all orders to create mapping
-    let allOrders: any[] = [];
-    let offset = 0;
-    const limit = 1000;
-    
-    while (true) {
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('id')
-        .range(offset, offset + limit - 1);
-      
-      if (ordersError) {
-        console.error('Error fetching orders:', ordersError);
-        break;
-      }
-      
-      if (!orders || orders.length === 0) {
-        break;
-      }
-      
-      allOrders = allOrders.concat(orders);
-      offset += limit;
-      
-      if (orders.length < limit) {
-        break;
-      }
-    }
+    // Get the order IDs we just inserted
+    const newOrderIds = new Set(ordersToInsert.map(o => o.id));
     
     // Create mapping: XML OrderID -> Supabase order ID
     const orderIdMap = new Map<string, string>();
-    for (const order of allOrders) {
-      const match = order.id.match(/order-(\d+)/);
+    for (const orderData of ordersToInsert) {
+      const match = orderData.id.match(/order-(\d+)/);
       if (match) {
         const xmlOrderId = match[1];
-        orderIdMap.set(xmlOrderId, order.id);
-        orderIdMap.set(xmlOrderId.toString(), order.id);
+        orderIdMap.set(xmlOrderId, orderData.id);
       }
     }
     
-    // Group works by order and process
+    // Group works by order
     const worksByOrder = new Map<string, XMLWork[]>();
     for (const work of tblWorks) {
       const orderId = work.WorksOrderID?.toString().trim();
-      if (orderId) {
+      if (orderId && orderIdMap.has(orderId)) {
         if (!worksByOrder.has(orderId)) {
           worksByOrder.set(orderId, []);
         }
@@ -485,22 +564,15 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
     }
     
     const orderJobsToInsert: any[] = [];
-    let skipped = 0;
     
     for (const [xmlOrderId, works] of worksByOrder.entries()) {
-      const supabaseOrderId = orderIdMap.get(xmlOrderId) || orderIdMap.get(xmlOrderId.toString());
-      
-      if (!supabaseOrderId) {
-        skipped += works.length;
-        continue;
-      }
+      const supabaseOrderId = orderIdMap.get(xmlOrderId);
+      if (!supabaseOrderId) continue;
       
       for (let i = 0; i < works.length; i++) {
         const work = works[i];
         const jobId = `oj-${xmlOrderId}-${i + 1}`;
         
-        // Convert WorksRatio to markup percentage
-        // WorksRatio = "1,5" means 1.5x multiplier = 50% markup
         const lineMarkup = convertMarkup(work.WorksRatio);
         
         const jobData: any = {
@@ -510,8 +582,6 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
           jobName: cleanString(work.WorksName) || 'Unknown',
           description: cleanString(work.WorksName) || 'Unknown',
           quantity: parseNumber(work.WorksQuantity),
-          // Use WorksFirstPrice (base price) instead of WorksPrice (price with markup)
-          // WorksPrice = WorksFirstPrice * WorksRatio, so we store the base price
           unitPrice: parseNumber(work.WorksFirstPrice) || parseNumber(work.WorksPrice),
           lineMarkup: lineMarkup,
           taxApplicable: true,
@@ -522,35 +592,41 @@ async function migrateOrders(xmlData: any, clientIdMap: Map<string, string>, xml
       }
     }
     
-    console.log(`Prepared ${orderJobsToInsert.length} order jobs to insert`);
-    if (skipped > 0) {
-      console.log(`Skipped ${skipped} works (order not found)`);
-    }
-    
-    // Insert order jobs in batches
-    inserted = 0;
-    for (let i = 0; i < orderJobsToInsert.length; i += batchSize) {
-      const batch = orderJobsToInsert.slice(i, i + batchSize);
-      const { error } = await supabase
-        .from('order_jobs')
-        .upsert(batch, { onConflict: 'id' });
+    if (orderJobsToInsert.length > 0) {
+      console.log(`Prepared ${orderJobsToInsert.length} order jobs to insert`);
       
-      if (error) {
-        console.error(`Error inserting order jobs batch ${i / batchSize + 1}:`, error);
-      } else {
-        inserted += batch.length;
-        if (inserted % 1000 === 0 || inserted === orderJobsToInsert.length) {
-          console.log(`Inserted ${inserted}/${orderJobsToInsert.length} order jobs`);
+      inserted = 0;
+      for (let i = 0; i < orderJobsToInsert.length; i += batchSize) {
+        const batch = orderJobsToInsert.slice(i, i + batchSize);
+        const { error } = await supabase
+          .from('order_jobs')
+          .insert(batch)
+          .select();
+        
+        if (error) {
+          if (error.code === '23505') {
+            console.log(`Batch ${i / batchSize + 1}: Some order jobs already exist (skipped)`);
+          } else {
+            console.error(`Error inserting order jobs batch ${i / batchSize + 1}:`, error);
+          }
+        } else {
+          inserted += batch.length;
+          if (inserted % 1000 === 0 || inserted === orderJobsToInsert.length) {
+            console.log(`Inserted ${inserted}/${orderJobsToInsert.length} order jobs`);
+          }
         }
       }
+      
+      console.log(`✓ Migrated ${inserted} order jobs`);
     }
-    
-    console.log(`✓ Migrated ${inserted} order jobs`);
   }
 }
 
 async function main() {
-  console.log('Starting XML to Supabase migration...\n');
+  console.log('='.repeat(80));
+  console.log('SELECTIVE MIGRATION - Only Missing Records');
+  console.log('='.repeat(80));
+  console.log('This script will ONLY insert new records, NOT update existing ones.\n');
   
   const xmlFilePath = path.join(__dirname, '../servicemk3.xml');
   
@@ -562,26 +638,16 @@ async function main() {
   console.log(`Reading XML file: ${xmlFilePath}`);
   const xmlContent = fs.readFileSync(xmlFilePath, 'utf-8');
   
-  console.log('Parsing XML...');
-  
-  // Pre-process XML to fix invalid tags (email addresses as tag names)
-  console.log('Pre-processing XML to fix invalid tags...');
+  // Pre-process XML
   let fixedXmlContent = xmlContent.replace(/<([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]+)>/g, (match, email) => {
-    // Replace invalid email tag with a valid tag containing the email as text
     return `<Email>${email}</Email>`;
   });
-  
-  // Also fix unclosed email tags in ClientEmail fields - handle cases like <ClientEmail>Text <email@domain.com></ClientEmail>
   fixedXmlContent = fixedXmlContent.replace(/<ClientEmail>([^<]*)<([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]+)><\/ClientEmail>/g, 
     '<ClientEmail>$1$2</ClientEmail>');
-  
-  // Fix any remaining invalid XML tags that might be email addresses or other invalid characters
-  // This is a more aggressive fix for any remaining issues
   fixedXmlContent = fixedXmlContent.replace(/<([^>]*@[^>]*)>/g, (match) => {
-    // If it looks like an email in a tag, escape it or remove the tag markers
     const emailMatch = match.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]+)/);
     if (emailMatch) {
-      return emailMatch[1]; // Just return the email without tag markers
+      return emailMatch[1];
     }
     return match;
   });
@@ -592,23 +658,9 @@ async function main() {
     textNodeName: '_text',
     parseAttributeValue: true,
     trimValues: true,
-    alwaysCreateTextNode: false,
-    stopNodes: [], // Don't stop parsing on any nodes
-    processEntities: true,
-    ignoreDeclaration: true,
-    ignorePiTags: true,
-    parseTagValue: true,
-    isArray: (name, jPath, isLeafNode, isAttribute) => {
-      // Force arrays for table elements - they always appear multiple times
-      const tableNames = ['tblMain', 'tblContacts', 'tblOrders', 'tblWorks', 
-                          'tblCatalogMatarials', 'tblCatalogWorks', 'tblContracts',
-                          'tblMaterials', 'tblSettings', 'tblDocs', 'tblProcedures',
-                          'tblUsers', 'tblEmployees'];
+    isArray: (name) => {
+      const tableNames = ['tblMain', 'tblContacts', 'tblOrders', 'tblWorks'];
       if (tableNames.includes(name)) {
-        return true;
-      }
-      // Also check if path contains the table name
-      if (jPath && tableNames.some(tn => jPath.includes(tn))) {
         return true;
       }
       return false;
@@ -620,37 +672,30 @@ async function main() {
     xmlData = parser.parse(fixedXmlContent);
   } catch (parseError: any) {
     console.error('XML Parse Error:', parseError.message);
-    console.error('Line:', parseError.lineNumber);
-    throw parseError;
-  }
-  
-  // Check if we got partial data
-  if (!xmlData?.dataroot) {
-    console.error('Error: Could not parse XML data root');
     process.exit(1);
   }
   
   if (!xmlData?.dataroot) {
-    console.error('Error: Invalid XML structure. Expected <dataroot> root element.');
+    console.error('Error: Invalid XML structure');
     process.exit(1);
   }
-  
-  // Check structure (minimal logging for production)
-  const dataroot = xmlData.dataroot;
-  console.log('XML Structure check:');
-  console.log(`- tblMain: ${Array.isArray(dataroot.tblMain) ? dataroot.tblMain.length : (dataroot.tblMain ? 1 : 0)} entries`);
-  console.log(`- tblOrders: ${Array.isArray(dataroot.tblOrders) ? dataroot.tblOrders.length : (dataroot.tblOrders ? 1 : 0)} entries`);
-  console.log(`- tblWorks: ${Array.isArray(dataroot.tblWorks) ? dataroot.tblWorks.length : (dataroot.tblWorks ? 1 : 0)} entries (will try fallback parsing if 0)`);
   
   try {
-    // Migrate clients first
-    const clientIdMap = await migrateClients(xmlData);
+    // Step 1: Get existing IDs from database
+    const existingClientIds = await getExistingClientIds();
+    const existingOrderIds = await getExistingOrderIds();
     
-    // Migrate orders (depends on clients) - pass xmlContent for works parsing fallback
-    await migrateOrders(xmlData, clientIdMap, fixedXmlContent);
+    // Step 2: Migrate missing clients first
+    const clientIdMap = await migrateMissingClients(xmlData, existingClientIds);
     
-    console.log('\n=== Migration Complete ===');
-    console.log('✓ All data migrated successfully');
+    // Step 3: Migrate missing orders (depends on clients)
+    await migrateMissingOrders(xmlData, clientIdMap, existingOrderIds, fixedXmlContent);
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('=== Migration Complete ===');
+    console.log('✓ Only new records were inserted');
+    console.log('✓ Existing records were NOT modified');
+    console.log('='.repeat(80));
     
   } catch (error) {
     console.error('\n=== Migration Failed ===');
@@ -660,4 +705,3 @@ async function main() {
 }
 
 main();
-

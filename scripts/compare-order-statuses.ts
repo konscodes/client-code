@@ -1,9 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * Compare Order Statuses Script
+ * Compare XML Backup to Database Script
  * 
- * Compares order statuses between XML file and Supabase database
- * to identify any discrepancies.
+ * Compares XML backup file with Supabase database to identify:
+ * - Missing clients (in XML but not in database)
+ * - Missing orders (in XML but not in database)
+ * - Order status discrepancies
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -49,8 +51,23 @@ function mapStatus(russianStatus: string): string {
   return STATUS_MAP[russianStatus] || 'proposal';
 }
 
+// Helper function to clean string (handle arrays from XML parser)
+function cleanString(value: string | string[] | undefined): string {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    return value[0] ? String(value[0]).trim() : '';
+  }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  return String(value).trim();
+}
+
 async function compareOrderStatuses() {
-  console.log('Starting order status comparison...\n');
+  console.log('='.repeat(80));
+  console.log('XML BACKUP vs PRODUCTION DATABASE COMPARISON');
+  console.log('='.repeat(80));
+  console.log();
 
   // Read XML file
   const xmlFilePath = path.join(__dirname, '../servicemk3.xml');
@@ -61,6 +78,11 @@ async function compareOrderStatuses() {
 
   console.log('Reading and parsing XML file...');
   const xmlContent = fs.readFileSync(xmlFilePath, 'utf-8');
+
+  // Extract generation date
+  const generatedMatch = xmlContent.match(/generated="([^"]+)"/);
+  const generatedDate = generatedMatch ? generatedMatch[1] : 'unknown';
+  console.log(`XML Backup Generated: ${generatedDate}\n`);
 
   // Pre-process XML to fix invalid tags
   let fixedXmlContent = xmlContent.replace(/<([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]+)>/g, (match, email) => {
@@ -99,7 +121,17 @@ async function compareOrderStatuses() {
     process.exit(1);
   }
 
+  // Extract clients from XML
+  console.log('Extracting clients from XML...');
+  let tblMain: any[] = [];
+  if (xmlData?.dataroot?.tblMain) {
+    tblMain = Array.isArray(xmlData.dataroot.tblMain)
+      ? xmlData.dataroot.tblMain
+      : [xmlData.dataroot.tblMain];
+  }
+
   // Extract orders from XML
+  console.log('Extracting orders from XML...');
   let tblOrders: any[] = [];
   if (xmlData?.dataroot?.tblOrders) {
     tblOrders = Array.isArray(xmlData.dataroot.tblOrders)
@@ -107,6 +139,7 @@ async function compareOrderStatuses() {
       : [xmlData.dataroot.tblOrders];
   }
 
+  console.log(`Found ${tblMain.length} clients in XML`);
   console.log(`Found ${tblOrders.length} orders in XML\n`);
 
   // Create mapping: XML OrderID -> Expected DB Status
@@ -122,11 +155,108 @@ async function compareOrderStatuses() {
 
   console.log(`Created status map for ${xmlStatusMap.size} orders from XML\n`);
 
+  // ============================================================================
+  // CHECK FOR MISSING CLIENTS
+  // ============================================================================
+  console.log('='.repeat(80));
+  console.log('CHECKING FOR MISSING CLIENTS');
+  console.log('='.repeat(80));
+  
+  const xmlClientIds = new Set<string>();
+  const xmlClientData = new Map<string, any>();
+  for (const client of tblMain) {
+    const clientId = client.ClientID?.toString();
+    if (clientId) {
+      xmlClientIds.add(clientId);
+      xmlClientData.set(clientId, {
+        ClientID: clientId,
+        ClientCompany: cleanString(client.ClientCompany),
+        ClientPhone: cleanString(client.ClientPhone),
+        ClientEmail: cleanString(client.ClientEmail),
+      });
+    }
+  }
+  
+  console.log(`Found ${xmlClientIds.size} unique clients in XML`);
+  
+  // Fetch all clients from database
+  console.log('Fetching clients from database...');
+  let allClients: any[] = [];
+  let clientOffset = 0;
+  const limit = 1000;
+
+  while (true) {
+    const { data: clients, error: clientsError } = await supabase
+      .from('clients')
+      .select('id')
+      .range(clientOffset, clientOffset + limit - 1);
+
+    if (clientsError) {
+      console.error('Error fetching clients:', clientsError);
+      break;
+    }
+
+    if (!clients || clients.length === 0) {
+      break;
+    }
+
+    allClients = allClients.concat(clients);
+    clientOffset += limit;
+
+    if (clients.length < limit) {
+      break;
+    }
+  }
+  
+  const dbClientIds = new Set<string>();
+  for (const client of allClients) {
+    const match = client.id.match(/^client-(\d+)$/);
+    if (match) {
+      dbClientIds.add(match[1]);
+    }
+  }
+  
+  console.log(`Found ${dbClientIds.size} clients in database`);
+  
+  const missingClientIds = new Set<string>();
+  for (const xmlClientId of xmlClientIds) {
+    if (!dbClientIds.has(xmlClientId)) {
+      missingClientIds.add(xmlClientId);
+    }
+  }
+  
+  if (missingClientIds.size > 0) {
+    console.log(`\n⚠️  Found ${missingClientIds.size} clients in XML that are NOT in database:`);
+    const missingList = Array.from(missingClientIds).slice(0, 20);
+    for (const clientId of missingList) {
+      const client = xmlClientData.get(clientId);
+      if (client) {
+        console.log(`  ClientID: ${clientId}`);
+        console.log(`    Company: ${client.ClientCompany || 'N/A'}`);
+        console.log(`    Phone: ${client.ClientPhone || 'N/A'}`);
+        console.log(`    Email: ${client.ClientEmail || 'N/A'}`);
+      }
+    }
+    if (missingClientIds.size > 20) {
+      console.log(`  ... and ${missingClientIds.size - 20} more`);
+    }
+  } else {
+    console.log('\n✓ All clients from XML are in database');
+  }
+  console.log();
+
+  // ============================================================================
+  // CHECK FOR MISSING ORDERS AND STATUS DISCREPANCIES
+  // ============================================================================
+  console.log('='.repeat(80));
+  console.log('CHECKING FOR MISSING ORDERS AND STATUS DISCREPANCIES');
+  console.log('='.repeat(80));
+  console.log();
+
   // Fetch all migrated orders from database
   console.log('Fetching orders from database...');
   let allOrders: any[] = [];
   let offset = 0;
-  const limit = 1000;
 
   while (true) {
     const { data: orders, error: ordersError } = await supabase
@@ -219,26 +349,65 @@ async function compareOrderStatuses() {
     }
   }
 
+  // Separate missing orders from status discrepancies
+  const missingOrders = discrepancies.filter(d => d.actualDbStatus === 'NOT IN DATABASE');
+  const statusDiscrepancies = discrepancies.filter(d => d.actualDbStatus !== 'NOT IN DATABASE');
+
   // Print results
   console.log('='.repeat(80));
   console.log('COMPARISON RESULTS');
   console.log('='.repeat(80));
-  console.log(`\nTotal orders in XML: ${xmlStatusMap.size}`);
-  console.log(`Total orders in DB: ${allOrders.length}`);
+  console.log(`\nXML Backup Date: ${generatedDate}`);
+  console.log(`\nClients:`);
+  console.log(`  XML: ${xmlClientIds.size}`);
+  console.log(`  Database: ${dbClientIds.size}`);
+  console.log(`  Missing: ${missingClientIds.size}`);
+  console.log(`\nOrders:`);
+  console.log(`  XML: ${xmlStatusMap.size}`);
+  console.log(`  Database: ${allOrders.length}`);
+  console.log(`  Missing: ${missingOrders.length}`);
   console.log(`\nMatching statuses:`);
   for (const [status, count] of matches.entries()) {
     console.log(`  ${status}: ${count}`);
   }
-  console.log(`\nDiscrepancies found: ${discrepancies.length}`);
+  console.log(`\nStatus discrepancies: ${statusDiscrepancies.length}`);
 
-  if (discrepancies.length > 0) {
+  // Show missing orders
+  if (missingOrders.length > 0) {
     console.log('\n' + '='.repeat(80));
-    console.log('DISCREPANCIES:');
+    console.log('MISSING ORDERS (in XML but not in database):');
+    console.log('='.repeat(80));
+    
+    // Group by status
+    const byStatus = new Map<string, typeof missingOrders>();
+    for (const order of missingOrders) {
+      const status = order.expectedDbStatus;
+      if (!byStatus.has(status)) {
+        byStatus.set(status, []);
+      }
+      byStatus.get(status)!.push(order);
+    }
+
+    for (const [status, items] of Array.from(byStatus.entries()).sort((a, b) => b[1].length - a[1].length)) {
+      console.log(`\n${status} (${items.length} orders):`);
+      for (const item of items.slice(0, 10)) {
+        console.log(`  OrderID: ${item.xmlOrderId}, Status: ${item.xmlStatus}`);
+      }
+      if (items.length > 10) {
+        console.log(`  ... and ${items.length - 10} more`);
+      }
+    }
+  }
+
+  // Show status discrepancies
+  if (statusDiscrepancies.length > 0) {
+    console.log('\n' + '='.repeat(80));
+    console.log('STATUS DISCREPANCIES:');
     console.log('='.repeat(80));
     
     // Group by type
-    const byType = new Map<string, typeof discrepancies>();
-    for (const disc of discrepancies) {
+    const byType = new Map<string, typeof statusDiscrepancies>();
+    for (const disc of statusDiscrepancies) {
       const key = `${disc.expectedDbStatus} -> ${disc.actualDbStatus}`;
       if (!byType.has(key)) {
         byType.set(key, []);
@@ -248,7 +417,7 @@ async function compareOrderStatuses() {
 
     for (const [type, items] of byType.entries()) {
       console.log(`\n${type} (${items.length} orders):`);
-      for (const item of items.slice(0, 10)) { // Show first 10
+      for (const item of items.slice(0, 10)) {
         console.log(`  ${item.orderId}: XML="${item.xmlStatus}" Expected="${item.expectedDbStatus}" Actual="${item.actualDbStatus}"`);
       }
       if (items.length > 10) {
@@ -258,17 +427,33 @@ async function compareOrderStatuses() {
 
     // Show summary by expected status
     console.log('\n' + '='.repeat(80));
-    console.log('DISCREPANCY SUMMARY BY EXPECTED STATUS:');
+    console.log('STATUS DISCREPANCY SUMMARY BY EXPECTED STATUS:');
     console.log('='.repeat(80));
     const byExpected = new Map<string, number>();
-    for (const disc of discrepancies) {
+    for (const disc of statusDiscrepancies) {
       byExpected.set(disc.expectedDbStatus, (byExpected.get(disc.expectedDbStatus) || 0) + 1);
     }
     for (const [status, count] of Array.from(byExpected.entries()).sort((a, b) => b[1] - a[1])) {
       console.log(`  ${status}: ${count} discrepancies`);
     }
-  } else {
+  } else if (missingOrders.length === 0) {
     console.log('\n✓ All order statuses match perfectly!');
+  }
+
+  // Final summary
+  console.log('\n' + '='.repeat(80));
+  console.log('SUMMARY');
+  console.log('='.repeat(80));
+  console.log(`\nNew records to migrate:`);
+  console.log(`  Clients: ${missingClientIds.size}`);
+  console.log(`  Orders: ${missingOrders.length}`);
+  
+  if (missingClientIds.size > 0 || missingOrders.length > 0) {
+    console.log(`\n⚠️  ACTION REQUIRED:`);
+    console.log(`   Run the migration script to import new records:`);
+    console.log(`   npx tsx scripts/migrate-xml-to-supabase.ts`);
+  } else {
+    console.log(`\n✓ Database is up to date with XML backup`);
   }
 
   console.log('\n' + '='.repeat(80));

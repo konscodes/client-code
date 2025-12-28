@@ -175,7 +175,7 @@ LEFT JOIN LATERAL (
 | `OrderType` | `tblOrders` | `orderType` | Order type (e.g., "Ремонтные работы", "Поставка") |
 | `OrderName` | `tblOrders` | `orderTitle` | Order description/name |
 | `OrderStatus` | `tblOrders` | `status` | Map Russian status to English (see Status Mapping) |
-| - | - | `taxRate` | Default: 8.5 (can be set to 0 if needed) |
+| - | - | `taxRate` | Default: 0 |
 | - | - | `globalMarkup` | Default: 20 |
 | - | - | `currency` | Default: 'USD' |
 
@@ -292,7 +292,7 @@ SELECT
   COALESCE(o.OrderAddTime::timestamp, o.OrderDate::timestamp) as "updatedAt",
   o.OrderType as "orderType",
   o.OrderName as "orderTitle",
-  8.5 as "taxRate",
+  0 as "taxRate",
   20 as "globalMarkup",
   'USD' as currency
 FROM tblOrders o
@@ -540,7 +540,8 @@ After running the migration script, verify the data:
 - **Batch Job Fetching**: The migration script now uses batch fetching for `order_jobs` to avoid N+1 query problems.
 - **Progressive Loading**: For large datasets, consider using progressive loading when fetching orders in the application.
 - **XML Parser Arrays**: Always handle arrays in XML parser output - single values may be returned as arrays
-- **Tax Rate**: Default is 8.5, but can be set to 0 if needed (update in migration script)
+- **Tax Rate**: Default is 0 (updated December 2025)
+- **Markup Precision**: Markup values are rounded to 2 decimal places to avoid floating-point precision errors (e.g., 60.00000000000001 → 60)
 - **Verification**: Always run comparison scripts after migration to catch missing data
 - **Client createdAt**: **CRITICAL** - Always use `ClientAddTime` from `tblMain` for `createdAt`, NOT `ContactAddTime` from `tblContacts`. This was corrected in December 2025 after discovering incorrect timestamps in production data.
 
