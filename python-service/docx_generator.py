@@ -30,18 +30,26 @@ WORKDAYS = ['рабочий день', 'рабочих дня', 'рабочих 
 MONTHS_RU = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
 def format_number_russian(num):
-    """Format number with Russian formatting: space as thousands separator, no decimals"""
-    # Round to integer (no cents/kopecks)
-    num_int = int(round(num))
+    """Format number with Russian formatting: space as thousands separator, 2 decimal places"""
+    # Round to 2 decimal places
+    num_rounded = round(num, 2)
     
-    # Add space as thousands separator
+    # Split into integer and decimal parts
+    num_str = f"{num_rounded:.2f}"
+    if '.' in num_str:
+        integer_part, decimal_part = num_str.split('.')
+    else:
+        integer_part = num_str
+        decimal_part = '00'
+    
+    # Add space as thousands separator to integer part
     integer_formatted = ''
-    for i, digit in enumerate(reversed(str(num_int))):
+    for i, digit in enumerate(reversed(integer_part)):
         if i > 0 and i % 3 == 0:
             integer_formatted = ' ' + integer_formatted
         integer_formatted = digit + integer_formatted
     
-    return integer_formatted
+    return f"{integer_formatted},{decimal_part}"
 
 def set_cell_shading(cell, color):
     """Set cell background color"""
@@ -144,14 +152,24 @@ def spell_number_russian(num, feminine=False):
     return ' '.join(result)
 
 def spell_money_russian(amount):
-    """Convert money amount to Russian words (no kopecks)"""
-    # Round to integer (no cents/kopecks)
-    rubles = int(round(amount))
+    """Convert money amount to Russian words with kopecks"""
+    # Round to 2 decimal places
+    amount_rounded = round(amount, 2)
+    
+    # Split into rubles and kopecks
+    rubles = int(amount_rounded)
+    kopecks = int(round((amount_rounded - rubles) * 100))
     
     rubles_text = spell_number_russian(rubles, False)
     rubles_form = get_declension(rubles, RUBLES)
     
     result = f"{rubles_text.capitalize()} {rubles_form}"
+    
+    # Add kopecks if present
+    if kopecks > 0:
+        kopecks_text = spell_number_russian(kopecks, True)  # Kopecks use feminine form
+        kopecks_form = get_declension(kopecks, KOPECKS)
+        result += f" {kopecks_text} {kopecks_form}"
     
     return result
 
@@ -415,7 +433,8 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
                 set_font_times_new_roman(run, size=12, bold=True, italic=False)
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            # All headers centered
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     # Add job rows
     for idx, job in enumerate(jobs_data, start=1):
@@ -423,67 +442,202 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         new_row.height = Mm(8)
         row_cells = new_row.cells
         
-        # №
+        # № - centered
         row_cells[0].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         run0 = row_cells[0].paragraphs[0].add_run(str(idx))
         set_font_times_new_roman(run0, size=12, bold=False, italic=False)
         
-        # Наименование
+        # Наименование - left aligned
         row_cells[1].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
         run1 = row_cells[1].paragraphs[0].add_run(job.get('name', ''))
         set_font_times_new_roman(run1, size=12, bold=False, italic=False)
         
-        # Кол-во (without unit)
+        # Кол-во - right aligned
         job_qty = job.get('qty', '0')
         row_cells[2].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         run2 = row_cells[2].paragraphs[0].add_run(job_qty)
         set_font_times_new_roman(run2, size=12, bold=False, italic=False)
         
-        # Цена за единицу (after markup) - calculate from lineTotal / quantity
+        # Цена за единицу (after markup) - right aligned
         job_total = float(job.get('lineTotal', '0.00'))
         job_qty_float = float(job.get('qty', '1'))
         job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
         row_cells[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         run3 = row_cells[3].paragraphs[0].add_run(format_number_russian(job_price_after_markup))
         set_font_times_new_roman(run3, size=12, bold=False, italic=False)
         
-        # Стоимость
+        # Сумма - right aligned
         row_cells[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         run4 = row_cells[4].paragraphs[0].add_run(format_number_russian(job_total))
         set_font_times_new_roman(run4, size=12, bold=False, italic=False)
     
-    # Add subtotal row
-    subtotal_table_row = jobs_table.add_row()
-    subtotal_table_row.height = Mm(8)
-    subtotal_row = subtotal_table_row.cells
+    doc.add_paragraph()
     
-    # Empty cells for columns 0-2
+    # Add total lines matching main table format
+    subtotal = float(order_data.get('subtotal', '0.00'))
+    tax = float(order_data.get('tax', '0.00'))
+    total = float(order_data.get('total', '0.00'))
+    tax_rate = float(order_data.get('taxRate', '0.00'))
+    
+    # Get column widths from main table to match alignment
+    column_widths = calculate_column_widths(jobs_data, available_width)
+    
+    # Adjust column widths for totals table - make label column wider
+    # Reduce empty columns (0-2) to make room for wider label column
+    totals_column_widths = column_widths.copy()
+    width_val = available_width.mm if hasattr(available_width, 'mm') else float(available_width)
+    
+    # Reduce columns 0-2 (empty columns) to make room for wider column 3
+    # Column 0: reduce from 10mm to 5mm
+    # Column 1: reduce proportionally (this is the name column, but we don't use it)
+    # Column 2: reduce from 20mm to 10mm
+    totals_column_widths[0] = 5  # Reduced from 10mm
+    totals_column_widths[2] = 10  # Reduced from 20mm
+    
+    # Calculate how much space we saved
+    saved_space = (column_widths[0] - totals_column_widths[0]) + (column_widths[2] - totals_column_widths[2])
+    
+    # Increase column 3 (label column) by the saved space
+    totals_column_widths[3] = column_widths[3] + saved_space  # Increase from 27mm
+    
+    # Keep column 4 at original width for alignment with main table
+    # Column 1 (name) will be calculated to fill remaining space
+    
+    # Recalculate column 1 to ensure total width matches available_width
+    fixed_total = sum(totals_column_widths) - totals_column_widths[1]  # Sum of all except column 1
+    totals_column_widths[1] = width_val - fixed_total
+    
+    # Ensure minimum width for column 1 (at least 30mm)
+    if totals_column_widths[1] < 30:
+        # If too small, reduce column 3 and adjust
+        reduction = 30 - totals_column_widths[1]
+        totals_column_widths[3] = max(35, totals_column_widths[3] - reduction)
+        totals_column_widths[1] = 30
+    
+    # Create totals table with same 5 columns as main table
+    totals_table = doc.add_table(rows=1, cols=5)
+    totals_table.autofit = False
+    
+    # Set table width explicitly to match main table
+    tbl = totals_table._tbl
+    tblPr = tbl.tblPr
+    if tblPr is None:
+        tblPr = OxmlElement('w:tblPr')
+        tbl.insert(0, tblPr)
+    
+    # Set table width explicitly in mm (same as main table)
+    tblW = OxmlElement('w:tblW')
+    tblW.set(qn('w:w'), str(int(width_val * 56.7)))  # Convert mm to twips (dxa)
+    tblW.set(qn('w:type'), 'dxa')
+    tblPr.append(tblW)
+    
+    for i, width in enumerate(totals_column_widths):
+        totals_table.columns[i].width = Mm(width)
+        # Set width type to dxa for consistency
+        for cell in totals_table.columns[i].cells:
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcW = OxmlElement('w:tcW')
+            tcW.set(qn('w:w'), str(int(width * 56.7)))  # Convert mm to twips
+            tcW.set(qn('w:type'), 'dxa')
+            tcPr.append(tcW)
+    
+    # Set minimal row height and line spacing to 0 for totals table
+    for row in totals_table.rows:
+        row.height = Mm(5)  # Reduced from 8mm to minimal height
+        for cell in row.cells:
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            for paragraph in cell.paragraphs:
+                paragraph_format = paragraph.paragraph_format
+                paragraph_format.line_spacing = Pt(0)
+                paragraph_format.space_before = Pt(0)
+                paragraph_format.space_after = Pt(0)
+    
+    # Итого: (subtotal)
+    row1 = totals_table.rows[0]
+    # Columns 0-2: empty
     for i in range(3):
-        subtotal_row[i].text = ''
-        subtotal_row[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        row1.cells[i].text = ''
     
-    # Column 3: "Итого:" label
-    subtotal_row[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-    subtotal_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-    subtotal_run = subtotal_row[3].paragraphs[0].add_run('Итого:')
-    set_font_times_new_roman(subtotal_run, size=12, bold=True, italic=False)
+    # Column 3: Label (aligned with Стоимость column)
+    cell1_label = row1.cells[3]
+    cell1_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run1_label = cell1_label.paragraphs[0].add_run('Итого:')
+    set_font_times_new_roman(run1_label, size=12, bold=True, italic=False)
     
-    # Column 4: Total sum
-    total_sum = sum(float(job.get('lineTotal', '0.00')) for job in jobs_data)
-    subtotal_row[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-    subtotal_row[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-    total_run = subtotal_row[4].paragraphs[0].add_run(format_number_russian(total_sum))
-    set_font_times_new_roman(total_run, size=12, bold=True, italic=False)
+    # Column 4: Amount (aligned with Сумма column)
+    cell1_amount = row1.cells[4]
+    cell1_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run1_amount = cell1_amount.paragraphs[0].add_run(format_number_russian(subtotal))
+    set_font_times_new_roman(run1_amount, size=12, bold=False, italic=False)
+    
+    # В т.ч. НДС (taxRate%): (tax amount)
+    if tax_rate > 0 and tax > 0:
+        row2 = totals_table.add_row()
+        row2.height = Mm(5)  # Minimal height
+        # Columns 0-2: empty
+        for i in range(3):
+            row2.cells[i].text = ''
+            row2.cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            for paragraph in row2.cells[i].paragraphs:
+                paragraph_format = paragraph.paragraph_format
+                paragraph_format.line_spacing = Pt(0)
+                paragraph_format.space_before = Pt(0)
+                paragraph_format.space_after = Pt(0)
+        
+        # Column 3: Label
+        cell2_label = row2.cells[3]
+        cell2_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run2_label = cell2_label.paragraphs[0].add_run(f'В т.ч. НДС ({tax_rate}%):')
+        set_font_times_new_roman(run2_label, size=12, bold=True, italic=False)
+        
+        # Column 4: Amount
+        cell2_amount = row2.cells[4]
+        cell2_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run2_amount = cell2_amount.paragraphs[0].add_run(format_number_russian(tax))
+        set_font_times_new_roman(run2_amount, size=12, bold=False, italic=False)
+    
+    # Итого с НДС: (total)
+    row3 = totals_table.add_row()
+    row3.height = Mm(5)  # Minimal height
+    # Columns 0-2: empty
+    for i in range(3):
+        row3.cells[i].text = ''
+        row3.cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        for paragraph in row3.cells[i].paragraphs:
+            paragraph_format = paragraph.paragraph_format
+            paragraph_format.line_spacing = Pt(0)
+            paragraph_format.space_before = Pt(0)
+            paragraph_format.space_after = Pt(0)
+    
+    # Column 3: Label
+    cell3_label = row3.cells[3]
+    cell3_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run3_label = cell3_label.paragraphs[0].add_run('Итого с НДС:')
+    set_font_times_new_roman(run3_label, size=12, bold=True, italic=False)
+    
+    # Column 4: Amount
+    cell3_amount = row3.cells[4]
+    cell3_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run3_amount = cell3_amount.paragraphs[0].add_run(format_number_russian(total))
+    set_font_times_new_roman(run3_amount, size=12, bold=False, italic=False)
+    
+    # Remove table borders for clean look
+    for row in totals_table.rows:
+        for cell in row.cells:
+            set_cell_border(cell, top={'val': 'nil'}, bottom={'val': 'nil'}, left={'val': 'nil'}, right={'val': 'nil'})
     
     doc.add_paragraph()
 
     # Cost line with Russian number formatting and spelling on same line
     total = float(order_data.get('total', '0.00'))
+    tax_rate = float(order_data.get('taxRate', '0.00'))
+    tax = float(order_data.get('tax', '0.00'))
     cost_para = doc.add_paragraph()
     if locale and locale.startswith('ru'):
         total_spelled = spell_money_russian(total)
@@ -497,8 +651,12 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         # Amount (not bold)
         cost_run2 = cost_para.add_run(f"{format_number_russian(total)} руб.")
         set_font_times_new_roman(cost_run2, size=12, bold=False, italic=False)
-        # Text after amount (regular)
-        cost_run3 = cost_para.add_run(f" ({total_spelled}) Без НДС.")
+        # Text after amount (regular) - dynamic based on tax
+        if tax_rate == 0 or tax == 0:
+            tax_text = "Без НДС."
+        else:
+            tax_text = "С НДС."
+        cost_run3 = cost_para.add_run(f" ({total_spelled}) {tax_text}")
         set_font_times_new_roman(cost_run3, size=12, bold=False, italic=False)
     else:
         # Text before amount (regular) - different for specification

@@ -44,6 +44,7 @@ interface DocumentData {
     subtotal: string;
     tax: string;
     total: string;
+    taxRate: string;
     orderTitle?: string;
   };
   jobs: Array<{
@@ -75,8 +76,8 @@ function formatDocumentData(
       name: job.jobName || job.description || 'Job Item',
       qty: job.quantity.toString(),
       unit: 'unit', // Could be enhanced to use unitOfMeasure from job template
-      unitPrice: Math.round(job.unitPrice).toString(),
-      lineTotal: Math.round(lineTotal).toString(),
+      unitPrice: job.unitPrice.toFixed(2),
+      lineTotal: lineTotal.toFixed(2),
     };
   });
   
@@ -120,9 +121,10 @@ function formatDocumentData(
     order: {
       id: order.id,
       date: formatDate(order.createdAt),
-      subtotal: Math.round(totals.subtotal).toString(),
-      tax: Math.round(totals.tax).toString(),
-      total: Math.round(totals.total).toString(),
+      subtotal: totals.subtotal.toFixed(2),
+      tax: totals.tax.toFixed(2),
+      total: totals.total.toFixed(2),
+      taxRate: order.taxRate.toString(),
       orderTitle: order.orderTitle,
     },
     jobs,
