@@ -65,11 +65,18 @@ function formatDocumentData(
   documentType: 'invoice' | 'po' | 'specification',
   documentNumber: string
 ): DocumentData {
-  const totals = getOrderTotals(order);
+  const taxRate = order.taxRate || 0;
+  const hasTax = taxRate > 0;
   
-  // Format jobs for the Python service
+  // Format jobs for the Python service - apply tax per line item if tax is set
   const jobs = order.jobs.map((job: OrderJob, index: number) => {
-    const lineTotal = job.quantity * job.unitPrice * (1 + job.lineMarkup / 100);
+    // Calculate base line total (with markup)
+    const baseLineTotal = job.quantity * job.unitPrice * (1 + job.lineMarkup / 100);
+    
+    // Apply tax per line item if tax is set
+    const lineTotal = hasTax 
+      ? baseLineTotal * (1 + taxRate / 100)
+      : baseLineTotal;
     
     return {
       code: `JOB-${(index + 1).toString().padStart(3, '0')}`,
@@ -80,6 +87,25 @@ function formatDocumentData(
       lineTotal: lineTotal.toFixed(2),
     };
   });
+  
+  // Calculate totals from line items (tax already included in line items if applicable)
+  const totalWithTax = jobs.reduce((sum, job) => sum + parseFloat(job.lineTotal), 0);
+  
+  // Calculate tax amount breakdown if tax is applied
+  let subtotal = totalWithTax;
+  let taxAmount = 0;
+  
+  if (hasTax) {
+    // If tax is included in line items, calculate the subtotal (without tax) and tax amount
+    subtotal = totalWithTax / (1 + taxRate / 100);
+    taxAmount = totalWithTax - subtotal;
+  }
+  
+  const totals = {
+    subtotal,
+    tax: taxAmount,
+    total: totalWithTax,
+  };
   
   // Determine document prefix based on type
   let documentPrefix = '';
@@ -124,7 +150,7 @@ function formatDocumentData(
       subtotal: totals.subtotal.toFixed(2),
       tax: totals.tax.toFixed(2),
       total: totals.total.toFixed(2),
-      taxRate: order.taxRate.toString(),
+      taxRate: taxRate.toString(),
       orderTitle: order.orderTitle,
     },
     jobs,

@@ -556,26 +556,30 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
                 paragraph_format.space_before = Pt(0)
                 paragraph_format.space_after = Pt(0)
     
-    # Итого: (subtotal)
+    # Totals section - different layout based on whether tax is applied
     row1 = totals_table.rows[0]
     # Columns 0-2: empty
     for i in range(3):
         row1.cells[i].text = ''
     
-    # Column 3: Label (aligned with Стоимость column)
-    cell1_label = row1.cells[3]
-    cell1_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run1_label = cell1_label.paragraphs[0].add_run('Итого:')
-    set_font_times_new_roman(run1_label, size=12, bold=True, italic=False)
-    
-    # Column 4: Amount (aligned with Сумма column)
-    cell1_amount = row1.cells[4]
-    cell1_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run1_amount = cell1_amount.paragraphs[0].add_run(format_number_russian(subtotal))
-    set_font_times_new_roman(run1_amount, size=12, bold=False, italic=False)
-    
-    # В т.ч. НДС (taxRate%): (tax amount)
     if tax_rate > 0 and tax > 0:
+        # If tax is applied (per line item), show:
+        # 1. Итого с НДС: (total with tax - since tax is already in line items)
+        # 2. НДС (taxRate%): (tax breakdown)
+        
+        # Column 3: Label (aligned with Стоимость column)
+        cell1_label = row1.cells[3]
+        cell1_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run1_label = cell1_label.paragraphs[0].add_run('Итого с НДС:')
+        set_font_times_new_roman(run1_label, size=12, bold=True, italic=False)
+        
+        # Column 4: Amount (aligned with Сумма column) - total with tax
+        cell1_amount = row1.cells[4]
+        cell1_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run1_amount = cell1_amount.paragraphs[0].add_run(format_number_russian(total))
+        set_font_times_new_roman(run1_amount, size=12, bold=False, italic=False)
+        
+        # НДС (taxRate%): (tax breakdown)
         row2 = totals_table.add_row()
         row2.height = Mm(5)  # Minimal height
         # Columns 0-2: empty
@@ -591,7 +595,7 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         # Column 3: Label
         cell2_label = row2.cells[3]
         cell2_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run2_label = cell2_label.paragraphs[0].add_run(f'В т.ч. НДС ({tax_rate}%):')
+        run2_label = cell2_label.paragraphs[0].add_run(f'НДС ({tax_rate}%):')
         set_font_times_new_roman(run2_label, size=12, bold=True, italic=False)
         
         # Column 4: Amount
@@ -599,31 +603,19 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
         cell2_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         run2_amount = cell2_amount.paragraphs[0].add_run(format_number_russian(tax))
         set_font_times_new_roman(run2_amount, size=12, bold=False, italic=False)
-    
-    # Итого с НДС: (total)
-    row3 = totals_table.add_row()
-    row3.height = Mm(5)  # Minimal height
-    # Columns 0-2: empty
-    for i in range(3):
-        row3.cells[i].text = ''
-        row3.cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        for paragraph in row3.cells[i].paragraphs:
-            paragraph_format = paragraph.paragraph_format
-            paragraph_format.line_spacing = Pt(0)
-            paragraph_format.space_before = Pt(0)
-            paragraph_format.space_after = Pt(0)
-    
-    # Column 3: Label
-    cell3_label = row3.cells[3]
-    cell3_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run3_label = cell3_label.paragraphs[0].add_run('Итого с НДС:')
-    set_font_times_new_roman(run3_label, size=12, bold=True, italic=False)
-    
-    # Column 4: Amount
-    cell3_amount = row3.cells[4]
-    cell3_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run3_amount = cell3_amount.paragraphs[0].add_run(format_number_russian(total))
-    set_font_times_new_roman(run3_amount, size=12, bold=False, italic=False)
+    else:
+        # If no tax, just show Итого:
+        # Column 3: Label (aligned with Стоимость column)
+        cell1_label = row1.cells[3]
+        cell1_label.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run1_label = cell1_label.paragraphs[0].add_run('Итого:')
+        set_font_times_new_roman(run1_label, size=12, bold=True, italic=False)
+        
+        # Column 4: Amount (aligned with Сумма column)
+        cell1_amount = row1.cells[4]
+        cell1_amount.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run1_amount = cell1_amount.paragraphs[0].add_run(format_number_russian(total))
+        set_font_times_new_roman(run1_amount, size=12, bold=False, italic=False)
     
     # Remove table borders for clean look
     for row in totals_table.rows:
