@@ -129,7 +129,7 @@ interface OrderDetailProps {
 export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChangesChange }: OrderDetailProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder, ensureOrderJobsLoaded } = useApp();
+  const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder, duplicateOrder, ensureOrderJobsLoaded } = useApp();
   const { formatCurrency } = useFormatting();
   
   // Get order type label based on current language
@@ -319,6 +319,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [focusedPriceInputs, setFocusedPriceInputs] = useState<Set<string>>(new Set());
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
   const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [clientValidationError, setClientValidationError] = useState<string>('');
   const [orderTitleValidationError, setOrderTitleValidationError] = useState<string>('');
   const [touchedOrderTitle, setTouchedOrderTitle] = useState(false);
@@ -636,6 +638,32 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Handle duplicate order - creates a copy in the database and navigates to it
+  const handleDuplicateOrder = () => {
+    // Always show confirmation dialog
+    setShowDuplicateDialog(true);
+  };
+
+  const performDuplicateOrder = async () => {
+    if (!existingOrder) return;
+    
+    setIsDuplicating(true);
+    setShowDuplicateDialog(false);
+    
+    try {
+      // Create duplicate from the saved order data (not unsaved formData)
+      const newOrderId = await duplicateOrder(existingOrder);
+      toast.success(t('orderDetail.orderDuplicated') || 'Order duplicated successfully');
+      onNavigate('order-detail', newOrderId);
+    } catch (error: any) {
+      logger.error('Error duplicating order', error);
+      const errorMessage = error?.message || error?.error?.message || t('orderDetail.duplicateOrderFailed') || 'Failed to duplicate order';
+      toast.error(errorMessage);
+    } finally {
+      setIsDuplicating(false);
     }
   };
   
@@ -1549,6 +1577,22 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
           </div>
         </div>
         <div className="flex flex-wrap gap-3 justify-end">
+          {/* Duplicate Order Button - only show for existing orders */}
+          {!isNewOrder && (
+            <button
+              onClick={handleDuplicateOrder}
+              disabled={isDuplicating || isSaving}
+              className="p-2 text-[#888D93] hover:text-[#1E2025] hover:bg-[#E4E7E7] border border-[#E4E7E7] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={t('orderDetail.duplicate') || 'Duplicate'}
+              aria-label={t('orderDetail.duplicate') || 'Duplicate'}
+            >
+              {isDuplicating ? (
+                <Loader2 size={20} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Copy size={20} aria-hidden="true" />
+              )}
+            </button>
+          )}
           {/* Document Dropdown */}
           <div className="relative" ref={documentDropdownRef}>
             <button
@@ -2729,6 +2773,40 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               className="bg-[#1F744F] text-white hover:bg-[#165B3C] m-0"
             >
               {t('orderDetail.saveAndCreate') || 'Save and Create'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Duplicate Order Confirmation Dialog */}
+      <AlertDialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <AlertDialogContent className="bg-white border border-[#E4E7E7]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#1E2025]">
+              {hasUnsavedChanges 
+                ? (t('orderDetail.unsavedChangesTitle') || 'Unsaved Changes')
+                : (t('orderDetail.duplicateOrderTitle') || 'Duplicate Order')
+              }
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[#555A60]">
+              {hasUnsavedChanges 
+                ? (t('orderDetail.duplicateUnsavedWarning') || 'You have unsaved changes. The duplicate will be created from the last saved version. Your unsaved changes will not be included in the duplicate.')
+                : (t('orderDetail.duplicateConfirmation') || 'Are you sure you want to create a copy of this order? The duplicate will be created with status "Proposal".')
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel
+              onClick={() => setShowDuplicateDialog(false)}
+              className="bg-[#E4E7E7] text-[#1E2025] hover:bg-[#D2D6D6] m-0"
+            >
+              {t('common.cancel') || 'Cancel'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={performDuplicateOrder}
+              className="bg-[#1F744F] text-white hover:bg-[#165B3C] m-0"
+            >
+              {t('orderDetail.duplicate') || 'Duplicate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

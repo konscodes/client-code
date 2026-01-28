@@ -27,6 +27,7 @@ interface AppContextType {
   updateOrder: (id: string, order: Partial<Order>) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   getOrder: (id: string) => Order | undefined;
+  duplicateOrder: (order: Order) => Promise<string>;
   
   // Job template methods
   addJobTemplate: (job: JobTemplate) => Promise<void>;
@@ -793,6 +794,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await deleteOrderMutation.mutateAsync(id);
   }, [deleteOrderMutation]);
 
+  // Duplicate order mutation - creates a copy of an order with all its jobs
+  const duplicateOrderMutation = useMutation({
+    mutationFn: async (sourceOrder: Order): Promise<string> => {
+      // Generate new order ID from database sequence
+      const { data: newOrderId, error: idError } = await supabase.rpc('next_order_id');
+      if (idError) {
+        logger.error('Error generating order ID for duplicate', idError);
+        throw idError;
+      }
+      
+      // Create duplicated order with new ID and reset fields
+      const { error: orderErr } = await supabase
+        .from('orders')
+        .insert({
+          id: newOrderId,
+          clientId: sourceOrder.clientId,
+          status: 'proposal', // Always start as proposal
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          taxRate: sourceOrder.taxRate,
+          globalMarkup: sourceOrder.globalMarkup,
+          currency: sourceOrder.currency,
+          orderType: sourceOrder.orderType,
+          orderTitle: `${sourceOrder.orderTitle} (Copy)`,
+          timeEstimate: sourceOrder.timeEstimate,
+        });
+      
+      if (orderErr) throw orderErr;
+      
+      // Copy all order jobs with new IDs
+      if (sourceOrder.jobs && sourceOrder.jobs.length > 0) {
+        const { error: jobsErr } = await supabase
+          .from('order_jobs')
+          .insert(sourceOrder.jobs.map(job => ({
+            id: crypto.randomUUID(),
+            orderId: newOrderId,
+            jobId: job.jobId,
+            jobName: job.jobName,
+            description: job.description,
+            quantity: job.quantity,
+            unitPrice: job.unitPrice,
+            lineMarkup: job.lineMarkup,
+            taxApplicable: job.taxApplicable,
+            position: job.position,
+            type: job.type || 'job',
+          })));
+        
+        if (jobsErr) throw jobsErr;
+      }
+      
+      return newOrderId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
+  const duplicateOrder = useCallback(async (order: Order): Promise<string> => {
+    return await duplicateOrderMutation.mutateAsync(order);
+  }, [duplicateOrderMutation]);
+
   const getOrder = useCallback((id: string) => {
     return orders.find(o => o.id === id);
   }, [orders]);
@@ -1071,6 +1133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateOrder,
     deleteOrder,
     getOrder,
+    duplicateOrder,
     
     addJobTemplate,
     updateJobTemplate,
