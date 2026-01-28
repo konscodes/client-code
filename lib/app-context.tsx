@@ -93,6 +93,7 @@ function dbRowToOrderJob(row: any): OrderJob {
     lineMarkup: parseFloat(row.lineMarkup),
     taxApplicable: row.taxApplicable,
     position: row.position,
+    type: row.type || 'job',
   };
 }
 
@@ -185,9 +186,13 @@ async function dbRowToJobPreset(row: any): Promise<JobPreset> {
   }
   
   const jobs: PresetJob[] = (presetJobsData || []).map((pj: any) => ({
-    jobId: pj.jobId,
-    defaultQty: parseFloat(pj.defaultQty),
+    jobId: pj.jobId || '',
+    defaultQty: parseFloat(pj.defaultQty) || 0,
     position: pj.position,
+    type: pj.type || 'job',
+    subcategoryName: pj.subcategoryName || undefined,
+    defaultPrice: pj.defaultPrice != null ? parseFloat(pj.defaultPrice) : undefined,
+    customName: pj.customName || undefined,
   }));
   
   return {
@@ -699,6 +704,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             lineMarkup: job.lineMarkup,
             taxApplicable: job.taxApplicable,
             position: job.position,
+            type: job.type || 'job',
           })));
         
         if (jobsErr) throw jobsErr;
@@ -753,6 +759,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               lineMarkup: job.lineMarkup,
               taxApplicable: job.taxApplicable,
               position: job.position,
+              type: job.type || 'job',
             })));
           
           if (jobsErr) throw jobsErr;
@@ -889,9 +896,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('preset_jobs')
         .insert(preset.jobs.map(job => ({
           presetId: preset.id,
-          jobId: job.jobId,
+          jobId: job.jobId || '',
           defaultQty: job.defaultQty,
           position: job.position,
+          type: job.type || 'job',
+          subcategoryName: job.subcategoryName || null,
+          defaultPrice: job.defaultPrice ?? null,
+          customName: job.customName || null,
         })));
       
       if (jobsErr) throw jobsErr;
@@ -927,9 +938,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .from('preset_jobs')
           .insert(jobs.map((job: PresetJob) => ({
             presetId: id,
-            jobId: job.jobId,
+            jobId: job.jobId || '',
             defaultQty: job.defaultQty,
             position: job.position,
+            type: job.type || 'job',
+            subcategoryName: job.subcategoryName || null,
+            defaultPrice: job.defaultPrice ?? null,
+            customName: job.customName || null,
           })));
         
         if (jobsErr) throw jobsErr;

@@ -54,6 +54,7 @@ interface DocumentData {
     unit: string;
     unitPrice: string;
     lineTotal: string;
+    type?: 'job' | 'subcategory';
   }>;
   workCompletionDays?: number;
 }
@@ -69,7 +70,23 @@ function formatDocumentData(
   const hasTax = taxRate > 0;
   
   // Format jobs for the Python service - apply tax per line item if tax is set
+  // Include type field to support subcategory headers in document
   const jobs = order.jobs.map((job: OrderJob, index: number) => {
+    const jobType = job.type || 'job';
+    
+    // For subcategory items, only include name and type (no pricing)
+    if (jobType === 'subcategory') {
+      return {
+        code: '',
+        name: job.jobName || '',
+        qty: '0',
+        unit: '',
+        unitPrice: '0.00',
+        lineTotal: '0.00',
+        type: 'subcategory' as const,
+      };
+    }
+    
     // Calculate base line total (with markup)
     const baseLineTotal = job.quantity * job.unitPrice * (1 + job.lineMarkup / 100);
     
@@ -85,6 +102,7 @@ function formatDocumentData(
       unit: 'unit', // Could be enhanced to use unitOfMeasure from job template
       unitPrice: job.unitPrice.toFixed(2),
       lineTotal: lineTotal.toFixed(2),
+      type: 'job' as const,
     };
   });
   

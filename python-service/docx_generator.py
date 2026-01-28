@@ -378,10 +378,48 @@ def calculate_column_widths(jobs_data, available_width):
     return fixed_widths
 
 def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale='ru-RU', work_days=30, available_width=Mm(190)):
-    """Add work description with table view for jobs"""
+    """Add work description with table view for jobs, supporting subcategory headers"""
     if not jobs_data:
         doc.add_paragraph("Нет работ")
         return
+    
+    # Filter out empty subcategories (subcategories with no jobs following them)
+    # and filter jobs for document generation (only include actual jobs, not subcategories)
+    filtered_jobs = []
+    current_subcategory = None
+    jobs_after_subcategory = []
+    
+    for job in jobs_data:
+        job_type = job.get('type', 'job')
+        
+        if job_type == 'subcategory':
+            # If we had a previous subcategory with jobs, add it to filtered list
+            if current_subcategory is not None and len(jobs_after_subcategory) > 0:
+                filtered_jobs.append(current_subcategory)
+                filtered_jobs.extend(jobs_after_subcategory)
+            
+            # Start tracking new subcategory
+            current_subcategory = job
+            jobs_after_subcategory = []
+        else:
+            # Regular job - add to current section
+            jobs_after_subcategory.append(job)
+    
+    # Don't forget the last section
+    if current_subcategory is not None and len(jobs_after_subcategory) > 0:
+        filtered_jobs.append(current_subcategory)
+        filtered_jobs.extend(jobs_after_subcategory)
+    elif len(jobs_after_subcategory) > 0:
+        # Jobs without any subcategory
+        filtered_jobs.extend(jobs_after_subcategory)
+    
+    # If no jobs remain after filtering, show message
+    if not filtered_jobs:
+        doc.add_paragraph("Нет работ")
+        return
+    
+    # Get only actual jobs for column width calculation (exclude subcategories)
+    actual_jobs = [j for j in filtered_jobs if j.get('type', 'job') != 'subcategory']
     
     # Create jobs table with 5 columns - use full available width
     jobs_table = doc.add_table(rows=1, cols=5)
@@ -402,8 +440,8 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     tblW.set(qn('w:type'), 'dxa')
     tblPr.append(tblW)
     
-    # Calculate column widths based on content
-    column_widths = calculate_column_widths(jobs_data, available_width)
+    # Calculate column widths based on content (use actual jobs, not subcategories)
+    column_widths = calculate_column_widths(actual_jobs if actual_jobs else jobs_data, available_width)
     for i, width in enumerate(column_widths):
         col = jobs_table.columns[i]
         col.width = Mm(width)
@@ -436,45 +474,74 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
             # All headers centered
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Add job rows
-    for idx, job in enumerate(jobs_data, start=1):
-        new_row = jobs_table.add_row()
-        new_row.height = Mm(8)
-        row_cells = new_row.cells
+    # Add job rows with subcategory support
+    # Track current job number (resets for each subcategory section)
+    job_number = 0
+    
+    for job in filtered_jobs:
+        job_type = job.get('type', 'job')
         
-        # № - centered
-        row_cells[0].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run0 = row_cells[0].paragraphs[0].add_run(str(idx))
-        set_font_times_new_roman(run0, size=12, bold=False, italic=False)
-        
-        # Наименование - left aligned
-        row_cells[1].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-        run1 = row_cells[1].paragraphs[0].add_run(job.get('name', ''))
-        set_font_times_new_roman(run1, size=12, bold=False, italic=False)
-        
-        # Кол-во - right aligned
-        job_qty = job.get('qty', '0')
-        row_cells[2].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run2 = row_cells[2].paragraphs[0].add_run(job_qty)
-        set_font_times_new_roman(run2, size=12, bold=False, italic=False)
-        
-        # Цена за единицу (after markup) - right aligned
-        job_total = float(job.get('lineTotal', '0.00'))
-        job_qty_float = float(job.get('qty', '1'))
-        job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
-        row_cells[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run3 = row_cells[3].paragraphs[0].add_run(format_number_russian(job_price_after_markup))
-        set_font_times_new_roman(run3, size=12, bold=False, italic=False)
-        
-        # Сумма - right aligned
-        row_cells[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run4 = row_cells[4].paragraphs[0].add_run(format_number_russian(job_total))
-        set_font_times_new_roman(run4, size=12, bold=False, italic=False)
+        if job_type == 'subcategory':
+            # Render subcategory header as merged row
+            new_row = jobs_table.add_row()
+            new_row.height = Mm(8)
+            row_cells = new_row.cells
+            
+            # Merge all cells for subcategory header
+            # We need to merge cells 0-4 (all 5 columns)
+            row_cells[0].merge(row_cells[4])
+            
+            # Set grey background for subcategory row
+            set_cell_shading(row_cells[0], 'D3D3D3')
+            
+            # Add subcategory name - centered, bold
+            row_cells[0].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = row_cells[0].paragraphs[0].add_run(job.get('name', ''))
+            set_font_times_new_roman(run, size=12, bold=True, italic=False)
+            
+            # Reset job numbering for next section
+            job_number = 0
+        else:
+            # Regular job row
+            job_number += 1
+            new_row = jobs_table.add_row()
+            new_row.height = Mm(8)
+            row_cells = new_row.cells
+            
+            # № - centered
+            row_cells[0].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run0 = row_cells[0].paragraphs[0].add_run(str(job_number))
+            set_font_times_new_roman(run0, size=12, bold=False, italic=False)
+            
+            # Наименование - left aligned
+            row_cells[1].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+            run1 = row_cells[1].paragraphs[0].add_run(job.get('name', ''))
+            set_font_times_new_roman(run1, size=12, bold=False, italic=False)
+            
+            # Кол-во - right aligned
+            job_qty = job.get('qty', '0')
+            row_cells[2].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            run2 = row_cells[2].paragraphs[0].add_run(job_qty)
+            set_font_times_new_roman(run2, size=12, bold=False, italic=False)
+            
+            # Цена за единицу (after markup) - right aligned
+            job_total = float(job.get('lineTotal', '0.00'))
+            job_qty_float = float(job.get('qty', '1'))
+            job_price_after_markup = job_total / job_qty_float if job_qty_float > 0 else 0.00
+            row_cells[3].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            run3 = row_cells[3].paragraphs[0].add_run(format_number_russian(job_price_after_markup))
+            set_font_times_new_roman(run3, size=12, bold=False, italic=False)
+            
+            # Сумма - right aligned
+            row_cells[4].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            run4 = row_cells[4].paragraphs[0].add_run(format_number_russian(job_total))
+            set_font_times_new_roman(run4, size=12, bold=False, italic=False)
     
     doc.add_paragraph()
     

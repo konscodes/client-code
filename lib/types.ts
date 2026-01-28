@@ -34,6 +34,8 @@ export interface JobTemplate {
   lastUpdated: Date;
 }
 
+export type OrderJobType = 'job' | 'subcategory';
+
 export interface OrderJob {
   id: string;
   jobId: string;
@@ -44,6 +46,7 @@ export interface OrderJob {
   lineMarkup: number;
   taxApplicable: boolean;
   position: number;
+  type?: OrderJobType; // Optional for backward compatibility, defaults to 'job'
 }
 
 export interface Order {
@@ -74,10 +77,16 @@ export interface JobPreset {
   lastUpdated: Date;
 }
 
+export type PresetJobType = 'job' | 'subcategory';
+
 export interface PresetJob {
   jobId: string;
   defaultQty: number;
   position: number;
+  type?: PresetJobType; // Optional for backward compatibility, defaults to 'job'
+  subcategoryName?: string; // Only used when type='subcategory'
+  defaultPrice?: number; // Price override for job when preset is applied
+  customName?: string; // Custom job name for manual/empty jobs (when jobId doesn't reference a template)
 }
 
 export interface CompanySettings {

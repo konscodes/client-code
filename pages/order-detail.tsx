@@ -28,8 +28,27 @@ import {
   Check,
   X,
   ChevronDown,
-  Eraser
+  Eraser,
+  GripVertical,
+  FolderPlus
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
@@ -65,6 +84,40 @@ const ORDER_TYPES = [
   { value: 'Ремонтные работы', labelEn: 'Repair work', labelRu: 'Ремонтные работы' },
   { value: 'Оказание иных услуг', labelEn: 'Provision of other services', labelRu: 'Оказание иных услуг' },
 ];
+
+// Sortable row wrapper component for drag-and-drop
+interface SortableRowProps {
+  id: string;
+  children: React.ReactNode;
+  isSubcategory?: boolean;
+}
+
+function SortableRow({ id, children, isSubcategory }: SortableRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: isSubcategory ? '#F0F4F8' : undefined,
+  };
+  
+  return (
+    <tr ref={setNodeRef} style={style} {...attributes} data-job-id={id}>
+      <td className="px-2 py-4 border-b border-[#E4E7E7] w-10 cursor-grab active:cursor-grabbing" {...listeners}>
+        <GripVertical size={18} className="text-[#7C8085]" />
+      </td>
+      {children}
+    </tr>
+  );
+}
 
 interface OrderDetailProps {
   orderId: string;
@@ -301,8 +354,15 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
   
+  // Check if there are any subcategories in the jobs list
+  const hasSubcategories = useMemo(() => 
+    formData.jobs?.some(job => job.type === 'subcategory') ?? false,
+    [formData.jobs]
+  );
+  
   // Automatically use card view on small screens, table view on larger screens
-  const jobsView: 'table' | 'card' = isSmallScreen ? 'card' : 'table';
+  // Force table view when subcategories are present (card view doesn't support subcategories well)
+  const jobsView: 'table' | 'card' = hasSubcategories ? 'table' : (isSmallScreen ? 'card' : 'table');
   
   const selectedClient = useMemo(() => 
     formData.clientId ? clients.find(c => c.id === formData.clientId) : null,
@@ -593,6 +653,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       lineMarkup: formData.globalMarkup || 0,
       taxApplicable: job.defaultTax,
       position: formData.jobs?.length || 0,
+      type: 'job',
     };
     
     setFormData({
@@ -614,6 +675,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       lineMarkup: formData.globalMarkup || 0,
       taxApplicable: false,
       position: formData.jobs?.length || 0,
+      type: 'job',
     };
     
     setFormData({
@@ -630,12 +692,78 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     toast.success(t('orderDetail.emptyJobAdded') || 'Empty job line added');
   };
   
+  const handleAddSubcategory = () => {
+    const newSubcategory: OrderJob = {
+      id: generateId('subcategory'),
+      jobId: '',
+      jobName: '',
+      description: '',
+      quantity: 0,
+      unitPrice: 0,
+      lineMarkup: 0,
+      taxApplicable: false,
+      position: formData.jobs?.length || 0,
+      type: 'subcategory',
+    };
+    
+    setFormData({
+      ...formData,
+      jobs: [...(formData.jobs || []), newSubcategory],
+    });
+    
+    // Automatically start editing the subcategory name
+    setTimeout(() => {
+      setEditingJobId(newSubcategory.id);
+      setEditingJobName('');
+    }, 100);
+    
+    toast.success(t('orderDetail.subcategoryAdded') || 'Subcategory added');
+  };
+  
   const handleAddPreset = (presetId: string) => {
     const preset = jobPresets.find(p => p.id === presetId);
     if (!preset) return;
     
+    const basePosition = formData.jobs?.length || 0;
+    
     const newJobs: OrderJob[] = preset.jobs.map((presetJob, index) => {
+      const presetJobType = presetJob.type || 'job';
+      
+      // Handle subcategory items
+      if (presetJobType === 'subcategory') {
+        return {
+          id: generateId('subcategory'),
+          jobId: '',
+          jobName: presetJob.subcategoryName || '',
+          description: '',
+          quantity: 0,
+          unitPrice: 0,
+          lineMarkup: 0,
+          taxApplicable: false,
+          position: basePosition + index,
+          type: 'subcategory' as const,
+        };
+      }
+      
+      // Handle regular job items
       const job = jobTemplates.find(j => j.id === presetJob.jobId);
+      
+      // Handle custom/manual jobs (no template reference)
+      if (!job && presetJob.customName) {
+        return {
+          id: generateId('job'),
+          jobId: '',
+          jobName: presetJob.customName,
+          description: '',
+          quantity: presetJob.defaultQty,
+          unitPrice: presetJob.defaultPrice ?? 0,
+          lineMarkup: formData.globalMarkup || 0,
+          taxApplicable: false,
+          position: basePosition + index,
+          type: 'job' as const,
+        };
+      }
+      
       if (!job) return null;
       
       return {
@@ -644,10 +772,11 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         jobName: job.name,
         description: job.description,
         quantity: presetJob.defaultQty,
-        unitPrice: job.unitPrice,
+        unitPrice: presetJob.defaultPrice ?? job.unitPrice, // Use preset price if set
         lineMarkup: formData.globalMarkup || 0,
         taxApplicable: job.defaultTax,
-        position: (formData.jobs?.length || 0) + index,
+        position: basePosition + index,
+        type: 'job' as const,
       };
     }).filter(Boolean) as OrderJob[];
     
@@ -707,6 +836,49 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const handleCancelEditJobName = () => {
     setEditingJobId(null);
     setEditingJobName('');
+  };
+  
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+  
+  // Handle drag end for reordering jobs/subcategories
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over || active.id === over.id) {
+      return;
+    }
+    
+    const jobs = formData.jobs || [];
+    const oldIndex = jobs.findIndex(j => j.id === active.id);
+    const newIndex = jobs.findIndex(j => j.id === over.id);
+    
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+    
+    // Reorder the array
+    const newJobs = arrayMove(jobs, oldIndex, newIndex);
+    
+    // Update positions to match new order
+    const updatedJobs = newJobs.map((job, index) => ({
+      ...job,
+      position: index,
+    }));
+    
+    setFormData({
+      ...formData,
+      jobs: updatedJobs,
+    });
   };
   
   // Document generation handlers
@@ -1828,6 +2000,13 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   {t('orderDetail.addFromCatalog')}
                 </button>
                 <button
+                  onClick={handleAddSubcategory}
+                  className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors"
+                >
+                  <FolderPlus size={18} aria-hidden="true" />
+                  {t('orderDetail.addSubcategory')}
+                </button>
+                <button
                   onClick={handleAddEmptyJob}
                   className="flex items-center gap-2 px-3 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors"
                 >
@@ -2116,42 +2295,44 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto relative">
-                <div 
-                  className="absolute right-[120px] top-0 bottom-0 w-12 pointer-events-none z-20"
-                  style={{
-                    background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,1) 100%)'
-                  }}
-                />
-                <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                  <thead>
-                    <tr>
-                      <th 
-                        className={`px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7] border-r relative select-none cursor-col-resize overflow-hidden group ${isResizing ? 'bg-[#F7F8F8]' : ''}`}
-                        style={{ 
-                          width: `${jobColumnWidth}px`, 
-                          minWidth: `${jobColumnWidth}px`, 
-                          maxWidth: `${jobColumnWidth}px`,
-                          borderRightColor: isResizing ? '#1F744F' : '#D2D6D6',
-                          borderRightWidth: isResizing ? '2px' : '1px'
-                        }}
-                        onMouseDown={handleResizeStart}
-                        onMouseEnter={(e) => {
-                          if (!isResizing) {
-                            e.currentTarget.style.borderRightColor = '#1F744F';
-                            e.currentTarget.style.borderRightWidth = '2px';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isResizing) {
-                            e.currentTarget.style.borderRightColor = '#D2D6D6';
-                            e.currentTarget.style.borderRightWidth = '1px';
-                          }
-                        }}
-                        title="Drag right edge to resize"
-                      >
-                        {t('orderDetail.job')}
-                      </th>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <div className="overflow-x-auto relative">
+                  <div 
+                    className="absolute right-[120px] top-0 bottom-0 w-12 pointer-events-none z-20"
+                    style={{
+                      background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,1) 100%)'
+                    }}
+                  />
+                  <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                    <thead>
+                      <tr>
+                        <th className="w-10 px-2 py-3 border-b border-[#E4E7E7]"></th>
+                        <th 
+                          className={`px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7] border-r relative select-none cursor-col-resize overflow-hidden group ${isResizing ? 'bg-[#F7F8F8]' : ''}`}
+                          style={{ 
+                            width: `${jobColumnWidth}px`, 
+                            minWidth: `${jobColumnWidth}px`, 
+                            maxWidth: `${jobColumnWidth}px`,
+                            borderRightColor: isResizing ? '#1F744F' : '#D2D6D6',
+                            borderRightWidth: isResizing ? '2px' : '1px'
+                          }}
+                          onMouseDown={handleResizeStart}
+                          onMouseEnter={(e) => {
+                            if (!isResizing) {
+                              e.currentTarget.style.borderRightColor = '#1F744F';
+                              e.currentTarget.style.borderRightWidth = '2px';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isResizing) {
+                              e.currentTarget.style.borderRightColor = '#D2D6D6';
+                              e.currentTarget.style.borderRightWidth = '1px';
+                            }
+                          }}
+                          title="Drag right edge to resize"
+                        >
+                          {t('orderDetail.job')}
+                        </th>
                       <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.qty')}</th>
                       <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">{t('orderDetail.unitPrice')}</th>
                       <th className="px-6 py-3 text-left text-[#555A60] border-b border-[#E4E7E7]">
@@ -2218,18 +2399,107 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                       >
                         {t('orderDetail.actions')}
                       </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.jobs.map(job => {
-                      const lineTotal = calculateLineTotal(job);
-                      
-                      return (
-                        <tr key={job.id} data-job-id={job.id}>
-                          <td 
-                            className="px-6 py-4 border-b border-[#E4E7E7] border-r border-[#D2D6D6] overflow-hidden"
-                            style={{ width: `${jobColumnWidth}px`, minWidth: `${jobColumnWidth}px`, maxWidth: `${jobColumnWidth}px` }}
-                          >
+                      </tr>
+                    </thead>
+                    <SortableContext items={formData.jobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
+                      <tbody>
+                        {formData.jobs.map(job => {
+                          const lineTotal = calculateLineTotal(job);
+                          const isSubcategory = job.type === 'subcategory';
+                          
+                          // Render subcategory row
+                          if (isSubcategory) {
+                            return (
+                              <SortableRow key={job.id} id={job.id} isSubcategory>
+                                <td 
+                                  className="px-6 py-3 border-b border-[#E4E7E7] border-r border-[#D2D6D6] bg-[#F0F4F8] overflow-hidden"
+                                  style={{ width: `${jobColumnWidth}px`, minWidth: `${jobColumnWidth}px`, maxWidth: `${jobColumnWidth}px` }}
+                                >
+                                  {editingJobId === job.id || !job.jobName ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={editingJobId === job.id ? editingJobName : (job.jobName || '')}
+                                        onChange={(e) => {
+                                          if (editingJobId === job.id) {
+                                            setEditingJobName(e.target.value);
+                                          } else {
+                                            handleUpdateJob(job.id, { jobName: e.target.value });
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSaveJobName(job.id);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingJobName('');
+                                            e.currentTarget.focus();
+                                          }
+                                        }}
+                                        onBlur={() => {
+                                          if (editingJobId === job.id) {
+                                            handleSaveJobName(job.id);
+                                          }
+                                        }}
+                                        className="flex-1 font-semibold bg-white min-w-[200px]"
+                                        autoFocus={!job.jobName || editingJobId === job.id}
+                                        placeholder={t('orderDetail.subcategoryNamePlaceholder') || 'Enter subcategory name...'}
+                                      />
+                                      <button
+                                        onClick={() => handleSaveJobName(job.id)}
+                                        className="p-1 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                        aria-label="Save"
+                                      >
+                                        <Check size={16} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 group min-w-0">
+                                      <p 
+                                        className="text-[#1E2025] font-semibold cursor-pointer hover:text-[#1F744F] transition-colors whitespace-nowrap truncate flex-1 min-w-0"
+                                        onClick={() => handleStartEditJobName(job.id)}
+                                        title={job.jobName}
+                                      >
+                                        {job.jobName}
+                                      </p>
+                                      <button
+                                        onClick={() => handleStartEditJobName(job.id)}
+                                        className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                        aria-label={t('orderDetail.editSubcategoryName') || 'Edit subcategory name'}
+                                      >
+                                        <Edit2 size={14} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                {/* Empty cells for qty, price, markup, total - maintaining column structure */}
+                                <td className="px-6 py-3 border-b border-[#E4E7E7] bg-[#F0F4F8]"></td>
+                                <td className="px-6 py-3 border-b border-[#E4E7E7] bg-[#F0F4F8]"></td>
+                                <td className="px-6 py-3 border-b border-[#E4E7E7] bg-[#F0F4F8]"></td>
+                                <td className="px-6 py-3 border-b border-[#E4E7E7] bg-[#F0F4F8]"></td>
+                                <td 
+                                  className="px-6 py-3 text-right border-b border-[#E4E7E7] sticky right-0 z-10 bg-[#F0F4F8]"
+                                  style={{ position: 'sticky', right: 0, zIndex: 10, minWidth: '120px' }}
+                                >
+                                  <div className="flex gap-2 justify-end">
+                                    <button
+                                      onClick={() => handleRemoveJob(job.id)}
+                                      className="p-2 text-[#E5484D] hover:bg-white rounded-lg transition-colors cursor-pointer"
+                                      aria-label={`Remove ${job.jobName}`}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </SortableRow>
+                            );
+                          }
+                          
+                          // Render regular job row
+                          return (
+                            <SortableRow key={job.id} id={job.id}>
+                              <td 
+                                className="px-6 py-4 border-b border-[#E4E7E7] border-r border-[#D2D6D6] overflow-hidden"
+                                style={{ width: `${jobColumnWidth}px`, minWidth: `${jobColumnWidth}px`, maxWidth: `${jobColumnWidth}px` }}
+                              >
                             {editingJobId === job.id || !job.jobName ? (
                               <div className="flex items-center gap-2">
                                 <Input
@@ -2401,29 +2671,31 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                               background: 'linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
                             }}
                           >
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => handleDuplicateJob(job.id)}
-                                className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors cursor-pointer"
-                                aria-label={`Duplicate ${job.jobName}`}
-                              >
-                                <Copy size={18} />
-                              </button>
-                              <button
-                                onClick={() => handleRemoveJob(job.id)}
-                                className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
-                                aria-label={`Remove ${job.jobName}`}
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => handleDuplicateJob(job.id)}
+                                  className="p-2 text-[#555A60] hover:bg-[#F7F8F8] rounded-lg transition-colors cursor-pointer"
+                                  aria-label={`Duplicate ${job.jobName}`}
+                                >
+                                  <Copy size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveJob(job.id)}
+                                  className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
+                                  aria-label={`Remove ${job.jobName}`}
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </SortableRow>
+                        );
+                      })}
+                      </tbody>
+                    </SortableContext>
+                  </table>
+                </div>
+              </DndContext>
             )}
           </div>
       </div>

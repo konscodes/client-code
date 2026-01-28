@@ -5,7 +5,24 @@ import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
 import { generateId } from '../lib/utils';
 import { logger } from '../lib/logger';
-import { Plus, Edit, Trash2, Layers, Search, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Layers, Search, Loader2, FolderPlus, Edit2, Check, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
@@ -35,6 +52,36 @@ interface JobPresetsProps {
   presetIdToEdit?: string;
 }
 
+// Sortable row wrapper for drag-and-drop in tables
+function SortableRow({ id, children, isSubcategory }: { id: string; children: React.ReactNode; isSubcategory?: boolean }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: isSubcategory ? '#F0F4F8' : undefined,
+  };
+
+  return (
+    <tr ref={setNodeRef} style={style} {...attributes}>
+      <td className="p-2 w-8" style={{ backgroundColor: isSubcategory ? '#F0F4F8' : undefined }}>
+        <div className="cursor-grab active:cursor-grabbing" {...listeners}>
+          <GripVertical size={16} className="text-[#B5BDB9]" />
+        </div>
+      </td>
+      {children}
+    </tr>
+  );
+}
+
 export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
   const { t } = useTranslation();
   const { formatDate } = useFormatting();
@@ -52,6 +99,44 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [presetToDelete, setPresetToDelete] = useState<JobPreset | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingSubcategoryId, setEditingSubcategoryId] = useState<string | null>(null);
+  const [editingSubcategoryName, setEditingSubcategoryName] = useState('');
+  const [editingCustomJobId, setEditingCustomJobId] = useState<string | null>(null);
+  const [editingCustomJobName, setEditingCustomJobName] = useState('');
+  
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+  
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const oldIndex = formData.jobs?.findIndex(j => j.jobId === active.id) ?? -1;
+      const newIndex = formData.jobs?.findIndex(j => j.jobId === over.id) ?? -1;
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newJobs = arrayMove(formData.jobs || [], oldIndex, newIndex);
+        // Update positions
+        const jobsWithPositions = newJobs.map((job, index) => ({
+          ...job,
+          position: index + 1,
+        }));
+        setFormData({
+          ...formData,
+          jobs: jobsWithPositions,
+        });
+      }
+    }
+  };
   
   const handleOpenCreate = () => {
     setFormData({
@@ -117,6 +202,9 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
       jobId: jobId,
       defaultQty: 1,
       position: (formData.jobs?.length || 0) + 1,
+      type: 'job',
+      defaultPrice: job.unitPrice,
+      customName: job.name, // Copy name from template for editing
     };
     
     setFormData({
@@ -136,11 +224,112 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
     });
   };
   
+  const handleAddSubcategory = () => {
+    const subcategoryId = generateId('preset-subcategory');
+    const newPresetJob: PresetJob = {
+      jobId: subcategoryId, // Use generated ID for tracking
+      defaultQty: 0,
+      position: (formData.jobs?.length || 0) + 1,
+      type: 'subcategory',
+      subcategoryName: '',
+    };
+    
+    setFormData({
+      ...formData,
+      jobs: [...(formData.jobs || []), newPresetJob],
+    });
+    
+    // Start editing the subcategory name immediately
+    setEditingSubcategoryId(subcategoryId);
+    setEditingSubcategoryName('');
+  };
+  
+  const handleRemoveSubcategory = (subcategoryId: string) => {
+    setFormData({
+      ...formData,
+      jobs: formData.jobs?.filter(j => j.jobId !== subcategoryId) || [],
+    });
+    if (editingSubcategoryId === subcategoryId) {
+      setEditingSubcategoryId(null);
+      setEditingSubcategoryName('');
+    }
+  };
+  
+  const handleSaveSubcategoryName = (subcategoryId: string) => {
+    if (editingSubcategoryName.trim()) {
+      setFormData({
+        ...formData,
+        jobs: formData.jobs?.map(j => 
+          j.jobId === subcategoryId 
+            ? { ...j, subcategoryName: editingSubcategoryName.trim() }
+            : j
+        ) || [],
+      });
+    }
+    setEditingSubcategoryId(null);
+    setEditingSubcategoryName('');
+  };
+  
+  const handleStartEditSubcategory = (subcategoryId: string, currentName: string) => {
+    setEditingSubcategoryId(subcategoryId);
+    setEditingSubcategoryName(currentName);
+  };
+  
+  const handleAddEmptyJob = () => {
+    const emptyJobId = generateId('preset-custom-job');
+    const newPresetJob: PresetJob = {
+      jobId: emptyJobId, // Use generated ID for tracking (not referencing a template)
+      defaultQty: 1,
+      position: (formData.jobs?.length || 0) + 1,
+      type: 'job',
+      customName: '',
+      defaultPrice: 0,
+    };
+    
+    setFormData({
+      ...formData,
+      jobs: [...(formData.jobs || []), newPresetJob],
+    });
+    
+    // Start editing the job name immediately
+    setEditingCustomJobId(emptyJobId);
+    setEditingCustomJobName('');
+  };
+  
+  const handleSaveCustomJobName = (jobId: string) => {
+    if (editingCustomJobName.trim()) {
+      setFormData({
+        ...formData,
+        jobs: formData.jobs?.map(j => 
+          j.jobId === jobId 
+            ? { ...j, customName: editingCustomJobName.trim() }
+            : j
+        ) || [],
+      });
+    }
+    setEditingCustomJobId(null);
+    setEditingCustomJobName('');
+  };
+  
+  const handleStartEditCustomJob = (jobId: string, currentName: string) => {
+    setEditingCustomJobId(jobId);
+    setEditingCustomJobName(currentName);
+  };
+  
   const handleUpdateJobQty = (jobId: string, qty: number) => {
     setFormData({
       ...formData,
       jobs: formData.jobs?.map(j => 
         j.jobId === jobId ? { ...j, defaultQty: qty } : j
+      ) || [],
+    });
+  };
+  
+  const handleUpdateJobPrice = (jobId: string, price: number) => {
+    setFormData({
+      ...formData,
+      jobs: formData.jobs?.map(j => 
+        j.jobId === jobId ? { ...j, defaultPrice: price } : j
       ) || [],
     });
   };
@@ -295,8 +484,8 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
       
       {/* Edit/Create Dialog */}
       <Dialog open={isEditing} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[700px]" style={{ maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {editingPreset ? t('jobPresets.editPreset') : t('jobPresets.createPreset')}
             </DialogTitle>
@@ -308,7 +497,7 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="grid gap-4 py-4">
+          <div className="flex flex-col gap-4 py-4" style={{ overflowY: 'auto', minHeight: 0, flex: 1 }}>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="presetName">{t('jobPresets.presetName')} *</Label>
@@ -343,21 +532,39 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
             </div>
             
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>{t('jobPresets.jobsInPreset')}</Label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowJobPicker(!showJobPicker);
-                    if (!showJobPicker) {
-                      setJobSearchQuery('');
-                    }
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors text-sm cursor-pointer"
-                >
-                  <Plus size={16} aria-hidden="true" />
-                  {t('orderDetail.addJob') || 'Add Job'}
-                </button>
+              <div className="flex items-center justify-between gap-4">
+                <Label className="shrink-0">{t('jobPresets.jobsInPreset')}</Label>
+                <div className="flex flex-wrap gap-2 items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowJobPicker(!showJobPicker);
+                      if (!showJobPicker) {
+                        setJobSearchQuery('');
+                      }
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors text-sm cursor-pointer"
+                  >
+                    <Search size={18} aria-hidden="true" />
+                    {t('orderDetail.addFromCatalog')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddSubcategory}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors text-sm cursor-pointer"
+                  >
+                    <FolderPlus size={18} aria-hidden="true" />
+                    {t('orderDetail.addSubcategory')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddEmptyJob}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#1F744F] text-white rounded-lg hover:bg-[#165B3C] transition-colors text-sm cursor-pointer"
+                  >
+                    <Plus size={18} aria-hidden="true" />
+                    {t('orderDetail.addJob')}
+                  </button>
+                </div>
               </div>
               
               {/* Job Picker */}
@@ -408,46 +615,229 @@ export function JobPresets({ onNavigate, presetIdToEdit }: JobPresetsProps) {
                   {t('jobPresets.noJobsAdded')}
                 </p>
               ) : (
-                <div className="border border-[#E4E7E7] rounded-lg divide-y divide-[#E4E7E7]">
-                  {formData.jobs.map(presetJob => {
-                    const job = jobTemplates.find(j => j.id === presetJob.jobId);
-                    if (!job) return null;
-                    
-                    return (
-                      <div key={presetJob.jobId} className="p-3 flex items-center gap-3">
-                        <div className="flex-1">
-                          <p className="text-[#1E2025]">{job.name}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`qty-${presetJob.jobId}`} className="text-[#7C8085] whitespace-nowrap">
-                            {t('jobPresets.qty')}:
-                          </Label>
-                          <Input
-                            id={`qty-${presetJob.jobId}`}
-                            type="number"
-                            min="1"
-                            value={presetJob.defaultQty}
-                            onChange={(e) => handleUpdateJobQty(presetJob.jobId, parseInt(e.target.value) || 1)}
-                            className="w-20"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveJob(presetJob.jobId)}
-                            className="p-2 text-[#E5484D] hover:bg-[#FEE] rounded-lg transition-colors cursor-pointer"
-                            aria-label={`Remove ${job.name}`}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <div className="border border-[#E4E7E7] rounded-lg overflow-hidden" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    <table className="w-full">
+                      <thead className="bg-[#F7F8F8]">
+                        <tr className="text-left text-[#7C8085] text-sm border-b border-[#E4E7E7]">
+                          <th className="p-2 w-8 bg-[#F7F8F8]"></th>
+                          <th className="p-2 bg-[#F7F8F8]">{t('jobPresets.name') || 'Name'}</th>
+                          <th className="p-2 w-20 text-center bg-[#F7F8F8]">{t('jobPresets.qty')}</th>
+                          <th className="p-2 w-28 text-center bg-[#F7F8F8]">{t('jobPresets.price')}</th>
+                          <th className="p-2 w-12 bg-[#F7F8F8]"></th>
+                        </tr>
+                      </thead>
+                      <SortableContext
+                        items={formData.jobs.map(j => j.jobId)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <tbody className="divide-y divide-[#E4E7E7]">
+                          {formData.jobs.map(presetJob => {
+                            const isSubcategory = presetJob.type === 'subcategory';
+                            
+                            // Render subcategory row
+                            if (isSubcategory) {
+                              return (
+                                <SortableRow key={presetJob.jobId} id={presetJob.jobId} isSubcategory>
+                                  <td colSpan={3} className="p-2" style={{ backgroundColor: '#F0F4F8' }}>
+                                    {editingSubcategoryId === presetJob.jobId || !presetJob.subcategoryName ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={editingSubcategoryId === presetJob.jobId ? editingSubcategoryName : (presetJob.subcategoryName || '')}
+                                          onFocus={() => {
+                                            // Re-enter editing mode when input is focused
+                                            if (editingSubcategoryId !== presetJob.jobId) {
+                                              setEditingSubcategoryId(presetJob.jobId);
+                                              setEditingSubcategoryName(presetJob.subcategoryName || '');
+                                            }
+                                          }}
+                                          onChange={(e) => {
+                                            if (editingSubcategoryId === presetJob.jobId) {
+                                              setEditingSubcategoryName(e.target.value);
+                                            }
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleSaveSubcategoryName(presetJob.jobId);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingSubcategoryId(null);
+                                              setEditingSubcategoryName('');
+                                            }
+                                          }}
+                                          onBlur={() => {
+                                            if (editingSubcategoryId === presetJob.jobId) {
+                                              handleSaveSubcategoryName(presetJob.jobId);
+                                            }
+                                          }}
+                                          className="flex-1 font-semibold bg-white"
+                                          autoFocus={!presetJob.subcategoryName || editingSubcategoryId === presetJob.jobId}
+                                          placeholder={t('orderDetail.subcategoryNamePlaceholder') || 'Enter subcategory name...'}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveSubcategoryName(presetJob.jobId)}
+                                          className="p-1 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                          aria-label="Save"
+                                        >
+                                          <Check size={16} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2 group">
+                                        <p 
+                                          className="text-[#1E2025] font-semibold cursor-pointer hover:text-[#1F744F] transition-colors flex-1"
+                                          onClick={() => handleStartEditSubcategory(presetJob.jobId, presetJob.subcategoryName || '')}
+                                        >
+                                          {presetJob.subcategoryName}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditSubcategory(presetJob.jobId, presetJob.subcategoryName || '')}
+                                          className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] hover:bg-white rounded transition-all cursor-pointer"
+                                          aria-label={t('orderDetail.editSubcategoryName') || 'Edit subcategory name'}
+                                        >
+                                          <Edit2 size={14} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-center" style={{ backgroundColor: '#F0F4F8' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveSubcategory(presetJob.jobId)}
+                                      className="p-1 text-[#E5484D] hover:bg-white rounded transition-colors cursor-pointer"
+                                      aria-label={`Remove ${presetJob.subcategoryName || 'subcategory'}`}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </td>
+                                </SortableRow>
+                              );
+                            }
+                            
+                            // Render regular job row
+                            const job = jobTemplates.find(j => j.id === presetJob.jobId);
+                            // Use customName if set, otherwise fall back to template name
+                            const displayName = presetJob.customName ?? job?.name ?? '';
+                            const hasName = displayName.length > 0;
+                            // Check if this is a custom/empty job (not referencing a template)
+                            const isCustomJob = presetJob.customName !== undefined || presetJob.jobId.startsWith('preset-custom-job');
+                            
+                            // Skip only if it's supposed to reference a template but template is missing
+                            if (!hasName && !job && !isCustomJob) return null;
+                            
+                            return (
+                              <SortableRow key={presetJob.jobId} id={presetJob.jobId}>
+                                <td className="p-2">
+                                  {/* Editable name for all jobs */}
+                                  {editingCustomJobId === presetJob.jobId || !hasName ? (
+                                    <div className="flex items-center gap-1">
+                                      <Input
+                                        value={editingCustomJobId === presetJob.jobId ? editingCustomJobName : displayName}
+                                        onFocus={() => {
+                                          if (editingCustomJobId !== presetJob.jobId) {
+                                            setEditingCustomJobId(presetJob.jobId);
+                                            setEditingCustomJobName(displayName);
+                                          }
+                                        }}
+                                        onChange={(e) => {
+                                          if (editingCustomJobId === presetJob.jobId) {
+                                            setEditingCustomJobName(e.target.value);
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSaveCustomJobName(presetJob.jobId);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingCustomJobId(null);
+                                            setEditingCustomJobName('');
+                                          }
+                                        }}
+                                        onBlur={() => {
+                                          if (editingCustomJobId === presetJob.jobId) {
+                                            handleSaveCustomJobName(presetJob.jobId);
+                                          }
+                                        }}
+                                        className="flex-1 text-sm"
+                                        autoFocus={!hasName || editingCustomJobId === presetJob.jobId}
+                                        placeholder={t('orderDetail.jobNamePlaceholder') || 'Enter job name...'}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveCustomJobName(presetJob.jobId)}
+                                        className="p-1 text-[#7C8085] hover:text-[#1F744F] rounded transition-all cursor-pointer"
+                                        aria-label="Save"
+                                      >
+                                        <Check size={14} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1 group">
+                                      <p 
+                                        className="text-[#1E2025] text-sm cursor-pointer hover:text-[#1F744F] transition-colors flex-1"
+                                        onClick={() => handleStartEditCustomJob(presetJob.jobId, displayName)}
+                                      >
+                                        {displayName}
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditCustomJob(presetJob.jobId, displayName)}
+                                        className="p-1 opacity-0 group-hover:opacity-100 text-[#7C8085] hover:text-[#1F744F] rounded transition-all cursor-pointer"
+                                        aria-label="Edit job name"
+                                      >
+                                        <Edit2 size={12} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    id={`qty-${presetJob.jobId}`}
+                                    type="number"
+                                    min="1"
+                                    value={presetJob.defaultQty}
+                                    onChange={(e) => handleUpdateJobQty(presetJob.jobId, parseInt(e.target.value) || 1)}
+                                    className="w-full text-center"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    id={`price-${presetJob.jobId}`}
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={presetJob.defaultPrice ?? (job?.unitPrice || 0)}
+                                    onChange={(e) => handleUpdateJobPrice(presetJob.jobId, parseFloat(e.target.value) || 0)}
+                                    className="w-full text-center"
+                                  />
+                                </td>
+                                <td className="p-2 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveJob(presetJob.jobId)}
+                                    className="p-1 text-[#E5484D] hover:bg-[#FEE] rounded transition-colors cursor-pointer"
+                                    aria-label={`Remove ${displayName}`}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </SortableRow>
+                            );
+                          })}
+                        </tbody>
+                      </SortableContext>
+                    </table>
+                  </div>
+                </DndContext>
               )}
             </div>
           </div>
           
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
               <button
                 onClick={handleClose}
                 className="px-4 py-2 bg-[#E4E7E7] text-[#1E2025] rounded-lg hover:bg-[#D2D6D6] transition-colors cursor-pointer"
