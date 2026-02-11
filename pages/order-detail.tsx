@@ -144,10 +144,6 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [generatingPO, setGeneratingPO] = useState(false);
   const [generatingSpecification, setGeneratingSpecification] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [timeEstimateMode, setTimeEstimateMode] = useState<'preset' | 'custom'>('preset');
-  const [customTimeEstimate, setCustomTimeEstimate] = useState<string>('');
-  const [originalTimeEstimate, setOriginalTimeEstimate] = useState<number | undefined>(undefined);
-  const customTimeEstimateInputRef = useRef<HTMLInputElement>(null);
   
   // Parse orderId to extract client ID from query string (e.g., "new?client=client-10328")
   const parsedOrderId = orderId?.includes('?') ? orderId.split('?')[0] : orderId;
@@ -268,33 +264,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }));
       setHasInitializedFromOrder(true);
       
-      // Initialize time estimate mode - always start in preset mode
-      // Only switch to custom when user explicitly selects "custom" option
-      const currentValue = orderWithoutDenormalized.timeEstimate ?? 10;
-      const presetValues = [2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
-      
-      // Always start in preset mode, preserve the actual value
-      setTimeEstimateMode('preset');
-      setCustomTimeEstimate('');
-      // Store original value only if it's not a preset (for when user switches to custom)
-      if (!presetValues.includes(currentValue)) {
-        setOriginalTimeEstimate(currentValue);
-      } else {
-        setOriginalTimeEstimate(undefined);
-      }
     }
   }, [existingOrder, isNewOrder, hasInitializedFromOrder]);
-  
-  // Auto-focus and select input when switching to custom mode
-  useEffect(() => {
-    if (timeEstimateMode === 'custom' && customTimeEstimateInputRef.current) {
-      // Use setTimeout to ensure the input is fully rendered
-      setTimeout(() => {
-        customTimeEstimateInputRef.current?.focus();
-        customTimeEstimateInputRef.current?.select();
-      }, 0);
-    }
-  }, [timeEstimateMode]);
 
   // Sync jobs when they load (even if formData was already initialized)
   // This handles the case where jobs load after formData was initialized
@@ -1413,26 +1384,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
             </div>
             
-            {/* Right Column: Status, Type, and Estimate */}
+            {/* Right Column: Date, Status, Type, and Estimate */}
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="status">{t('orderDetail.status')}</Label>
-                <Select
-                  value={formData.status || 'proposal'}
-                  onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
-                    <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
-                    <SelectItem value="completed">{t('orders.completed')}</SelectItem>
-                    <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="orderDate">{t('orderDetail.orderDate')}</Label>
                 <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -1461,6 +1414,24 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="status">{t('orderDetail.status')}</Label>
+                <Select
+                  value={formData.status || 'proposal'}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
+                    <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                    <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                    <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
                 <Select
                   value={formData.orderType || ''}
@@ -1481,60 +1452,18 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               
               <div className="space-y-2">
                 <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
-                {timeEstimateMode === 'preset' ? (
-                  <Select
-                    value={(formData.timeEstimate ?? 10).toString()}
-                        onValueChange={(value) => {
-                          if (value === 'custom') {
-                            setTimeEstimateMode('custom');
-                            // Restore original value if it exists, otherwise use current formData value
-                            const valueToShow = originalTimeEstimate !== undefined 
-                              ? originalTimeEstimate.toString() 
-                              : (formData.timeEstimate ?? 10).toString();
-                            setCustomTimeEstimate(valueToShow);
-                            setFormData({ ...formData, timeEstimate: originalTimeEstimate ?? formData.timeEstimate ?? 10 });
-                            // Focus the input after a short delay to ensure it's rendered
-                            setTimeout(() => {
-                              customTimeEstimateInputRef.current?.focus();
-                              customTimeEstimateInputRef.current?.select();
-                            }, 0);
-                          } else {
-                            const numValue = parseInt(value, 10);
-                            setFormData({ ...formData, timeEstimate: numValue });
-                            // Clear original value since user selected a preset
-                            setOriginalTimeEstimate(undefined);
-                          }
-                        }}
-                  >
-                    <SelectTrigger id="timeEstimate">
-                      <SelectValue>
-                        {formData.timeEstimate ?? 10}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30].map((days) => (
-                        <SelectItem key={days} value={days.toString()}>
-                          {days}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="custom">{t('orderDetail.timeEstimateCustom')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-              ) : (
-                  <Input
-                    ref={customTimeEstimateInputRef}
-                    type="number"
-                    min="1"
-                    value={customTimeEstimate}
-                    onChange={(e) => {
-                      setCustomTimeEstimate(e.target.value);
-                      const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                      setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
-                    }}
-                    placeholder="10"
-                    className="w-full"
-                  />
-                )}
+                <Input
+                  id="timeEstimate"
+                  type="number"
+                  min="1"
+                  value={formData.timeEstimate ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                    setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                  }}
+                  placeholder="10"
+                  className="w-full"
+                />
               </div>
             </div>
           </div>
@@ -1866,8 +1795,35 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     </div>
                   </div>
                   
-                  {/* Right Column: Status, Order Type, Time Estimate */}
+                  {/* Right Column: Date, Status, Order Type, Time Estimate */}
                   <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="orderDate">{t('orderDetail.orderDate')}</Label>
+                      <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            id="orderDate"
+                            variant="outline"
+                            className="w-full justify-between text-left font-normal h-9"
+                          >
+                            <span className="truncate flex-1 text-left">
+                              {formData.createdAt ? formatDate(formData.createdAt) : t('orderDetail.selectDate') || 'Select date'}
+                            </span>
+                            <Calendar className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <DatePicker
+                            date={formData.createdAt || null}
+                            onChange={(date) => {
+                              setFormData({ ...formData, createdAt: date || new Date() });
+                              setDatePickerOpen(false);
+                            }}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    
                     <div className="space-y-2">
                       <Label htmlFor="status">{t('orderDetail.status')}</Label>
                     <Select
@@ -1884,33 +1840,6 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                         <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="orderDate">{t('orderDetail.orderDate')}</Label>
-                    <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          id="orderDate"
-                          variant="outline"
-                          className="w-full justify-between text-left font-normal h-9"
-                        >
-                          <span className="truncate flex-1 text-left">
-                            {formData.createdAt ? formatDate(formData.createdAt) : t('orderDetail.selectDate') || 'Select date'}
-                          </span>
-                          <Calendar className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <DatePicker
-                          date={formData.createdAt || null}
-                          onChange={(date) => {
-                            setFormData({ ...formData, createdAt: date || new Date() });
-                            setDatePickerOpen(false);
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
                   </div>
                   
                   <div className="space-y-2">
@@ -1934,61 +1863,19 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   
                   <div className="space-y-2">
                     <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
-                    {timeEstimateMode === 'preset' ? (
-                      <Select
-                        value={(formData.timeEstimate ?? 10).toString()}
-                        onValueChange={(value) => {
-                          if (value === 'custom') {
-                            setTimeEstimateMode('custom');
-                            // Restore original value if it exists, otherwise use current formData value
-                            const valueToShow = originalTimeEstimate !== undefined 
-                              ? originalTimeEstimate.toString() 
-                              : (formData.timeEstimate ?? 10).toString();
-                            setCustomTimeEstimate(valueToShow);
-                            setFormData({ ...formData, timeEstimate: originalTimeEstimate ?? formData.timeEstimate ?? 10 });
-                            // Focus the input after a short delay to ensure it's rendered
-                            setTimeout(() => {
-                              customTimeEstimateInputRef.current?.focus();
-                              customTimeEstimateInputRef.current?.select();
-                            }, 0);
-                          } else {
-                            const numValue = parseInt(value, 10);
-                            setFormData({ ...formData, timeEstimate: numValue });
-                            // Clear original value since user selected a preset
-                            setOriginalTimeEstimate(undefined);
-                          }
-                        }}
-                      >
-                        <SelectTrigger id="timeEstimate">
-                          <SelectValue>
-                            {formData.timeEstimate ?? 10}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30].map((days) => (
-                            <SelectItem key={days} value={days.toString()}>
-                              {days}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="custom">{t('orderDetail.timeEstimateCustom')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        ref={customTimeEstimateInputRef}
-                        type="number"
-                        min="1"
-                        value={customTimeEstimate}
-                        onChange={(e) => {
-                          setCustomTimeEstimate(e.target.value);
-                          const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                          setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
-                        }}
-                        placeholder="10"
-                        className="w-full"
-                      />
-                    )}
-                    </div>
+                    <Input
+                      id="timeEstimate"
+                      type="number"
+                      min="1"
+                      value={formData.timeEstimate ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                        setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                      }}
+                      placeholder="10"
+                      className="w-full"
+                    />
+                  </div>
                   </div>
                 </div>
               </div>
