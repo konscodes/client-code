@@ -362,6 +362,8 @@
     "startTypingToSearchClients": "Начните вводить текст для поиска клиентов",
     "moreClientsAvailable": "Продолжите ввод, чтобы увидеть больше результатов",
     "status": "Статус",
+    "orderDate": "Дата заказа",
+    "selectDate": "Выберите дату",
     "currency": "Валюта",
     "taxRate": "Налоговая ставка (%)",
     "globalMarkup": "Глобальная наценка (%)",

@@ -363,6 +363,8 @@
     "startTypingToSearchClients": "Start typing to search for clients",
     "moreClientsAvailable": "Continue typing to see more results",
     "status": "Status",
+    "orderDate": "Order Date",
+    "selectDate": "Select date",
     "currency": "Currency",
     "taxRate": "Tax Rate (%)",
     "globalMarkup": "Global Markup (%)",

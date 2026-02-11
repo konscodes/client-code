@@ -297,12 +297,26 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     order_id = order_data.get('id', '')
     doc_number = extract_order_number(order_id)
     
-    # Use current date
-    current_date = datetime.now()
-    if locale and locale.startswith('ru'):
-        date_formatted = format_date_full_russian(current_date.strftime('%Y-%m-%d'))
+    # Use order date from request, fallback to current date if not provided
+    order_date_str = order_data.get('date', '')
+    if order_date_str:
+        try:
+            # Parse the date string (expected format: YYYY-MM-DD)
+            if ' ' in order_date_str:
+                # Handle case where time might be included
+                order_date_str = order_date_str.split()[0]
+            order_date = datetime.strptime(order_date_str, '%Y-%m-%d')
+        except (ValueError, TypeError):
+            # If parsing fails, use current date
+            order_date = datetime.now()
     else:
-        date_formatted = current_date.strftime('%Y-%m-%d')
+        # If no date provided, use current date
+        order_date = datetime.now()
+    
+    if locale and locale.startswith('ru'):
+        date_formatted = format_date_full_russian(order_date.strftime('%Y-%m-%d'))
+    else:
+        date_formatted = order_date.strftime('%Y-%m-%d')
     
     # Create table for alignment - use full width
     header_table = doc.add_table(rows=2, cols=2)

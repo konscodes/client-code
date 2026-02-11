@@ -164,7 +164,7 @@ function formatDocumentData(
     },
     order: {
       id: order.id,
-      date: formatDate(order.createdAt),
+      date: order.createdAt ? order.createdAt.toISOString().split('T')[0] : new Date().toISOString().split('T')[0], // Send date in YYYY-MM-DD format for Python parsing
       subtotal: totals.subtotal.toFixed(2),
       tax: totals.tax.toFixed(2),
       total: totals.total.toFixed(2),
