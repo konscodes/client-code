@@ -91,11 +91,14 @@ ssh <SSH_HOST_ALIAS> "tail -f /opt/crm-app/logs/deployment.log"
 
 ### Network Access
 
-- **SSH**: Port 22 (configured with SSH key)
-- **API (Direct IP)**: `http://<VM_PUBLIC_IP>:8000`
-- **API (Domain)**: `https://supabase.service-mk.ru` or `https://api.service-mk.ru` (both point to port 8000)
-- **Studio (Direct IP only)**: `http://<VM_PUBLIC_IP>:3000` (not exposed via domain)
-- **NGINX Proxy Manager**: `http://<VM_PUBLIC_IP>:81` (for domain configuration)
+- **SSH**: Port 22 (key-only authentication)
+- **API (Domain)**: `https://supabase.service-mk.ru` or `https://api.service-mk.ru` (both point to Kong on port 8000)
+- **CRM App (VM)**: `https://crm.service-mk.ru`
+- **CRM App (Vercel)**: `https://app.service-mk.ru`
+- **Studio**: SSH tunnel only — see [Accessing Supabase Studio](#accessing-supabase-studio)
+- **NGINX Proxy Manager**: SSH tunnel only — see [Accessing NGINX Proxy Manager](#accessing-nginx-proxy-manager)
+
+**Ports 3000 and 81 are not publicly accessible** (blocked by Yandex Cloud SG, UFW, Docker 127.0.0.1 binding, and Kong config).
 
 ### SSH Access
 
@@ -106,9 +109,11 @@ Host <SSH_HOST_ALIAS>
     HostName <VM_PUBLIC_IP>
     User <VM_USERNAME>
     IdentityFile ~/.ssh/<SSH_KEY_NAME>
-    StrictHostKeyChecking no
+    StrictHostKeyChecking yes
     ServerAliveInterval 60
     ServerAliveCountMax 3
+    PasswordAuthentication no
+    PubkeyAuthentication yes
 ```
 
 **Note**: Replace placeholders:
@@ -526,15 +531,46 @@ curl -X POST 'http://<VM_PUBLIC_IP>:8000/auth/v1/admin/users' \
 
 **Note**: Replace `<SSH_HOST_ALIAS>` and `<VM_PUBLIC_IP>` with your actual values.
 
-### Accessing Studio
+### Accessing Supabase Studio
 
-1. Navigate to: `http://<VM_PUBLIC_IP>:3000`
-2. Login with user credentials
-3. Access database tables, run SQL queries, manage data
+Studio is locked to `127.0.0.1` and is only reachable via SSH tunnel. There is no browser login prompt — the SSH key is the authentication.
 
-**Default admin user** (if created):
-- Email: Check with team lead
-- Password: Check with team lead (stored securely)
+**Step 1** — Open tunnel (keep this terminal running):
+```bash
+ssh -L 3000:localhost:3000 yandex-vm -N
+```
+
+**Step 2** — Open in browser:
+```
+http://localhost:3000
+```
+
+Studio connects to `https://supabase.service-mk.ru` for API calls, so internet connectivity is required even when using the tunnel.
+
+### Accessing NGINX Proxy Manager
+
+```bash
+ssh -L 8181:localhost:81 yandex-vm -N
+# Then open: http://localhost:8181
+```
+
+### Resetting an Application User Password
+
+```bash
+ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
+  sudo docker exec supabase-db psql -U postgres -d postgres -c \
+  \"UPDATE auth.users SET encrypted_password = crypt('newpassword', gen_salt('bf')), updated_at = now() WHERE email = 'user@example.com';\""
+```
+
+Verify the login works after resetting:
+```bash
+SERVICE_KEY=$(ssh <SSH_HOST_ALIAS> "grep '^SERVICE_ROLE_KEY=' ~/supabase/docker/.env | cut -d= -f2")
+curl -s -X POST 'https://supabase.service-mk.ru/auth/v1/token?grant_type=password' \
+  -H "apikey: $SERVICE_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"newpassword"}' | python3 -c \
+  "import sys,json; d=json.load(sys.stdin); print('OK' if 'access_token' in d else d)"
+```
 
 ## Troubleshooting
 
@@ -631,135 +667,98 @@ ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
   'SELECT count(*) FROM pg_stat_activity;'"
 ```
 
-## Security Considerations
+## Security
+
+### Security Architecture
+
+The infrastructure uses defense-in-depth with three independent layers protecting admin interfaces (Studio port 3000, NPM admin port 81):
+
+1. **Yandex Cloud Security Group** — network-level firewall; only 22, 80, 443, 8000 allowed
+2. **UFW + DOCKER-USER iptables chain** — host firewall with Docker-aware rules that fire before Docker's own iptables routing
+3. **Docker port binding to `127.0.0.1`** — admin ports only listen on loopback, never reachable from the network
+
+Kong API gateway additionally has the Studio catch-all route removed, so `supabase.service-mk.ru` exposes API endpoints only.
+
+See `docs/SECURITY_AUDIT.md` for full breach analysis and remediation details.
 
 ### Important Notes
 
-⚠️ **This document is public** - All sensitive information has been replaced with placeholders:
-- `<VM_ID>`: VM identifier from Yandex Cloud console
-- `<VM_PUBLIC_IP>`: Public IP address of the VM
+⚠️ **This document is public** — all sensitive values use placeholders:
+- `<SSH_HOST_ALIAS>`: Local SSH alias (e.g., `yandex-vm`)
+- `<VM_PUBLIC_IP>`: VM public IP (from Yandex Cloud console)
 - `<VM_USERNAME>`: SSH username for the VM
-- `<SSH_HOST_ALIAS>`: Local SSH host alias (e.g., `yandex-vm`)
-- `<SSH_KEY_NAME>`: Name of SSH private key file
-- `<ANON_KEY>`: Supabase anonymous key (from `.env` file on VM)
-- `<SERVICE_ROLE_KEY>`: Supabase service role key (from `.env` file on VM)
+- `<SSH_KEY_NAME>`: SSH private key filename
 
 **Never commit to version control:**
-- Actual API keys or passwords
+- API keys, JWT secrets, or passwords
 - SSH private keys
-- Database passwords
-- Service role keys
-- Real IP addresses or VM IDs
+- `.env` files
 
-### Security Best Practices
+### Running the Security Audit
 
-1. **SSH Keys**: Keep SSH keys secure, use strong passphrases
-2. **API Keys**: Rotate keys periodically
-3. **Firewall**: Consider configuring UFW firewall (currently inactive)
-4. **Access Control**: Limit Studio access (consider IP restrictions)
-5. **Backups**: Store backups securely, encrypt if containing sensitive data
-6. **Updates**: Keep Docker images and system packages updated
-
-### Security Checks
-
-#### Running Security Check
-
-A comprehensive security check script is available on the VM:
+Verify all security controls are in place:
 
 ```bash
-ssh <SSH_HOST_ALIAS> "~/security-check.sh"
+ssh <SSH_HOST_ALIAS> "bash -s" < scripts/security-audit.sh
 ```
 
-This script checks:
-- File permissions (`.env` should be 600 or 400)
-- SSH security configuration
-- Firewall status
-- Docker security
-- Database security settings
+Expected: **31 PASS, 0 WARN, 0 FAIL**. Run after any infrastructure changes or at least monthly.
 
-#### Database Security Verification
+### Database Security
 
 **Check RLS status:**
 ```bash
-ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
-  sudo docker compose exec -T db psql -U postgres -d postgres -c \
-  \"SELECT schemaname, tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""
+ssh <SSH_HOST_ALIAS> "sudo docker exec supabase-db psql -U postgres -d postgres -c \
+  \"SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname='public' ORDER BY tablename;\""
 ```
 
 **Check RLS policies:**
 ```bash
-ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
-  sudo docker compose exec -T db psql -U postgres -d postgres -c \
-  \"SELECT schemaname, tablename, policyname, roles, cmd FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename, policyname;\""
+ssh <SSH_HOST_ALIAS> "sudo docker exec supabase-db psql -U postgres -d postgres -c \
+  \"SELECT tablename, policyname, roles, cmd FROM pg_policies WHERE schemaname='public' ORDER BY tablename;\""
 ```
 
-**Verify PostgreSQL is not exposed externally:**
-```bash
-ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
-  sudo docker ps --format 'table {{.Names}}\t{{.Ports}}' | grep -E 'db|postgres'"
-```
-
-Port 5432 should NOT be mapped to the host (only accessible within Docker network).
-
-**Check database authentication:**
-```bash
-ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
-  sudo docker compose exec -T db psql -U postgres -d postgres -c \
-  \"SELECT name, setting FROM pg_settings WHERE name IN ('password_encryption', 'ssl', 'ssl_min_protocol_version') ORDER BY name;\""
-```
-
-Expected:
-- `password_encryption`: `scram-sha-256` (strong encryption)
-- `ssl_min_protocol_version`: `TLSv1.2` or higher
-
-#### Row Level Security (RLS)
-
-All tables have RLS enabled with policies that allow authenticated users full access. This provides defense-in-depth security.
-
-**RLS Status:**
-- ✅ RLS enabled on all public tables
-- ✅ Policies configured for `authenticated` role
-- ✅ Access controlled via Supabase Auth
-
-**Current RLS Policies:**
-All tables have the policy: "Allow all for authenticated users"
-- Applies to: `authenticated` role
-- Permissions: ALL (SELECT, INSERT, UPDATE, DELETE)
-- Condition: `true` (all authenticated users have access)
+**Current RLS status:**
+- ✅ RLS enabled on all 7 public tables
+- ✅ All tables have `authenticated` role policies (SELECT, INSERT, UPDATE, DELETE)
+- ✅ PostgreSQL port 5432 not exposed to host network
 
 **Managing RLS Policies:**
 
-To view all policies:
-```bash
-ssh <SSH_HOST_ALIAS> "cd ~/supabase/docker && \
-  sudo docker compose exec -T db psql -U postgres -d postgres -c \
-  \"SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public' ORDER BY tablename, policyname;\""
-```
-
-To create a new policy:
 ```sql
-CREATE POLICY "policy_name" ON public.table_name 
-  FOR ALL TO authenticated 
-  USING (condition) 
-  WITH CHECK (condition);
-```
+-- Create policy
+CREATE POLICY "policy_name" ON public.table_name
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
 
-To drop a policy:
-```sql
+-- Drop policy
 DROP POLICY "policy_name" ON public.table_name;
 ```
 
-### Firewall Configuration (Optional)
+### Firewall Configuration
 
-To enable firewall:
+UFW is active with Docker-aware rules. To view current status:
+
 ```bash
-ssh <SSH_HOST_ALIAS> "sudo ufw allow 22/tcp    # SSH
-sudo ufw allow 80/tcp    # HTTP
-sudo ufw allow 443/tcp   # HTTPS
-sudo ufw allow 8000/tcp  # API
-sudo ufw allow 3000/tcp  # Studio
-sudo ufw enable"
+ssh <SSH_HOST_ALIAS> "sudo ufw status"
 ```
+
+Expected allowed ports: `22/tcp`, `80/tcp`, `443/tcp`, `8000/tcp`, `8080` (from `172.16.0.0/12` only).
+
+The `DOCKER-USER` iptables chain rules (persisted in `/etc/ufw/after.rules`) drop all external traffic to ports 3000 and 81 before Docker's own routing rules apply.
+
+### Credential Rotation
+
+To rotate all Supabase credentials (JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY, POSTGRES_PASSWORD, DASHBOARD_PASSWORD):
+
+```bash
+ssh <SSH_HOST_ALIAS> "bash -s" < scripts/remediate/stage4-rotate-creds.sh
+```
+
+After rotation:
+1. Update `VITE_SUPABASE_ANON_KEY` in Vercel project settings and trigger redeploy
+2. Rebuild the VM CRM frontend: `ssh <SSH_HOST_ALIAS> "/opt/crm-app/deployment/deploy.sh"`
+3. Update `.env.local` on your local machine with the new keys
 
 ## Updates & Upgrades
 
@@ -897,9 +896,7 @@ For issues or questions:
 3. Check service logs for errors
 4. Contact team lead with specific error messages
 
-## Change Log
-
-### December 2025
+#### December 2025 — Initial Setup
 - Initial setup of self-hosted Supabase on Yandex Cloud
 - Optimized for limited resources (1.9GB RAM, 19GB disk)
 - Disabled unused services (storage, realtime, functions)
@@ -910,5 +907,19 @@ For issues or questions:
 
 ---
 
-**Last Updated**: December 12, 2025
+**Last Updated**: March 3, 2026  
 **Maintained By**: Development Team
+
+### Change Log
+
+#### March 2026 — Security Remediation
+- Confirmed and remediated critical security breach (attacker had Studio access via exposed port 3000)
+- Hardened Docker port bindings: Studio and NPM admin locked to `127.0.0.1`
+- Enabled UFW with Docker-aware `DOCKER-USER` iptables chain rules
+- Removed Studio proxy route from Kong API gateway (`supabase.service-mk.ru` now API-only)
+- Disabled `studio.service-mk.ru` NPM proxy host
+- Rotated all credentials: JWT_SECRET, ANON_KEY, SERVICE_ROLE_KEY, POSTGRES_PASSWORD, DASHBOARD_PASSWORD
+- Added UFW rule for Docker bridge → CRM nginx (port 8080, `172.16.0.0/12` only)
+- Added `scripts/security-audit.sh` — 31-check read-only audit runner
+- Added `docs/SECURITY_AUDIT.md` — breach report and remediation documentation
+- Updated SSH config to use `StrictHostKeyChecking yes` and explicit `PasswordAuthentication no`
