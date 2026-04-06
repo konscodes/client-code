@@ -14,7 +14,7 @@ import {
   isValidEmail,
   extractIdNumbers
 } from '../lib/utils';
-import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User, Save, Building2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Edit, Plus, FileText, User, Save, Building2, Loader2, LayoutList } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
@@ -29,12 +29,13 @@ interface ClientDetailProps {
   previousPage?: { page: string; id?: string } | null;
 }
 
+const MAX_ORDERS_ON_CLIENT_PAGE = 20;
+
 export function ClientDetail({ clientId, onNavigate, previousPage }: ClientDetailProps) {
   const { t } = useTranslation();
   const { formatCurrency, formatDate } = useFormatting();
   const { clients, orders, addClient, updateClient } = useApp();
   const [isEditing, setIsEditing] = useState(clientId === 'new');
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders'>('overview');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -669,68 +670,16 @@ export function ClientDetail({ clientId, onNavigate, previousPage }: ClientDetai
             )}
           </div>
           
-          {/* Tabs */}
-          <div className="border-b border-[#E4E7E7]">
-            <nav className="flex gap-6" role="tablist">
-              <button
-                role="tab"
-                aria-selected={activeTab === 'overview'}
-                onClick={() => setActiveTab('overview')}
-                className={`px-4 py-3 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'overview'
-                    ? 'border-[#1F744F] text-[#1F744F]'
-                    : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
-                }`}
-              >
-                {t('clientDetail.overview')}
-              </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'orders'}
-                onClick={() => setActiveTab('orders')}
-                className={`px-4 py-3 border-b-2 transition-colors cursor-pointer ${
-                  activeTab === 'orders'
-                    ? 'border-[#1F744F] text-[#1F744F]'
-                    : 'border-transparent text-[#7C8085] hover:text-[#1E2025]'
-                }`}
-              >
-                {t('clientDetail.orders')} ({clientOrders.length})
-              </button>
-            </nav>
-          </div>
-          
-          {/* Tab Content */}
-          {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-                <h3 className="text-[#1E2025] mb-4 font-semibold text-base">{t('clientDetail.recentOrders')}</h3>
-                {clientOrders.length === 0 ? (
-                  <p className="text-[#7C8085]">{t('clientDetail.noOrders')}</p>
-                ) : (
-                  <div className="space-y-3">
-                    {clientOrders.slice(0, 5).map(order => (
-                      <button
-                        key={order.id}
-                        onClick={() => onNavigate('order-detail', order.id)}
-                        className="w-full flex items-center justify-between p-3 hover:bg-[#F7F8F8] rounded-lg transition-colors text-left cursor-pointer"
-                      >
-                        <div>
-                          <p className="text-[#1E2025]">{t('orders.orderNumberPrefix')}{extractIdNumbers(order.id)}</p>
-                          <p className="text-[#7C8085]">{formatDate(order.createdAt)}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <StatusPill status={order.status} />
-                          <p className="text-[#1E2025]">{formatCurrency(calculateOrderTotal(order))}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+          <div className="space-y-4 mt-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <LayoutList size={20} className="text-[#7C8085]" aria-hidden="true" />
+                <h2 className="text-[#1E2025] text-lg font-medium">
+                  {t('clientDetail.orders')} ({clientOrders.length})
+                </h2>
               </div>
             </div>
-          )}
-          
-          {activeTab === 'orders' && (
+
             <div className="bg-white rounded-xl border border-[#E4E7E7] overflow-hidden">
               {clientOrders.length === 0 ? (
                 <div className="px-6 py-12 text-center">
@@ -755,7 +704,7 @@ export function ClientDetail({ clientId, onNavigate, previousPage }: ClientDetai
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E4E7E7]">
-                      {clientOrders.slice(0, 10).map(order => (
+                      {clientOrders.slice(0, MAX_ORDERS_ON_CLIENT_PAGE).map(order => (
                         <tr
                           key={order.id}
                           onClick={() => onNavigate('order-detail', order.id)}
@@ -777,20 +726,20 @@ export function ClientDetail({ clientId, onNavigate, previousPage }: ClientDetai
                       ))}
                     </tbody>
                   </table>
-                  {clientOrders.length > 10 && (
+                  {clientOrders.length > MAX_ORDERS_ON_CLIENT_PAGE && (
                     <div className="px-6 py-4 border-t border-[#E4E7E7]">
                       <button
                         onClick={() => onNavigate('orders', `?client=${client?.id}`)}
                         className="text-[#1F744F] hover:text-[#165B3C] transition-colors cursor-pointer"
                       >
-                        {t('clientDetail.viewMoreOrders')} ({clientOrders.length - 10} {t('common.more')})
+                        {t('clientDetail.viewMoreOrders')} ({clientOrders.length - MAX_ORDERS_ON_CLIENT_PAGE} {t('common.more')})
                       </button>
                     </div>
                   )}
                 </>
               )}
             </div>
-          )}
+          </div>
         </>
       )}
     </div>

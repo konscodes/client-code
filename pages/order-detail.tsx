@@ -31,7 +31,8 @@ import {
   Eraser,
   GripVertical,
   FolderPlus,
-  Calendar
+  Calendar,
+  LayoutList
 } from 'lucide-react';
 import {
   DndContext,
@@ -1951,10 +1952,15 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             </div>
           </div>
           
-          {/* Line Items */}
-          <div className="bg-white rounded-xl border border-[#E4E7E7]">
-            <div className="px-6 py-4 border-b border-[#E4E7E7] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <h2 className="text-[#1E2025]">{t('orderDetail.lineItems')}</h2>
+          {/* Line Items: toolbar on page plane, table in card */}
+          <div className="space-y-4 mt-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <LayoutList size={20} className="text-[#7C8085]" aria-hidden="true" />
+                <h2 className="text-[#1E2025] text-lg font-medium">
+                  {t('orderDetail.lineItems')} ({formData.jobs?.length ?? 0})
+                </h2>
+              </div>
               <div className="flex flex-wrap gap-2 items-center justify-end sm:ml-auto">
                 <button
                   onClick={() => {
@@ -2004,7 +2010,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                 </button>
               </div>
             </div>
-            
+
+            <div className="bg-white rounded-xl border border-[#E4E7E7]">
             {/* Job Picker */}
             {showJobPicker && (
               <div className="px-6 py-4 border-b border-[#E4E7E7] bg-[#F7F8F8]">
@@ -2686,6 +2693,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                 </div>
               </DndContext>
             )}
+          </div>
           </div>
       </div>
       
