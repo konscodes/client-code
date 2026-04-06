@@ -294,7 +294,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   const [editingJobName, setEditingJobName] = useState('');
   const [focusedPriceInputs, setFocusedPriceInputs] = useState<Set<string>>(new Set());
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
-  const [pendingDocumentAction, setPendingDocumentAction] = useState<(() => Promise<void>) | null>(null);
+  const [pendingDocumentAction, setPendingDocumentAction] = useState<((order: Order) => Promise<void>) | null>(null);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [clientValidationError, setClientValidationError] = useState<string>('');
@@ -490,6 +490,73 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     }
   };
 
+  /** Full order snapshot from the form — used for document generation and dialog flows */
+  const buildOrderFromFormForDocument = (): Order => ({
+    id: existingOrder?.id || formData.id || '',
+    clientId: formData.clientId!,
+    status: (formData.status as OrderStatus) || 'proposal',
+    createdAt: formData.createdAt || existingOrder?.createdAt || new Date(),
+    updatedAt: new Date(),
+    taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
+    globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+    currency: formData.currency || 'USD',
+    orderType: formData.orderType || '',
+    orderTitle: formData.orderTitle || '',
+    timeEstimate: formData.timeEstimate ?? 10,
+    jobs: formData.jobs || [],
+  });
+
+  /** Persists an existing order (same payload as Save). Returns the saved order or null on validation/API failure. */
+  const persistExistingOrder = async (options?: { showSuccessToast?: boolean }): Promise<Order | null> => {
+    const showSuccessToast = options?.showSuccessToast !== false;
+    if (!formData.clientId) {
+      toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
+      return null;
+    }
+    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
+      setTouchedOrderTitle(true);
+      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
+      return null;
+    }
+    setOrderTitleValidationError('');
+    setIsSaving(true);
+    try {
+      const orderData: Order = {
+        id: existingOrder?.id || formData.id || '',
+        clientId: formData.clientId,
+        status: formData.status as OrderStatus || 'proposal',
+        createdAt: formData.createdAt || existingOrder?.createdAt || new Date(),
+        updatedAt: new Date(),
+        taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
+        globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+        currency: formData.currency || 'USD',
+        orderType: formData.orderType || '',
+        orderTitle: formData.orderTitle || '',
+        timeEstimate: formData.timeEstimate ?? 10,
+        jobs: formData.jobs || [],
+      };
+      await updateOrder(orderData.id, orderData);
+      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+        return oldOrders.map(order => 
+          order.id === orderData.id ? orderData : order
+        );
+      });
+      setFormData({ ...formData, ...orderData });
+      if (showSuccessToast) {
+        toast.success(t('orderDetail.orderUpdatedSuccess'));
+      }
+      return orderData;
+    } catch (error: any) {
+      logger.error('Error saving order', error);
+      const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
+      toast.error(errorMessage);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCreate = async () => {
     // Validate client is selected
     if (!formData.clientId) {
@@ -563,58 +630,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   };
 
   const handleSave = async () => {
-    if (!formData.clientId) {
-      toast.error(t('orderDetail.selectClientRequired') || 'Please select a client');
-      return;
-    }
-    
-    // Validate order title is provided
-    if (!formData.orderTitle || formData.orderTitle.trim() === '') {
-      setTouchedOrderTitle(true);
-      setOrderTitleValidationError(t('orderDetail.orderTitleRequired') || 'Order title is required');
-      toast.error(t('orderDetail.orderTitleRequired') || 'Order title is required');
-      return;
-    }
-    
-    setOrderTitleValidationError('');
-    setIsSaving(true);
-    try {
-      const orderData: Order = {
-        id: existingOrder?.id || formData.id || '',
-        clientId: formData.clientId,
-        status: formData.status as OrderStatus || 'proposal',
-        createdAt: formData.createdAt || existingOrder?.createdAt || new Date(),
-        updatedAt: new Date(),
-        taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
-        globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
-        currency: formData.currency || 'USD',
-        orderType: formData.orderType || '',
-        orderTitle: formData.orderTitle || '',
-        timeEstimate: formData.timeEstimate ?? 10,
-        jobs: formData.jobs || [],
-      };
-      
-      await updateOrder(orderData.id, orderData);
-      
-      // Optimistically update the query cache so existingOrder updates immediately
-      // This ensures hasUnsavedChanges becomes false right after saving
-      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
-        return oldOrders.map(order => 
-          order.id === orderData.id ? orderData : order
-        );
-      });
-      
-      // Update formData to reflect saved state
-      setFormData({ ...formData, ...orderData });
-      
-      toast.success(t('orderDetail.orderUpdatedSuccess'));
-    } catch (error: any) {
-      logger.error('Error saving order', error);
-      const errorMessage = error?.message || error?.error?.message || t('orderDetail.saveOrderFailed');
-      toast.error(errorMessage);
-    } finally {
-      setIsSaving(false);
-    }
+    await persistExistingOrder({ showSuccessToast: true });
   };
 
   // Handle duplicate order - creates a copy in the database and navigates to it
@@ -886,19 +902,26 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   };
   
   // Document generation handlers
-  const handleGenerateDocument = async (action: () => Promise<void>) => {
+  const handleGenerateDocument = async (action: (order: Order) => Promise<void>) => {
     if (!isOrderSaved) {
       setPendingDocumentAction(() => action);
       setShowDocumentDialog(true);
       return;
     }
-    await action();
+    if (hasUnsavedChanges) {
+      const saved = await persistExistingOrder({ showSuccessToast: false });
+      if (!saved) return;
+      await action(saved);
+      return;
+    }
+    await action(buildOrderFromFormForDocument());
   };
   
   const handleCreateDocumentAnyway = async () => {
     setShowDocumentDialog(false);
     if (pendingDocumentAction) {
-      await pendingDocumentAction();
+      const order = buildOrderFromFormForDocument();
+      await pendingDocumentAction(order);
       setPendingDocumentAction(null);
     }
   };
@@ -935,36 +958,30 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
         globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
         currency: formData.currency || 'USD',
+        timeEstimate: formData.timeEstimate ?? 10,
       };
       
       if (isNewOrder) {
         const generatedOrderId = await addOrder(orderData);
         toast.success(t('orderDetail.orderCreatedSuccess'));
-        // Update formData with the new order ID and all order data
-        // This ensures the order is recognized as saved
+        const orderForDoc: Order = { ...orderData, id: generatedOrderId };
         setFormData({ ...formData, ...orderData, id: generatedOrderId });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        if (pendingDocumentAction) {
+          await pendingDocumentAction(orderForDoc);
+          setPendingDocumentAction(null);
+        }
       } else {
-        await updateOrder(orderData.id, orderData);
-        
-        // Optimistically update the query cache so existingOrder updates immediately
-        queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
-          return oldOrders.map(order => 
-            order.id === orderData.id ? orderData : order
-          );
-        });
-        
-        toast.success(t('orderDetail.orderUpdatedSuccess'));
-        // Update formData to reflect saved state
-        setFormData({ ...formData, ...orderData });
-      }
-      
-      // Small delay to ensure orders list updates and state propagates
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Now generate the document
-      if (pendingDocumentAction) {
-        await pendingDocumentAction();
-        setPendingDocumentAction(null);
+        const saved = await persistExistingOrder({ showSuccessToast: true });
+        if (!saved) {
+          setPendingDocumentAction(null);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 300));
+        if (pendingDocumentAction) {
+          await pendingDocumentAction(saved);
+          setPendingDocumentAction(null);
+        }
       }
     } catch (error) {
       logger.error('Error saving order', error);
@@ -985,16 +1002,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       return;
     }
     
-    const client = clients.find(c => c.id === formData.clientId);
-    if (!client) {
-      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
-      return;
-    }
-    
-    await handleGenerateDocument(async () => {
+    await handleGenerateDocument(async (order: Order) => {
+      const client = clients.find(c => c.id === order.clientId);
+      if (!client) {
+        toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+        return;
+      }
       setGeneratingInvoice(true);
       try {
-        const order = formData as Order;
         const invoiceNumber = generateDocumentNumber(
           companySettings.invoicePrefix,
           order.id,
@@ -1017,16 +1032,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       return;
     }
     
-    const client = clients.find(c => c.id === formData.clientId);
-    if (!client) {
-      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
-      return;
-    }
-    
-    await handleGenerateDocument(async () => {
+    await handleGenerateDocument(async (order: Order) => {
+      const client = clients.find(c => c.id === order.clientId);
+      if (!client) {
+        toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+        return;
+      }
       setGeneratingPO(true);
       try {
-        const order = formData as Order;
         const poNumber = generateDocumentNumber(
           companySettings.poPrefix,
           order.id,
@@ -1049,16 +1062,14 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       return;
     }
     
-    const client = clients.find(c => c.id === formData.clientId);
-    if (!client) {
-      toast.error(t('orderDetail.clientNotFound') || 'Client not found');
-      return;
-    }
-    
-    await handleGenerateDocument(async () => {
+    await handleGenerateDocument(async (order: Order) => {
+      const client = clients.find(c => c.id === order.clientId);
+      if (!client) {
+        toast.error(t('orderDetail.clientNotFound') || 'Client not found');
+        return;
+      }
       setGeneratingSpecification(true);
       try {
-        const order = formData as Order;
         const specificationNumber = generateDocumentNumber(
           companySettings.invoicePrefix,
           order.id,
