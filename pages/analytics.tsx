@@ -78,10 +78,12 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     return { startDate, endDate };
   }, [timePreset, customDateFrom, customDateTo]);
 
-  // Filter orders by updatedAt within time range
+  // Filter orders by createdAt within time range.
+  // We intentionally use createdAt (not updatedAt) so that editing an old order
+  // does not re-attribute its revenue/count to the month of the edit.
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      const orderDate = order.updatedAt instanceof Date ? order.updatedAt : new Date(order.updatedAt);
+      const orderDate = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt);
       return orderDate >= dateRange.startDate && orderDate <= dateRange.endDate;
     });
   }, [orders, dateRange]);
@@ -107,11 +109,12 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     const uniqueClientIds = new Set(filteredOrders.map(o => o.clientId));
     const numberOfClients = uniqueClientIds.size;
 
-    // Number of orders: Total count of orders updated in time range
+    // Number of orders: Total count of orders created in time range
     const numberOfOrders = filteredOrders.length;
 
-    // Orders in progress: Orders with status 'in-progress' updated in time range
-    const ordersInProgress = filteredOrders.filter(
+    // Orders in progress: reflects current system state, independent of the
+    // selected time window — an "in progress" order is in progress now.
+    const ordersInProgress = orders.filter(
       o => o.status === 'in-progress'
     ).length;
 
@@ -126,7 +129,7 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
       ordersInProgress,
       revenueTotal,
     };
-  }, [filteredOrders]);
+  }, [filteredOrders, orders]);
 
   // Revenue per client chart data
   const revenuePerClientData = useMemo(() => {
@@ -153,10 +156,9 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     const monthMap = new Map<string, number>();
 
     filteredOrders.forEach(order => {
-      const orderDate = order.updatedAt instanceof Date ? order.updatedAt : new Date(order.updatedAt);
+      const orderDate = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt);
       const monthKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
-      const monthLabel = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      
+
       if (!monthMap.has(monthKey)) {
         monthMap.set(monthKey, 0);
       }
@@ -184,7 +186,7 @@ export function Analytics({ onNavigate }: AnalyticsProps) {
     filteredOrders
       .filter(o => o.status === 'completed')
       .forEach(order => {
-        const orderDate = order.updatedAt instanceof Date ? order.updatedAt : new Date(order.updatedAt);
+        const orderDate = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt);
         const monthKey = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
         const revenue = calculateOrderTotal(order);
         
