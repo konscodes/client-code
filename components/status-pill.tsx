@@ -23,13 +23,13 @@ const statusConfig: Record<OrderStatus, { className: string; style?: React.CSSPr
   },
 };
 
-const paymentConfig = {
+const paymentConfig: Record<'paid' | 'unpaid', { className: string; style?: React.CSSProperties }> = {
   paid: {
     className: 'bg-[#E8F5E9] text-[#1F744F] font-medium',
   },
   unpaid: {
     className: 'font-medium',
-    style: { backgroundColor: '#FFECB3', color: '#F57F17' } as React.CSSProperties,
+    style: { backgroundColor: '#FFECB3', color: '#F57F17' },
   },
 };
 
@@ -78,7 +78,7 @@ export function PaymentPill({ isPaid }: PaymentPillProps) {
   return (
     <span
       className={`inline-flex items-center px-3 py-1 rounded-md whitespace-nowrap ${config.className}`}
-      style={'style' in config ? config.style : undefined}
+      style={config.style}
       role="status"
       aria-label={`${t('orders.payment')}: ${label}`}
     >
