@@ -61,6 +61,7 @@ export interface Order {
   orderType: string;
   orderTitle: string;
   timeEstimate?: number; // Time estimate in days
+  isPaid?: boolean; // Payment status; false/undefined = unpaid
   jobs: OrderJob[];
   // Denormalized fields (from database)
   total?: number;      // Calculated total (with tax)

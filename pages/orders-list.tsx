@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { useApp } from '../lib/app-context';
 import { useFormatting } from '../lib/use-formatting';
-import { StatusPill } from '../components/status-pill';
+import { StatusPill, PaymentPill } from '../components/status-pill';
 import { calculateOrderTotal, getOrderTotals, extractIdNumbers } from '../lib/utils';
 import { logger } from '../lib/logger';
 import { Search, Plus, Filter, Columns, X as XIcon, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Table, LayoutGrid } from 'lucide-react';
@@ -25,7 +25,7 @@ interface OrdersListProps {
   pageId?: string;
 }
 
-type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle' | 'timeEstimate';
+type ColumnKey = 'orderId' | 'client' | 'date' | 'status' | 'payment' | 'jobs' | 'total' | 'subtotal' | 'orderType' | 'orderTitle' | 'timeEstimate';
 
 export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const { t } = useTranslation();
@@ -71,7 +71,8 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     client: false,
     date: true,
     status: true,
-    jobs: true,
+    payment: true,
+    jobs: false,
     total: true,
     subtotal: false,
     orderType: false,
@@ -85,11 +86,12 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     'client',
     'date',
     'status',
-    'jobs',
+    'payment',
     'total',
     'subtotal',
     'orderType',
     'timeEstimate',
+    'jobs',
   ];
   
   // Load from localStorage on mount
@@ -136,18 +138,28 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   // Column visibility state - load from localStorage and merge with defaults to include new columns
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(() => {
     const stored = loadFromStorage<Record<ColumnKey, boolean>>(STORAGE_KEYS.visibleColumns, defaultVisibleColumns);
-    // Merge stored visibility with defaults to ensure new columns are included
-    return { ...defaultVisibleColumns, ...stored };
+    const isNewPaymentColumn = stored.payment === undefined;
+    const merged = { ...defaultVisibleColumns, ...stored };
+    if (isNewPaymentColumn) {
+      merged.payment = true;
+      merged.jobs = false;
+    }
+    return merged;
   });
   
   // Column order state - load from localStorage and merge with defaults to include new columns
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(() => {
     const stored = loadFromStorage<ColumnKey[]>(STORAGE_KEYS.columnOrder, defaultColumnOrder);
-    // Merge stored order with defaults to ensure new columns are included
     const mergedOrder = [...stored];
     defaultColumnOrder.forEach((col) => {
       if (!mergedOrder.includes(col)) {
-        mergedOrder.push(col);
+        if (col === 'payment') {
+          const statusIndex = mergedOrder.indexOf('status');
+          const insertAt = statusIndex >= 0 ? statusIndex + 1 : mergedOrder.length;
+          mergedOrder.splice(insertAt, 0, col);
+        } else {
+          mergedOrder.push(col);
+        }
       }
     });
     return mergedOrder;
@@ -319,6 +331,9 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
         case 'status':
           comparison = a.status.localeCompare(b.status);
           break;
+        case 'payment':
+          comparison = Number(a.isPaid === true) - Number(b.isPaid === true);
+          break;
         case 'jobs':
           comparison = a.jobs.length - b.jobs.length;
           break;
@@ -421,6 +436,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     client: t('orders.client'),
     date: t('orders.date'),
     status: t('orders.status'),
+    payment: t('orders.payment'),
     jobs: t('orders.jobs'),
     total: t('orders.total'),
     subtotal: t('orders.subtotal'),
@@ -439,6 +455,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     const isDateColumn = columnKey === 'date';
     const isJobsColumn = columnKey === 'jobs';
     const isStatusColumn = columnKey === 'status';
+    const isPaymentColumn = columnKey === 'payment';
     const isTimeEstimateColumn = columnKey === 'timeEstimate';
     const hasOpenPanel = filtersOpen || settingsOpen;
     
@@ -460,6 +477,9 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
     }
     if (isStatusColumn) {
       headerStyle.minWidth = '120px';
+    }
+    if (isPaymentColumn) {
+      headerStyle.minWidth = '150px';
     }
     if (isTimeEstimateColumn) {
       headerStyle.minWidth = '100px';
@@ -600,6 +620,23 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
             } : { minWidth: '120px' }}
           >
             <StatusPill status={order.status} />
+          </td>
+        );
+      case 'payment':
+        return (
+          <td 
+            key={columnKey}
+            data-sticky={isFirstColumn ? 'true' : undefined}
+            className={`px-6 py-4 border-b border-[#E4E7E7] ${isFirstColumn ? 'sticky left-0 z-10' : ''}`}
+            style={isFirstColumn ? { 
+              position: 'sticky', 
+              left: 0, 
+              zIndex: hasOpenPanel ? 0 : 10, 
+              minWidth: '150px',
+              background: 'linear-gradient(to left, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 20px, rgba(255,255,255,1) 100%)'
+            } : { minWidth: '150px' }}
+          >
+            <PaymentPill isPaid={order.isPaid === true} />
           </td>
         );
       case 'jobs':
@@ -788,6 +825,12 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-[#7C8085]">{t('orders.date')}</span>
                     <span className="text-[#1E2025]">{formatDate(order.createdAt)}</span>
+                  </div>
+                )}
+                {visibleColumns.payment && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#7C8085]">{t('orders.payment')}</span>
+                    <PaymentPill isPaid={order.isPaid === true} />
                   </div>
                 )}
                 {visibleColumns.jobs && (
@@ -1020,6 +1063,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
                           client: 'w-20',
                           date: 'w-24',
                           status: 'w-16',
+                          payment: 'w-24',
                           jobs: 'w-16',
                           total: 'w-20',
                           subtotal: 'w-20',
@@ -1232,6 +1276,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
                           <SelectItem value="orderId">{t('orders.orderId')}</SelectItem>
                           <SelectItem value="client">{t('orders.client')}</SelectItem>
                           <SelectItem value="status">{t('orders.status')}</SelectItem>
+                          <SelectItem value="payment">{t('orders.payment')}</SelectItem>
                           <SelectItem value="jobs">{t('orders.jobs')}</SelectItem>
                           <SelectItem value="total">{t('orders.total')}</SelectItem>
                           <SelectItem value="subtotal">{t('orders.subtotal')}</SelectItem>

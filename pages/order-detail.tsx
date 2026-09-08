@@ -181,6 +181,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       orderType: 'Ремонтные работы',
       orderTitle: '',
       timeEstimate: 10, // Default to 10 days
+      isPaid: false,
       jobs: [],
     };
   });
@@ -455,6 +456,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         formData.globalMarkup !== existingOrder.globalMarkup ||
         formData.currency !== existingOrder.currency ||
         formData.timeEstimate !== existingOrder.timeEstimate ||
+        !!formData.isPaid !== !!existingOrder.isPaid ||
         jobsChanged
       );
     }
@@ -466,7 +468,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     
     // For orders that don't exist yet, no unsaved changes
     return false;
-  }, [isOrderSaved, existingOrder, isNewOrder, formData.clientId, formData.status, formData.orderType, formData.orderTitle, formData.taxRate, formData.globalMarkup, formData.currency, formData.timeEstimate, formData.jobs]);
+  }, [isOrderSaved, existingOrder, isNewOrder, formData.clientId, formData.status, formData.orderType, formData.orderTitle, formData.taxRate, formData.globalMarkup, formData.currency, formData.timeEstimate, formData.isPaid, formData.jobs]);
   
   // Notify parent component about unsaved changes state
   useEffect(() => {
@@ -509,6 +511,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     orderType: formData.orderType || '',
     orderTitle: formData.orderTitle || '',
     timeEstimate: formData.timeEstimate ?? 10,
+    isPaid: formData.isPaid === true,
     jobs: formData.jobs || [],
   });
 
@@ -540,6 +543,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
         timeEstimate: formData.timeEstimate ?? 10,
+        isPaid: formData.isPaid === true,
         jobs: formData.jobs || [],
       };
       await updateOrder(orderData.id, orderData);
@@ -596,6 +600,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
         timeEstimate: formData.timeEstimate ?? 10,
+        isPaid: formData.isPaid === true,
         jobs: [],
       };
       
@@ -614,6 +619,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         orderType: orderData.orderType,
         orderTitle: orderData.orderTitle,
         timeEstimate: orderData.timeEstimate,
+        isPaid: orderData.isPaid === true,
         jobs: [], // New orders have no jobs
       };
       
@@ -965,6 +971,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
         currency: formData.currency || 'USD',
         timeEstimate: formData.timeEstimate ?? 10,
+        isPaid: formData.isPaid === true,
       };
       
       if (isNewOrder) {
@@ -1249,9 +1256,9 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         
         {/* Basic Order Information Card */}
         <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left Column: Client and Order Title */}
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Client and Order Title */}
               <div className="space-y-2">
                 <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
                 <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
@@ -1393,14 +1400,13 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                   aria-invalid={touchedOrderTitle && !!orderTitleValidationError}
                   className={touchedOrderTitle && orderTitleValidationError ? 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/50' : ''}
                 />
-                {touchedOrderTitle && orderTitleValidationError && (
-                  <p className="text-sm text-red-600">{orderTitleValidationError}</p>
-                )}
+                    {touchedOrderTitle && orderTitleValidationError && (
+                      <p className="text-sm text-red-600">{orderTitleValidationError}</p>
+                    )}
               </div>
             </div>
             
-            {/* Right Column: Date, Status, Type, and Estimate */}
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="orderDate">{t('orderDetail.orderDate')}</Label>
                 <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -1429,6 +1435,22 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
+                <Input
+                  id="timeEstimate"
+                  type="number"
+                  min="1"
+                  value={formData.timeEstimate ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                    setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                  }}
+                  placeholder="10"
+                  className="w-full"
+                />
+              </div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="status">{t('orderDetail.status')}</Label>
                 <Select
                   value={formData.status || 'proposal'}
@@ -1447,6 +1469,22 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="payment">{t('orderDetail.payment')}</Label>
+                <Select
+                  value={formData.isPaid ? 'paid' : 'unpaid'}
+                  onValueChange={(value) => setFormData({ ...formData, isPaid: value === 'paid' })}
+                >
+                  <SelectTrigger id="payment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unpaid">{t('orders.unpaid')}</SelectItem>
+                    <SelectItem value="paid">{t('orders.paid')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
                 <Select
                   value={formData.orderType || ''}
@@ -1463,22 +1501,6 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
-                <Input
-                  id="timeEstimate"
-                  type="number"
-                  min="1"
-                  value={formData.timeEstimate ?? ''}
-                  onChange={(e) => {
-                    const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                    setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
-                  }}
-                  placeholder="10"
-                  className="w-full"
-                />
               </div>
             </div>
           </div>
@@ -1678,9 +1700,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
               {/* Section 1: Order Information (spans 2 columns on desktop) */}
               <div className="md:col-span-2">
                 <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderInformation')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Left Column: Client and Order Title */}
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="client">{t('orderDetail.clientRequired')}</Label>
                     <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
@@ -1817,8 +1838,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     </div>
                   </div>
                   
-                  {/* Right Column: Date, Status, Order Type, Time Estimate */}
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="orderDate">{t('orderDetail.orderDate')}</Label>
                       <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -1847,63 +1867,79 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
                     </div>
                     
                     <div className="space-y-2">
+                      <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
+                      <Input
+                        id="timeEstimate"
+                        type="number"
+                        min="1"
+                        value={formData.timeEstimate ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                          setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
+                        }}
+                        placeholder="10"
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
                       <Label htmlFor="status">{t('orderDetail.status')}</Label>
-                    <Select
-                      value={formData.status || 'proposal'}
-                      onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
-                    >
-                      <SelectTrigger id="status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
-                        <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
-                        <SelectItem value="completed">{t('orders.completed')}</SelectItem>
-                        <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      <Select
+                        value={formData.status || 'proposal'}
+                        onValueChange={(value) => setFormData({ ...formData, status: value as OrderStatus })}
+                      >
+                        <SelectTrigger id="status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="proposal">{t('orders.proposal')}</SelectItem>
+                          <SelectItem value="in-progress">{t('orders.inProgress')}</SelectItem>
+                          <SelectItem value="completed">{t('orders.completed')}</SelectItem>
+                          <SelectItem value="canceled">{t('orders.canceled')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
-                    <Select
-                      value={formData.orderType || ''}
-                      onValueChange={(value) => setFormData({ ...formData, orderType: value })}
-                    >
-                      <SelectTrigger id="orderType">
-                        <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ORDER_TYPES.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {getOrderTypeLabel(type.value)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="payment">{t('orderDetail.payment')}</Label>
+                      <Select
+                        value={formData.isPaid ? 'paid' : 'unpaid'}
+                        onValueChange={(value) => setFormData({ ...formData, isPaid: value === 'paid' })}
+                      >
+                        <SelectTrigger id="payment">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unpaid">{t('orders.unpaid')}</SelectItem>
+                          <SelectItem value="paid">{t('orders.paid')}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="timeEstimate">{t('orderDetail.timeEstimate')}</Label>
-                    <Input
-                      id="timeEstimate"
-                      type="number"
-                      min="1"
-                      value={formData.timeEstimate ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-                        setFormData({ ...formData, timeEstimate: isNaN(value as number) ? undefined : value });
-                      }}
-                      placeholder="10"
-                      className="w-full"
-                    />
-                  </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="orderType">{t('orderDetail.orderType')}</Label>
+                      <Select
+                        value={formData.orderType || ''}
+                        onValueChange={(value) => setFormData({ ...formData, orderType: value })}
+                      >
+                        <SelectTrigger id="orderType">
+                          <SelectValue placeholder={t('orderDetail.orderTypePlaceholder')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ORDER_TYPES.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {getOrderTypeLabel(type.value)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
               
               {/* Section 2: Order Summary */}
-              <div>
+              <div className="bg-[#F7F8F8] rounded-lg p-4 h-fit">
                 <h3 className="text-[#555A60] mb-4 font-semibold text-base">{t('orderDetail.orderSummary')}</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-[#555A60]">

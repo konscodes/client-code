@@ -114,6 +114,7 @@ function dbRowToOrder(row: any, jobsByOrderId: Map<string, OrderJob[]>): Order {
     orderType: row.orderType || '',
     orderTitle: row.orderTitle || '',
     timeEstimate: row.timeEstimate !== undefined && row.timeEstimate !== null ? parseInt(row.timeEstimate, 10) : undefined,
+    isPaid: row.isPaid === true,
     jobs,
     // Denormalized fields (from database)
     total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : undefined,
@@ -686,6 +687,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           orderType: order.orderType,
           orderTitle: order.orderTitle,
           timeEstimate: order.timeEstimate,
+          isPaid: order.isPaid === true,
         });
       
       if (orderErr) throw orderErr;
@@ -732,6 +734,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Remove jobs from updateData if present (handled separately)
       const jobs = updateData.jobs;
       delete updateData.jobs;
+      delete updateData.total;
+      delete updateData.subtotal;
+      delete updateData.job_count;
+      if (updates.isPaid !== undefined) {
+        updateData.isPaid = updates.isPaid === true;
+      }
       
       const { error: err } = await supabase
         .from('orders')
@@ -819,6 +827,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           orderType: sourceOrder.orderType,
           orderTitle: `${sourceOrder.orderTitle} (Copy)`,
           timeEstimate: sourceOrder.timeEstimate,
+          isPaid: false,
         });
       
       if (orderErr) throw orderErr;

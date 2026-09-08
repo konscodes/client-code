@@ -23,6 +23,16 @@ const statusConfig: Record<OrderStatus, { className: string; style?: React.CSSPr
   },
 };
 
+const paymentConfig = {
+  paid: {
+    className: 'bg-[#E8F5E9] text-[#1F744F] font-medium',
+  },
+  unpaid: {
+    className: 'font-medium',
+    style: { backgroundColor: '#FFECB3', color: '#F57F17' } as React.CSSProperties,
+  },
+};
+
 export function StatusPill({ status }: StatusPillProps) {
   const { t } = useTranslation();
   const config = statusConfig[status];
@@ -49,6 +59,28 @@ export function StatusPill({ status }: StatusPillProps) {
       style={config.style}
       role="status"
       aria-label={`${t('orders.status')}: ${label}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+interface PaymentPillProps {
+  isPaid: boolean;
+}
+
+export function PaymentPill({ isPaid }: PaymentPillProps) {
+  const { t } = useTranslation();
+  const paid = isPaid === true;
+  const config = paid ? paymentConfig.paid : paymentConfig.unpaid;
+  const label = paid ? t('orders.paid') : t('orders.unpaid');
+
+  return (
+    <span
+      className={`inline-flex items-center px-3 py-1 rounded-md whitespace-nowrap ${config.className}`}
+      style={'style' in config ? config.style : undefined}
+      role="status"
+      aria-label={`${t('orders.payment')}: ${label}`}
     >
       {label}
     </span>
