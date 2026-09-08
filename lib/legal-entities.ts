@@ -40,7 +40,7 @@ export const METSERVICE_COMPANY: CompanySettings = {
   bankBik: '044525225',
   currency: 'RUB',
   locale: 'ru-RU',
-  defaultTaxRate: 5,
+  defaultTaxRate: 0,
   defaultMarkup: 0,
   invoicePrefix: 'smeta',
   poPrefix: 'kp',
@@ -62,12 +62,11 @@ export const LEGAL_ENTITIES: LegalEntityDefinition[] = [
     shortName: 'МЕТСЕРВИС',
     numberSeries: 'metservice',
     resolveSettings: (defaults) => {
-      // Prefer cached settings from last load/save; fall back to built-in defaults
+      // Prefer cached settings from last load/save; fall back to built-in defaults.
+      // Keep Metservice tax/markup independent from MK (МЕТСЕРВИС is typically without VAT).
       const stored = getMetserviceSettingsSync();
       return {
         ...stored,
-        defaultTaxRate: defaults.defaultTaxRate ?? stored.defaultTaxRate,
-        defaultMarkup: defaults.defaultMarkup ?? stored.defaultMarkup,
         currency: defaults.currency || stored.currency,
         locale: defaults.locale || stored.locale,
       };
@@ -75,7 +74,7 @@ export const LEGAL_ENTITIES: LegalEntityDefinition[] = [
   },
 ];
 
-const METSERVICE_SETTINGS_KEY = 'metservice-company-settings-v1';
+const METSERVICE_SETTINGS_KEY = 'metservice-company-settings-v2';
 
 /** In-memory cache so document generation can resolve sync after settings load/save */
 let metserviceSettingsCache: CompanySettings | null = null;
@@ -119,8 +118,14 @@ export async function loadMetserviceSettings(): Promise<CompanySettings> {
         taxId: data.taxId ?? data.inn ?? METSERVICE_COMPANY.taxId,
         currency: data.currency ?? METSERVICE_COMPANY.currency,
         locale: data.locale ?? METSERVICE_COMPANY.locale,
-        defaultTaxRate: parseFloat(data.defaultTaxRate) || METSERVICE_COMPANY.defaultTaxRate,
-        defaultMarkup: parseFloat(data.defaultMarkup) || METSERVICE_COMPANY.defaultMarkup,
+        defaultTaxRate: (() => {
+          const n = parseFloat(data.defaultTaxRate);
+          return Number.isFinite(n) ? n : METSERVICE_COMPANY.defaultTaxRate;
+        })(),
+        defaultMarkup: (() => {
+          const n = parseFloat(data.defaultMarkup);
+          return Number.isFinite(n) ? n : METSERVICE_COMPANY.defaultMarkup;
+        })(),
         invoicePrefix: data.invoicePrefix || METSERVICE_COMPANY.invoicePrefix,
         poPrefix: data.poPrefix || METSERVICE_COMPANY.poPrefix,
         specPrefix: data.specPrefix || METSERVICE_COMPANY.specPrefix,

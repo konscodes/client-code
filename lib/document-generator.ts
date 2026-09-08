@@ -9,10 +9,14 @@ const PYTHON_SERVICE_URL =
   import.meta.env.VITE_DOCX_SERVICE_URL || 
   (import.meta.env.DEV ? 'http://localhost:5001/generate' : '/api/generate');
 
+export type DocumentStyle = 'mk' | 'metservice';
+
 interface DocumentData {
   type: 'invoice' | 'po' | 'specification';
   locale?: string;
   documentPrefix?: string; // Prefix for filename (e.g., 'smeta', 'kp', 'spec')
+  /** Layout/theme: MK (Times) vs Metservice compact (Verdana) */
+  documentStyle?: DocumentStyle;
   company: {
     name: string;
     address: string;
@@ -64,9 +68,15 @@ function formatDocumentData(
   client: Client,
   companySettings: CompanySettings,
   documentType: 'invoice' | 'po' | 'specification',
-  documentNumber: string
+  documentNumber: string,
+  documentStyle: DocumentStyle = 'mk'
 ): DocumentData {
-  const taxRate = order.taxRate || 0;
+  // Company profile controls VAT on issued docs (МЕТСЕРВИС default is 0 / Без НДС)
+  const orderTaxRate = order.taxRate || 0;
+  const taxRate =
+    companySettings.defaultTaxRate > 0
+      ? orderTaxRate || companySettings.defaultTaxRate
+      : 0;
   const hasTax = taxRate > 0;
   
   // Format jobs for the Python service - apply tax per line item if tax is set
@@ -94,13 +104,18 @@ function formatDocumentData(
     const lineTotal = hasTax 
       ? baseLineTotal * (1 + taxRate / 100)
       : baseLineTotal;
+
+    // Unit price as shown on the document (with markup; + tax when applicable)
+    const unitDisplay = job.quantity > 0
+      ? (hasTax ? lineTotal / job.quantity : baseLineTotal / job.quantity)
+      : job.unitPrice * (1 + job.lineMarkup / 100) * (hasTax ? 1 + taxRate / 100 : 1);
     
     return {
       code: `JOB-${(index + 1).toString().padStart(3, '0')}`,
       name: job.jobName || job.description || 'Job Item',
       qty: job.quantity.toString(),
       unit: 'unit', // Could be enhanced to use unitOfMeasure from job template
-      unitPrice: job.unitPrice.toFixed(2),
+      unitPrice: unitDisplay.toFixed(2),
       lineTotal: lineTotal.toFixed(2),
       type: 'job' as const,
     };
@@ -139,6 +154,7 @@ function formatDocumentData(
     type: documentType,
     locale: companySettings.locale,
     documentPrefix,
+    documentStyle,
     company: {
       name: companySettings.name,
       address: companySettings.address,
@@ -267,9 +283,10 @@ export async function generateInvoice(
   order: Order,
   client: Client,
   companySettings: CompanySettings,
-  invoiceNumber: string
+  invoiceNumber: string,
+  documentStyle: DocumentStyle = 'mk'
 ): Promise<void> {
-  const data = formatDocumentData(order, client, companySettings, 'invoice', invoiceNumber);
+  const data = formatDocumentData(order, client, companySettings, 'invoice', invoiceNumber, documentStyle);
   await downloadDocument(data);
 }
 
@@ -277,9 +294,10 @@ export async function generatePurchaseOrder(
   order: Order,
   client: Client,
   companySettings: CompanySettings,
-  poNumber: string
+  poNumber: string,
+  documentStyle: DocumentStyle = 'mk'
 ): Promise<void> {
-  const data = formatDocumentData(order, client, companySettings, 'po', poNumber);
+  const data = formatDocumentData(order, client, companySettings, 'po', poNumber, documentStyle);
   await downloadDocument(data);
 }
 
@@ -287,9 +305,10 @@ export async function generateSpecification(
   order: Order,
   client: Client,
   companySettings: CompanySettings,
-  specificationNumber: string
+  specificationNumber: string,
+  documentStyle: DocumentStyle = 'mk'
 ): Promise<void> {
-  const data = formatDocumentData(order, client, companySettings, 'specification', specificationNumber);
+  const data = formatDocumentData(order, client, companySettings, 'specification', specificationNumber, documentStyle);
   await downloadDocument(data);
 }
 

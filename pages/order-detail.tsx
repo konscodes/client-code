@@ -16,6 +16,7 @@ import {
   LEGAL_ENTITIES,
   getEntityDocumentNumber,
   getLegalEntity,
+  loadMetserviceSettings,
   type LegalEntityId,
 } from '../lib/legal-entities';
 import { logger } from '../lib/logger';
@@ -1015,10 +1016,11 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingInvoice(true);
       try {
+        if (entityId === 'metservice') await loadMetserviceSettings();
         const entity = getLegalEntity(entityId);
         const settings = entity.resolveSettings(companySettings);
         const invoiceNumber = await getEntityDocumentNumber(entityId, order.id);
-        await generateInvoice(order, client, settings, invoiceNumber);
+        await generateInvoice(order, client, settings, invoiceNumber, entityId);
         toast.success(t('orderDetail.invoiceGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating invoice', error);
@@ -1043,10 +1045,11 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingPO(true);
       try {
+        if (entityId === 'metservice') await loadMetserviceSettings();
         const entity = getLegalEntity(entityId);
         const settings = entity.resolveSettings(companySettings);
         const poNumber = await getEntityDocumentNumber(entityId, order.id);
-        await generatePurchaseOrder(order, client, settings, poNumber);
+        await generatePurchaseOrder(order, client, settings, poNumber, entityId);
         toast.success(t('orderDetail.poGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating PO', error);
@@ -1071,10 +1074,11 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingSpecification(true);
       try {
+        if (entityId === 'metservice') await loadMetserviceSettings();
         const entity = getLegalEntity(entityId);
         const settings = entity.resolveSettings(companySettings);
         const specificationNumber = await getEntityDocumentNumber(entityId, order.id);
-        await generateSpecification(order, client, settings, specificationNumber);
+        await generateSpecification(order, client, settings, specificationNumber, entityId);
         toast.success(t('orderDetail.specificationGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating specification', error);

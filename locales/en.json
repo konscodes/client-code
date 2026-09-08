@@ -130,6 +130,8 @@
     "locale": "Locale",
     "defaultTaxRate": "Default Tax Rate (%)",
     "defaultMarkup": "Default Markup (%)",
+    "entityTaxRateHint": "0% — documents without VAT (simplified tax). Used when generating documents for this company.",
+    "financialPerEntityHint": "Tax and markup are configured separately per company.",
     "financialSettingsDescription": "These settings will be used as defaults when creating new orders and invoices.",
     "documentSettings": "Document Settings",
     "invoicePrefix": "Invoice Prefix",

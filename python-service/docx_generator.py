@@ -857,6 +857,12 @@ def add_footer_section(doc, company_data, doc_type, locale='ru-RU', available_wi
 
 def generate_document(data, doc_type):
     """Generate DOCX document from data"""
+    document_style = (data.get('documentStyle') or 'mk').lower()
+    if document_style == 'metservice':
+        from metservice_style import generate_metservice_document
+        import sys
+        return generate_metservice_document(data, doc_type, helpers=sys.modules[__name__])
+
     doc = Document()
     
     # Set narrow margins (12.7mm ≈ 0.5 inches on all sides)

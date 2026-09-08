@@ -246,6 +246,28 @@ export function Settings({ onNavigate }: SettingsProps) {
           </div>
 
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+            <h2 className="text-[#1E2025] mb-6">{t('settings.taxInformation')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="entityDefaultTaxRate">{t('settings.defaultTaxRate')}</Label>
+                <Input
+                  id="entityDefaultTaxRate"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={companyForm.defaultTaxRate}
+                  onChange={(e) =>
+                    patchCompanyForm('defaultTaxRate', parseFloat(e.target.value) || 0)
+                  }
+                />
+                <p className="text-sm text-[#555A60]">
+                  {t('settings.entityTaxRateHint')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.bankingInformation')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-6">
@@ -295,6 +317,20 @@ export function Settings({ onNavigate }: SettingsProps) {
         <TabsContent value="financial">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.financialSettings')}</h2>
+            <p className="text-[#555A60] mb-6">{t('settings.financialPerEntityHint')}</p>
+            <Tabs
+              value={activeEntityId}
+              onValueChange={(v) => switchEntity(v as LegalEntityId)}
+              className="mb-6"
+            >
+              <TabsList aria-label={t('settings.legalEntity')}>
+                {LEGAL_ENTITIES.map((entity) => (
+                  <TabsTrigger key={entity.id} value={entity.id}>
+                    {t(entity.labelKey)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="defaultTaxRate">{t('settings.defaultTaxRate')}</Label>
@@ -303,8 +339,10 @@ export function Settings({ onNavigate }: SettingsProps) {
                   type="number"
                   min="0"
                   step="0.1"
-                  value={mkForm.defaultTaxRate}
-                  onChange={(e) => patchMkForm('defaultTaxRate', parseFloat(e.target.value) || 0)}
+                  value={companyForm.defaultTaxRate}
+                  onChange={(e) =>
+                    patchCompanyForm('defaultTaxRate', parseFloat(e.target.value) || 0)
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -314,8 +352,10 @@ export function Settings({ onNavigate }: SettingsProps) {
                   type="number"
                   min="0"
                   step="1"
-                  value={mkForm.defaultMarkup}
-                  onChange={(e) => patchMkForm('defaultMarkup', parseFloat(e.target.value) || 0)}
+                  value={activeEntityId === 'mk' ? mkForm.defaultMarkup : (msForm?.defaultMarkup ?? 0)}
+                  onChange={(e) =>
+                    patchCompanyForm('defaultMarkup', parseFloat(e.target.value) || 0)
+                  }
                 />
               </div>
             </div>
