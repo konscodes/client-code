@@ -291,9 +291,13 @@ def add_document_header(doc, order_data, client_data, doc_type, locale='ru-RU', 
     else:  # po
         doc_label = "КП №"
     
-    # Always use order ID to extract number
-    order_id = order_data.get('id', '')
-    doc_number = extract_order_number(order_id)
+    # Prefer explicit document number from the client (per legal entity series).
+    # Fall back to order ID digits for older callers.
+    doc_number = (
+        order_data.get('invoiceNumber')
+        or order_data.get('poNumber')
+        or extract_order_number(order_data.get('id', ''))
+    )
     
     # Use order date from request, fallback to current date if not provided
     order_date_str = order_data.get('date', '')
@@ -679,12 +683,13 @@ def add_work_description(doc, jobs_data, order_data, doc_type='invoice', locale=
     
     # Work completion deadline / Delivery deadline
     if locale and locale.startswith('ru'):
-        days_spelled = spell_workdays_russian(work_days)
+        days_word = spell_number_russian(work_days, False).capitalize()
+        days_form = get_declension(work_days, WORKDAYS)
         deadline_para = doc.add_paragraph()
         if doc_type == 'specification':
-            deadline_text = f"Срок поставки – {work_days} ({days_spelled}) рабочих дней с момента подписания спецификации и внесения предоплаты."
+            deadline_text = f"Срок поставки – {work_days} ({days_word}) {days_form} с момента подписания спецификации и внесения предоплаты."
         else:
-            deadline_text = f"Срок выполнения работ – {work_days} ({days_spelled}) рабочих дней с момента внесения предоплаты и подписания сметы."
+            deadline_text = f"Срок выполнения работ – {work_days} ({days_word}) {days_form} с момента внесения предоплаты и подписания сметы."
         deadline_run = deadline_para.add_run(deadline_text)
         set_font_times_new_roman(deadline_run, size=12, bold=False, italic=False)
         
@@ -980,15 +985,18 @@ class handler(BaseHTTPRequestHandler):
             doc_bytes = doc_buffer.getvalue()
             print(f"Document size: {len(doc_bytes)} bytes")
             
-            # Generate filename using prefix from data and extract numbers from order ID
+            # Generate filename using prefix + document number (entity-specific series)
             document_prefix = data.get('documentPrefix') or doc_type
-            # Ensure prefix is not empty, use doc_type as fallback
             if not document_prefix or document_prefix.strip() == '':
                 document_prefix = doc_type
-            order_id = data.get('order', {}).get('id', 'document')
-            # Extract numbers from order ID (e.g., 'order-22650' -> '22650')
-            order_numbers = re.sub(r'\D', '', str(order_id))
-            filename = f"{document_prefix}-{order_numbers}.docx"
+            order = data.get('order', {}) or {}
+            doc_number = (
+                order.get('invoiceNumber')
+                or order.get('poNumber')
+                or re.sub(r'\D', '', str(order.get('id', 'document')))
+            )
+            safe_doc_number = re.sub(r'[^\w.-]+', '-', str(doc_number), flags=re.UNICODE)
+            filename = f"{document_prefix}-{safe_doc_number}.docx"
             
             # Send response
             self.send_response(200)

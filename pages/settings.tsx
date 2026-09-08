@@ -1,5 +1,5 @@
 // Settings page - manage company settings and preferences
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
 import { Input } from '../components/ui/input';
@@ -13,6 +13,12 @@ import { toast } from 'sonner';
 import { localeToLanguage } from '../lib/i18n';
 import i18n from '../lib/i18n';
 import { logger } from '../lib/logger';
+import {
+  LEGAL_ENTITIES,
+  loadMetserviceSettings,
+  saveMetserviceSettings,
+  type LegalEntityId,
+} from '../lib/legal-entities';
 import type { CompanySettings } from '../lib/types';
 
 interface SettingsProps {
@@ -22,42 +28,83 @@ interface SettingsProps {
 export function Settings({ onNavigate }: SettingsProps) {
   const { t } = useTranslation();
   const { companySettings, updateCompanySettings } = useApp();
-  const [formData, setFormData] = useState<CompanySettings>(companySettings);
-  const [hasChanges, setHasChanges] = useState(false);
+
+  // Per-entity company profiles (Company tab only)
+  const [activeEntityId, setActiveEntityId] = useState<LegalEntityId>('mk');
+  const [mkForm, setMkForm] = useState<CompanySettings>(companySettings);
+  const [msForm, setMsForm] = useState<CompanySettings | null>(null);
+  const [mkDirty, setMkDirty] = useState(false);
+  const [msDirty, setMsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localeOpen, setLocaleOpen] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
-  
-  // Update form data when company settings change
+
+  const companyForm = activeEntityId === 'mk' ? mkForm : (msForm ?? mkForm);
+  const hasChanges = mkDirty || msDirty;
+
   useEffect(() => {
-    setFormData(companySettings);
-  }, [companySettings]);
-  
-  const handleChange = (field: keyof CompanySettings, value: string | number) => {
-    const newFormData = {
-      ...formData,
-      [field]: value,
+    if (!mkDirty) setMkForm(companySettings);
+  }, [companySettings, mkDirty]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const settings = await loadMetserviceSettings();
+        if (!cancelled && !msDirty) setMsForm(settings);
+      } catch (error) {
+        logger.error('Failed to load Metservice settings', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    setFormData(newFormData);
-    setHasChanges(true);
-    
-    // If locale changed, update i18n language immediately
+  }, [msDirty]);
+
+  const switchEntity = useCallback(
+    (nextId: LegalEntityId) => {
+      if (nextId === activeEntityId) return;
+      setActiveEntityId(nextId);
+    },
+    [activeEntityId]
+  );
+
+  const patchCompanyForm = (field: keyof CompanySettings, value: string | number) => {
+    if (activeEntityId === 'mk') {
+      setMkForm((prev) => ({ ...prev, [field]: value }));
+      setMkDirty(true);
+      if (field === 'locale' && typeof value === 'string') {
+        i18n.changeLanguage(localeToLanguage(value));
+      }
+    } else {
+      setMsForm((prev) => ({ ...(prev as CompanySettings), [field]: value }));
+      setMsDirty(true);
+    }
+  };
+
+  /** CRM-wide fields always edit MK profile */
+  const patchMkForm = (field: keyof CompanySettings, value: string | number) => {
+    setMkForm((prev) => ({ ...prev, [field]: value }));
+    setMkDirty(true);
     if (field === 'locale' && typeof value === 'string') {
       i18n.changeLanguage(localeToLanguage(value));
     }
   };
-  
+
   const handleSave = async () => {
-    if (isSaving) return; // Prevent double-clicking
-    
+    if (isSaving || !hasChanges) return;
     setIsSaving(true);
     try {
-      await updateCompanySettings(formData);
-      setHasChanges(false);
+      if (mkDirty) {
+        await updateCompanySettings(mkForm);
+        i18n.changeLanguage(localeToLanguage(mkForm.locale));
+        setMkDirty(false);
+      }
+      if (msDirty && msForm) {
+        await saveMetserviceSettings(msForm);
+        setMsDirty(false);
+      }
       toast.success(t('settings.savedSuccessfully'));
-      
-      // Update i18n language if locale changed
-      i18n.changeLanguage(localeToLanguage(formData.locale));
     } catch (error) {
       logger.error('Error saving settings', error);
       toast.error(t('settings.saveFailed') || 'Failed to save settings');
@@ -65,11 +112,10 @@ export function Settings({ onNavigate }: SettingsProps) {
       setIsSaving(false);
     }
   };
-  
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-[#1E2025] mb-2">{t('settings.title')}</h1>
           <p className="text-[#555A60]">{t('settings.subtitle')}</p>
@@ -94,7 +140,7 @@ export function Settings({ onNavigate }: SettingsProps) {
           </button>
         )}
       </div>
-      
+
       <Tabs defaultValue="company" className="space-y-6">
         <TabsList>
           <TabsTrigger value="company">{t('settings.company')}</TabsTrigger>
@@ -102,135 +148,142 @@ export function Settings({ onNavigate }: SettingsProps) {
           <TabsTrigger value="locale">{t('settings.locale')}</TabsTrigger>
           <TabsTrigger value="documents">{t('settings.documents')}</TabsTrigger>
         </TabsList>
-        
-        {/* Company Tab */}
-        <TabsContent value="company">
+
+        <TabsContent value="company" className="space-y-6">
+          <Tabs
+            value={activeEntityId}
+            onValueChange={(v) => switchEntity(v as LegalEntityId)}
+          >
+            <TabsList aria-label={t('settings.legalEntity')}>
+              {LEGAL_ENTITIES.map((entity) => (
+                <TabsTrigger key={entity.id} value={entity.id}>
+                  {t(entity.labelKey)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.companyInformation')}</h2>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="companyName">{t('settings.companyName')}</Label>
                 <Input
                   id="companyName"
-                  value={formData.name}
-                  onChange={(e) => handleChange('name', e.target.value)}
+                  value={companyForm.name}
+                  onChange={(e) => patchCompanyForm('name', e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="legalName">{t('settings.legalName')}</Label>
                 <Input
                   id="legalName"
-                  value={formData.legalName}
-                  onChange={(e) => handleChange('legalName', e.target.value)}
+                  value={companyForm.legalName}
+                  onChange={(e) => patchCompanyForm('legalName', e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="address">{t('settings.address')}</Label>
                 <Input
                   id="address"
-                  value={formData.address}
-                  onChange={(e) => handleChange('address', e.target.value)}
+                  value={companyForm.address}
+                  onChange={(e) => patchCompanyForm('address', e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="phone">{t('settings.phone')}</Label>
                 <PhoneInput
                   id="phone"
-                  value={formData.phone}
-                  onChange={(value) => handleChange('phone', value)}
+                  value={companyForm.phone}
+                  onChange={(value) => patchCompanyForm('phone', value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="email">{t('settings.email')}</Label>
                 <Input
                   id="email"
                   type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange('email', e.target.value)}
+                  value={companyForm.email}
+                  onChange={(e) => patchCompanyForm('email', e.target.value)}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="inn">{t('settings.inn')}</Label>
                 <Input
                   id="inn"
-                  value={formData.inn || ''}
-                  onChange={(e) => handleChange('inn', e.target.value)}
+                  value={companyForm.inn || ''}
+                  onChange={(e) => patchCompanyForm('inn', e.target.value)}
                   placeholder={t('settings.innPlaceholder')}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="kpp">{t('settings.kpp')}</Label>
                 <Input
                   id="kpp"
-                  value={formData.kpp || ''}
-                  onChange={(e) => handleChange('kpp', e.target.value)}
+                  value={companyForm.kpp || ''}
+                  onChange={(e) => patchCompanyForm('kpp', e.target.value)}
                   placeholder={t('settings.kppPlaceholder')}
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="directorName">{t('settings.directorName')}</Label>
                 <Input
                   id="directorName"
-                  value={formData.directorName || ''}
-                  onChange={(e) => handleChange('directorName', e.target.value)}
+                  value={companyForm.directorName || ''}
+                  onChange={(e) => patchCompanyForm('directorName', e.target.value)}
                   placeholder={t('settings.directorNamePlaceholder')}
                 />
               </div>
             </div>
           </div>
-          
-          {/* Banking Information Section */}
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 mt-6">
+
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.bankingInformation')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left column: Bank Name and БИК */}
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="bankName">{t('settings.bankName')}</Label>
                   <Input
                     id="bankName"
-                    value={formData.bankName || ''}
-                    onChange={(e) => handleChange('bankName', e.target.value)}
+                    value={companyForm.bankName || ''}
+                    onChange={(e) => patchCompanyForm('bankName', e.target.value)}
                     placeholder={t('settings.bankNamePlaceholder')}
                   />
                 </div>
-                
                 <div className="space-y-2">
                   <Label htmlFor="bankBik">{t('settings.bankBik')}</Label>
                   <Input
                     id="bankBik"
-                    value={formData.bankBik || ''}
-                    onChange={(e) => handleChange('bankBik', e.target.value)}
+                    value={companyForm.bankBik || ''}
+                    onChange={(e) => patchCompanyForm('bankBik', e.target.value)}
                     placeholder={t('settings.bankBikPlaceholder')}
                   />
                 </div>
               </div>
-              
-              {/* Right column: Account numbers */}
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="bankAccount">{t('settings.bankAccount')}</Label>
                   <Input
                     id="bankAccount"
-                    value={formData.bankAccount || ''}
-                    onChange={(e) => handleChange('bankAccount', e.target.value)}
+                    value={companyForm.bankAccount || ''}
+                    onChange={(e) => patchCompanyForm('bankAccount', e.target.value)}
                     placeholder={t('settings.bankAccountPlaceholder')}
                   />
                 </div>
-                
                 <div className="space-y-2">
                   <Label htmlFor="correspondentAccount">{t('settings.correspondentAccount')}</Label>
                   <Input
                     id="correspondentAccount"
-                    value={formData.correspondentAccount || ''}
-                    onChange={(e) => handleChange('correspondentAccount', e.target.value)}
+                    value={companyForm.correspondentAccount || ''}
+                    onChange={(e) => patchCompanyForm('correspondentAccount', e.target.value)}
                     placeholder={t('settings.correspondentAccountPlaceholder')}
                   />
                 </div>
@@ -238,8 +291,7 @@ export function Settings({ onNavigate }: SettingsProps) {
             </div>
           </div>
         </TabsContent>
-        
-        {/* Financial Tab */}
+
         <TabsContent value="financial">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.financialSettings')}</h2>
@@ -251,11 +303,10 @@ export function Settings({ onNavigate }: SettingsProps) {
                   type="number"
                   min="0"
                   step="0.1"
-                  value={formData.defaultTaxRate}
-                  onChange={(e) => handleChange('defaultTaxRate', parseFloat(e.target.value) || 0)}
+                  value={mkForm.defaultTaxRate}
+                  onChange={(e) => patchMkForm('defaultTaxRate', parseFloat(e.target.value) || 0)}
                 />
               </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="defaultMarkup">{t('settings.defaultMarkup')}</Label>
                 <Input
@@ -263,21 +314,17 @@ export function Settings({ onNavigate }: SettingsProps) {
                   type="number"
                   min="0"
                   step="1"
-                  value={formData.defaultMarkup}
-                  onChange={(e) => handleChange('defaultMarkup', parseFloat(e.target.value) || 0)}
+                  value={mkForm.defaultMarkup}
+                  onChange={(e) => patchMkForm('defaultMarkup', parseFloat(e.target.value) || 0)}
                 />
               </div>
             </div>
-            
             <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-              <p className="text-[#555A60] mb-4">
-                {t('settings.financialSettingsDescription')}
-              </p>
+              <p className="text-[#555A60] mb-4">{t('settings.financialSettingsDescription')}</p>
             </div>
           </div>
         </TabsContent>
-        
-        {/* Locale Tab */}
+
         <TabsContent value="locale">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.localeSettings')}</h2>
@@ -285,10 +332,9 @@ export function Settings({ onNavigate }: SettingsProps) {
               <div className="space-y-2">
                 <Label htmlFor="currency">{t('settings.currency')}</Label>
                 <Select
-                  value={formData.currency}
+                  value={mkForm.currency}
                   onValueChange={(value) => {
-                    handleChange('currency', value);
-                    // Close dropdown after state update
+                    patchMkForm('currency', value);
                     setTimeout(() => setCurrencyOpen(false), 0);
                   }}
                   open={currencyOpen}
@@ -303,16 +349,13 @@ export function Settings({ onNavigate }: SettingsProps) {
                   </SelectContent>
                 </Select>
               </div>
-              
               <div className="space-y-2">
                 <Label htmlFor="locale">{t('settings.locale')}</Label>
                 <Select
-                  value={formData.locale}
+                  value={mkForm.locale}
                   onValueChange={(value) => {
-                    // Close dropdown first to avoid re-render interference
                     setLocaleOpen(false);
-                    // Then update the locale (this triggers i18n change and re-render)
-                    handleChange('locale', value);
+                    patchMkForm('locale', value);
                   }}
                   open={localeOpen}
                   onOpenChange={setLocaleOpen}
@@ -321,139 +364,119 @@ export function Settings({ onNavigate }: SettingsProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en-US">English (en-US)</SelectItem>
-                    <SelectItem value="ru-RU">Русский (ru-RU)</SelectItem>
+                    <SelectItem value="en-US">English (US)</SelectItem>
+                    <SelectItem value="ru-RU">Русский</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            
             <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-              <p className="text-[#555A60] mb-4">
-                {t('settings.localeSettingsDescription')}
-              </p>
+              <p className="text-[#555A60] mb-4">{t('settings.localeSettingsDescription')}</p>
             </div>
           </div>
         </TabsContent>
-        
-        {/* Documents Tab */}
+
         <TabsContent value="documents">
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-              <h2 className="text-[#1E2025] mb-6">{t('settings.documentSettings')}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="invoicePrefix">{t('settings.invoicePrefix')}</Label>
-                  <Input
-                    id="invoicePrefix"
-                    value={formData.invoicePrefix}
-                    onChange={(e) => handleChange('invoicePrefix', e.target.value)}
-                    placeholder="e.g., INV"
-                  />
-                  <p className="text-[#7C8085]">
-                    {t('settings.invoicePrefixExample', { prefix: formData.invoicePrefix })}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="poPrefix">{t('settings.poPrefix')}</Label>
-                  <Input
-                    id="poPrefix"
-                    value={formData.poPrefix}
-                    onChange={(e) => handleChange('poPrefix', e.target.value)}
-                    placeholder="e.g., PO"
-                  />
-                  <p className="text-[#7C8085]">
-                    {t('settings.poPrefixExample', { prefix: formData.poPrefix })}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="specPrefix">{t('settings.specPrefix')}</Label>
-                  <Input
-                    id="specPrefix"
-                    value={formData.specPrefix}
-                    onChange={(e) => handleChange('specPrefix', e.target.value)}
-                    placeholder="e.g., SPEC"
-                  />
-                  <p className="text-[#7C8085]">
-                    {t('settings.specPrefixExample', { prefix: formData.specPrefix })}
-                  </p>
-                </div>
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
+            <h2 className="text-[#1E2025] mb-6">{t('settings.documentSettings')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="invoicePrefix">{t('settings.invoicePrefix')}</Label>
+                <Input
+                  id="invoicePrefix"
+                  value={mkForm.invoicePrefix}
+                  onChange={(e) => patchMkForm('invoicePrefix', e.target.value)}
+                />
+                <p className="text-[#7C8085]">
+                  {t('settings.invoicePrefixExample', { prefix: mkForm.invoicePrefix })}
+                </p>
               </div>
-              
-              <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-                <p className="text-[#555A60] mb-4">
-                  {t('settings.documentPrefixDescription')}
+              <div className="space-y-2">
+                <Label htmlFor="poPrefix">{t('settings.poPrefix')}</Label>
+                <Input
+                  id="poPrefix"
+                  value={mkForm.poPrefix}
+                  onChange={(e) => patchMkForm('poPrefix', e.target.value)}
+                />
+                <p className="text-[#7C8085]">
+                  {t('settings.poPrefixExample', { prefix: mkForm.poPrefix })}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specPrefix">{t('settings.specPrefix')}</Label>
+                <Input
+                  id="specPrefix"
+                  value={mkForm.specPrefix}
+                  onChange={(e) => patchMkForm('specPrefix', e.target.value)}
+                />
+                <p className="text-[#7C8085]">
+                  {t('settings.specPrefixExample', { prefix: mkForm.specPrefix })}
                 </p>
               </div>
             </div>
-            
-            {/* Variable Reference */}
-            <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-              <h2 className="text-[#1E2025] mb-6">{t('settings.availableTemplateVariables')}</h2>
-              <p className="text-[#555A60] mb-6">
-                {t('settings.templateVariablesDescription')}
-              </p>
-              
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="company">
-                  <AccordionTrigger className="text-[#1E2025]">{t('settings.companyVariables')}</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3">
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.name}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.address}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.phone}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.email}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{company.taxId}}'}</div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-                
-                <AccordionItem value="client">
-                  <AccordionTrigger className="text-[#1E2025]">{t('settings.clientVariables')}</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3">
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.name}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.company}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.address}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.phone}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{client.email}}'}</div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-                
-                <AccordionItem value="order">
-                  <AccordionTrigger className="text-[#1E2025]">{t('settings.orderVariables')}</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3">
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.id}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.date}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.invoiceNumber}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.poNumber}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.subtotal}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.tax}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{order.total}}'}</div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-                
-                <AccordionItem value="jobs">
-                  <AccordionTrigger className="text-[#1E2025]">{t('settings.jobLineItemVariables')}</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3">
-                      <p className="text-[#555A60] mb-3">{t('settings.forEachJob')}</p>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].code}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].name}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].qty}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].unit}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].unitPrice}}'}</div>
-                      <div className="font-mono bg-[#F2F4F4] px-3 py-2 rounded text-[#1E2025]">{'{{jobs[].lineTotal}}'}</div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+            <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+              <p className="text-[#555A60] mb-4">{t('settings.documentPrefixDescription')}</p>
             </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6 mt-6">
+            <h2 className="text-[#1E2025] mb-4">{t('settings.availableTemplateVariables')}</h2>
+            <p className="text-[#555A60] mb-6">{t('settings.templateVariablesDescription')}</p>
+            <Accordion type="multiple" className="w-full">
+              <AccordionItem value="company">
+                <AccordionTrigger>{t('settings.companyVariables')}</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 font-mono text-sm text-[#555A60]">
+                    <p>{'{{company.name}}'}</p>
+                    <p>{'{{company.legalName}}'}</p>
+                    <p>{'{{company.address}}'}</p>
+                    <p>{'{{company.phone}}'}</p>
+                    <p>{'{{company.email}}'}</p>
+                    <p>{'{{company.taxId}}'}</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="client">
+                <AccordionTrigger>{t('settings.clientVariables')}</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 font-mono text-sm text-[#555A60]">
+                    <p>{'{{client.name}}'}</p>
+                    <p>{'{{client.company}}'}</p>
+                    <p>{'{{client.address}}'}</p>
+                    <p>{'{{client.phone}}'}</p>
+                    <p>{'{{client.email}}'}</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="order">
+                <AccordionTrigger>{t('settings.orderVariables')}</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 font-mono text-sm text-[#555A60]">
+                    <p>{'{{order.id}}'}</p>
+                    <p>{'{{order.date}}'}</p>
+                    <p>{'{{order.invoiceNumber}}'}</p>
+                    <p>{'{{order.poNumber}}'}</p>
+                    <p>{'{{order.subtotal}}'}</p>
+                    <p>{'{{order.tax}}'}</p>
+                    <p>{'{{order.total}}'}</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="jobs">
+                <AccordionTrigger>{t('settings.jobLineItemVariables')}</AccordionTrigger>
+                <AccordionContent>
+                  <p className="text-[#555A60] mb-2">{t('settings.forEachJob')}</p>
+                  <div className="space-y-2 font-mono text-sm text-[#555A60]">
+                    <p>{'{{job.code}}'}</p>
+                    <p>{'{{job.name}}'}</p>
+                    <p>{'{{job.qty}}'}</p>
+                    <p>{'{{job.unit}}'}</p>
+                    <p>{'{{job.unitPrice}}'}</p>
+                    <p>{'{{job.lineTotal}}'}</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         </TabsContent>
       </Tabs>

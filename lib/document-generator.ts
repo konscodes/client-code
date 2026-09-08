@@ -246,9 +246,13 @@ async function downloadDocument(data: DocumentData): Promise<void> {
     const link = document.createElement('a');
     link.href = url;
     // Fallback filename (actual filename comes from Content-Disposition header)
-    const orderNumbers = data.order.id.replace(/\D/g, '');
+    const docNumber =
+      data.order.invoiceNumber ||
+      data.order.poNumber ||
+      data.order.id.replace(/\D/g, '');
+    const safeDocNumber = String(docNumber).replace(/[^\w.-]+/g, '-');
     const fallbackPrefix = data.documentPrefix || data.type;
-    link.download = `${fallbackPrefix}-${orderNumbers}.docx`;
+    link.download = `${fallbackPrefix}-${safeDocNumber}.docx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

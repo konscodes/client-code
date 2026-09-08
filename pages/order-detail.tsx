@@ -9,10 +9,15 @@ import {
   calculateLineTotal,
   getOrderTotals,
   generateId,
-  generateDocumentNumber,
   extractIdNumbers
 } from '../lib/utils';
 import { generateInvoice, generatePurchaseOrder, generateSpecification } from '../lib/document-generator';
+import {
+  LEGAL_ENTITIES,
+  getEntityDocumentNumber,
+  getLegalEntity,
+  type LegalEntityId,
+} from '../lib/legal-entities';
 import { logger } from '../lib/logger';
 import { 
   ArrowLeft, 
@@ -995,8 +1000,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     setPendingDocumentAction(null);
   };
   
-  // Document generation handlers
-  const handleGenerateInvoice = async () => {
+  // Document generation handlers — entity picks company block + number series
+  const handleGenerateInvoice = async (entityId: LegalEntityId = 'mk') => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1010,12 +1015,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingInvoice(true);
       try {
-        const invoiceNumber = generateDocumentNumber(
-          companySettings.invoicePrefix,
-          order.id,
-          order.createdAt || new Date()
-        );
-        await generateInvoice(order, client, companySettings, invoiceNumber);
+        const entity = getLegalEntity(entityId);
+        const settings = entity.resolveSettings(companySettings);
+        const invoiceNumber = await getEntityDocumentNumber(entityId, order.id);
+        await generateInvoice(order, client, settings, invoiceNumber);
         toast.success(t('orderDetail.invoiceGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating invoice', error);
@@ -1026,7 +1029,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
-  const handleGeneratePO = async () => {
+  const handleGeneratePO = async (entityId: LegalEntityId = 'mk') => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1040,12 +1043,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingPO(true);
       try {
-        const poNumber = generateDocumentNumber(
-          companySettings.poPrefix,
-          order.id,
-          order.createdAt || new Date()
-        );
-        await generatePurchaseOrder(order, client, companySettings, poNumber);
+        const entity = getLegalEntity(entityId);
+        const settings = entity.resolveSettings(companySettings);
+        const poNumber = await getEntityDocumentNumber(entityId, order.id);
+        await generatePurchaseOrder(order, client, settings, poNumber);
         toast.success(t('orderDetail.poGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating PO', error);
@@ -1056,7 +1057,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
-  const handleGenerateSpecification = async () => {
+  const handleGenerateSpecification = async (entityId: LegalEntityId = 'mk') => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1070,12 +1071,10 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       }
       setGeneratingSpecification(true);
       try {
-        const specificationNumber = generateDocumentNumber(
-          companySettings.invoicePrefix,
-          order.id,
-          order.createdAt || new Date()
-        );
-        await generateSpecification(order, client, companySettings, specificationNumber);
+        const entity = getLegalEntity(entityId);
+        const settings = entity.resolveSettings(companySettings);
+        const specificationNumber = await getEntityDocumentNumber(entityId, order.id);
+        await generateSpecification(order, client, settings, specificationNumber);
         toast.success(t('orderDetail.specificationGeneratedSuccess'));
       } catch (error) {
         logger.error('Error generating specification', error);
@@ -1578,67 +1577,74 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             </button>
             
             {showDocumentDropdown && (
-              <div className="absolute right-0 top-full mt-1 w-full min-w-[200px] bg-white border border-[#E4E7E7] rounded-lg shadow-lg z-50 overflow-hidden">
-                <button
-                  onClick={() => {
-                    handleGenerateInvoice();
-                    setShowDocumentDropdown(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={generatingInvoice || generatingPO || generatingSpecification}
-                >
-                  {generatingInvoice ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                      {t('orderDetail.generating')}
-                    </>
-                  ) : (
-                    <>
-                      <FileText size={18} aria-hidden="true" />
-                      {t('orderDetail.generateInvoice')}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    handleGeneratePO();
-                    setShowDocumentDropdown(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={generatingInvoice || generatingPO || generatingSpecification}
-                >
-                  {generatingPO ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                      {t('orderDetail.generating')}
-                    </>
-                  ) : (
-                    <>
-                      <FileText size={18} aria-hidden="true" />
-                      {t('orderDetail.generatePO')}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    handleGenerateSpecification();
-                    setShowDocumentDropdown(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={generatingInvoice || generatingPO || generatingSpecification}
-                >
-                  {generatingSpecification ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" aria-hidden="true" />
-                      {t('orderDetail.generating')}
-                    </>
-                  ) : (
-                    <>
-                      <FileText size={18} aria-hidden="true" />
-                      {t('orderDetail.generateSpecification')}
-                    </>
-                  )}
-                </button>
+              <div className="absolute right-0 top-full mt-1 w-full min-w-[260px] bg-white border border-[#E4E7E7] rounded-lg shadow-lg z-50 overflow-hidden">
+                {LEGAL_ENTITIES.map((entity, entityIndex) => (
+                  <div key={entity.id} className={entityIndex > 0 ? 'border-t border-[#E4E7E7]' : ''}>
+                    <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#7C8085] bg-[#F7F8F8]">
+                      {t(entity.labelKey)}
+                    </div>
+                    <button
+                      onClick={() => {
+                        handleGenerateInvoice(entity.id);
+                        setShowDocumentDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={generatingInvoice || generatingPO || generatingSpecification}
+                    >
+                      {generatingInvoice ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                          {t('orderDetail.generating')}
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={18} aria-hidden="true" />
+                          {t('orderDetail.generateInvoice')}
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleGeneratePO(entity.id);
+                        setShowDocumentDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={generatingInvoice || generatingPO || generatingSpecification}
+                    >
+                      {generatingPO ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                          {t('orderDetail.generating')}
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={18} aria-hidden="true" />
+                          {t('orderDetail.generatePO')}
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleGenerateSpecification(entity.id);
+                        setShowDocumentDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-[#1E2025] hover:bg-[#F7F8F8] transition-colors border-t border-[#E4E7E7] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={generatingInvoice || generatingPO || generatingSpecification}
+                    >
+                      {generatingSpecification ? (
+                        <>
+                          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                          {t('orderDetail.generating')}
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={18} aria-hidden="true" />
+                          {t('orderDetail.generateSpecification')}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

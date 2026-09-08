@@ -38,6 +38,7 @@ timestamp-differences.json
 supabase/
 
 # Python service
+.venv/
 python-service/venv/
 python-service/__pycache__/
 python-service/*.pyc
@@ -52,5 +53,4 @@ python-service/*.pyc
 *.njsproj
 *.sln
 *.sw?
-
 
