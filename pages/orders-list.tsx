@@ -51,7 +51,7 @@ export function OrdersList({ onNavigate, pageId }: OrdersListProps) {
   const filteredClient = clientFilterId ? clients.find(c => c.id === clientFilterId) : null;
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
-  const isLoading = loading || (orders.length === 0 && clients.length === 0);
+  const isLoading = loading;
   
   // localStorage keys
   const STORAGE_KEY_PREFIX = 'orders-table-';

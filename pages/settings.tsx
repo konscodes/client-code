@@ -1,5 +1,5 @@
 // Settings page - manage company settings and preferences
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../lib/app-context';
 import { Input } from '../components/ui/input';
@@ -14,7 +14,6 @@ import { localeToLanguage } from '../lib/i18n';
 import i18n from '../lib/i18n';
 import { logger } from '../lib/logger';
 import {
-  LEGAL_ENTITIES,
   loadMetserviceSettings,
   saveMetserviceSettings,
   type LegalEntityId,
@@ -27,10 +26,10 @@ interface SettingsProps {
 
 export function Settings({ onNavigate }: SettingsProps) {
   const { t } = useTranslation();
-  const { companySettings, updateCompanySettings } = useApp();
+  const { companySettings, workspaceId, updateCompanySettings, refreshCompanySettings } = useApp();
 
-  // Per-entity company profiles (Company tab only)
-  const [activeEntityId, setActiveEntityId] = useState<LegalEntityId>('mk');
+  // Per-entity company profiles: the active one follows the sidebar workspace switcher
+  const activeEntityId: LegalEntityId = workspaceId;
   const [mkForm, setMkForm] = useState<CompanySettings>(companySettings);
   const [msForm, setMsForm] = useState<CompanySettings | null>(null);
   const [mkDirty, setMkDirty] = useState(false);
@@ -60,14 +59,6 @@ export function Settings({ onNavigate }: SettingsProps) {
       cancelled = true;
     };
   }, [msDirty]);
-
-  const switchEntity = useCallback(
-    (nextId: LegalEntityId) => {
-      if (nextId === activeEntityId) return;
-      setActiveEntityId(nextId);
-    },
-    [activeEntityId]
-  );
 
   const patchCompanyForm = (field: keyof CompanySettings, value: string | number) => {
     if (activeEntityId === 'mk') {
@@ -103,6 +94,7 @@ export function Settings({ onNavigate }: SettingsProps) {
       if (msDirty && msForm) {
         await saveMetserviceSettings(msForm);
         setMsDirty(false);
+        await refreshCompanySettings(); // Refresh workspace defaults used by new orders
       }
       toast.success(t('settings.savedSuccessfully'));
     } catch (error) {
@@ -150,19 +142,6 @@ export function Settings({ onNavigate }: SettingsProps) {
         </TabsList>
 
         <TabsContent value="company" className="space-y-6">
-          <Tabs
-            value={activeEntityId}
-            onValueChange={(v) => switchEntity(v as LegalEntityId)}
-          >
-            <TabsList aria-label={t('settings.legalEntity')}>
-              {LEGAL_ENTITIES.map((entity) => (
-                <TabsTrigger key={entity.id} value={entity.id}>
-                  {t(entity.labelKey)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
             <h2 className="text-[#1E2025] mb-6">{t('settings.companyInformation')}</h2>
 
@@ -244,14 +223,17 @@ export function Settings({ onNavigate }: SettingsProps) {
               </div>
             </div>
           </div>
+        </TabsContent>
 
+        <TabsContent value="financial" className="space-y-6">
           <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-6">{t('settings.taxInformation')}</h2>
+            <h2 className="text-[#1E2025] mb-6">{t('settings.financialSettings')}</h2>
+            <p className="text-[#555A60] mb-6">{t('settings.financialPerEntityHint')}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="entityDefaultTaxRate">{t('settings.defaultTaxRate')}</Label>
+                <Label htmlFor="defaultTaxRate">{t('settings.defaultTaxRate')}</Label>
                 <Input
-                  id="entityDefaultTaxRate"
+                  id="defaultTaxRate"
                   type="number"
                   min="0"
                   step="0.1"
@@ -264,6 +246,22 @@ export function Settings({ onNavigate }: SettingsProps) {
                   {t('settings.entityTaxRateHint')}
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="defaultMarkup">{t('settings.defaultMarkup')}</Label>
+                <Input
+                  id="defaultMarkup"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={activeEntityId === 'mk' ? mkForm.defaultMarkup : (msForm?.defaultMarkup ?? 0)}
+                  onChange={(e) =>
+                    patchCompanyForm('defaultMarkup', parseFloat(e.target.value) || 0)
+                  }
+                />
+              </div>
+            </div>
+            <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
+              <p className="text-[#555A60] mb-4">{t('settings.financialSettingsDescription')}</p>
             </div>
           </div>
 
@@ -310,57 +308,6 @@ export function Settings({ onNavigate }: SettingsProps) {
                   />
                 </div>
               </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="financial">
-          <div className="bg-white rounded-xl border border-[#E4E7E7] p-6">
-            <h2 className="text-[#1E2025] mb-6">{t('settings.financialSettings')}</h2>
-            <p className="text-[#555A60] mb-6">{t('settings.financialPerEntityHint')}</p>
-            <Tabs
-              value={activeEntityId}
-              onValueChange={(v) => switchEntity(v as LegalEntityId)}
-              className="mb-6"
-            >
-              <TabsList aria-label={t('settings.legalEntity')}>
-                {LEGAL_ENTITIES.map((entity) => (
-                  <TabsTrigger key={entity.id} value={entity.id}>
-                    {t(entity.labelKey)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="defaultTaxRate">{t('settings.defaultTaxRate')}</Label>
-                <Input
-                  id="defaultTaxRate"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={companyForm.defaultTaxRate}
-                  onChange={(e) =>
-                    patchCompanyForm('defaultTaxRate', parseFloat(e.target.value) || 0)
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="defaultMarkup">{t('settings.defaultMarkup')}</Label>
-                <Input
-                  id="defaultMarkup"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={activeEntityId === 'mk' ? mkForm.defaultMarkup : (msForm?.defaultMarkup ?? 0)}
-                  onChange={(e) =>
-                    patchCompanyForm('defaultMarkup', parseFloat(e.target.value) || 0)
-                  }
-                />
-              </div>
-            </div>
-            <div className="mt-6 pt-6 border-t border-[#E4E7E7]">
-              <p className="text-[#555A60] mb-4">{t('settings.financialSettingsDescription')}</p>
             </div>
           </div>
         </TabsContent>

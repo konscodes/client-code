@@ -138,7 +138,7 @@ interface OrderDetailProps {
 export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChangesChange }: OrderDetailProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const { orders, clients, jobTemplates, jobPresets, companySettings, addOrder, updateOrder, duplicateOrder, ensureOrderJobsLoaded } = useApp();
+  const { orders, clients, jobTemplates, jobPresets, companySettings, workspaceId, workspaceSettings, addOrder, updateOrder, duplicateOrder, ensureOrderJobsLoaded } = useApp();
   const { formatCurrency, formatDate } = useFormatting();
   
   // Get order type label based on current language
@@ -175,8 +175,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       clientId: clientIdFromQuery || '',
       status: 'proposal',
       createdAt: new Date(),
-      taxRate: companySettings?.defaultTaxRate ?? 0,
-      globalMarkup: companySettings?.defaultMarkup ?? 0,
+      taxRate: workspaceSettings?.defaultTaxRate ?? 0,
+      globalMarkup: workspaceSettings?.defaultMarkup ?? 0,
       currency: 'USD',
       orderType: 'Ремонтные работы',
       orderTitle: '',
@@ -193,26 +193,26 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     }
   }, [isNewOrder, clientIdFromQuery, formData.clientId, existingOrder]);
   
-  // Update tax rate and markup when companySettings loads (if it wasn't available initially)
-  // Only update if we're still using the hardcoded fallback defaults (meaning companySettings wasn't available on mount)
+  // Update tax rate and markup when workspace settings load (if they weren't available initially)
+  // Only update if we're still using the hardcoded fallback defaults (meaning settings weren't available on mount)
   useEffect(() => {
-    if (isNewOrder && !existingOrder && companySettings) {
+    if (isNewOrder && !existingOrder && workspaceSettings) {
       setFormData(prev => {
         const needsUpdate = 
-          (prev.taxRate === 0 && companySettings.defaultTaxRate !== 0) ||
-          (prev.globalMarkup === 0 && companySettings.defaultMarkup !== 0);
+          (prev.taxRate === 0 && workspaceSettings.defaultTaxRate !== 0) ||
+          (prev.globalMarkup === 0 && workspaceSettings.defaultMarkup !== 0);
         
         if (needsUpdate) {
           return {
             ...prev,
-            taxRate: prev.taxRate === 0 ? companySettings.defaultTaxRate : prev.taxRate,
-            globalMarkup: prev.globalMarkup === 0 ? companySettings.defaultMarkup : prev.globalMarkup,
+            taxRate: prev.taxRate === 0 ? workspaceSettings.defaultTaxRate : prev.taxRate,
+            globalMarkup: prev.globalMarkup === 0 ? workspaceSettings.defaultMarkup : prev.globalMarkup,
           };
         }
         return prev;
       });
     }
-  }, [isNewOrder, existingOrder, companySettings]);
+  }, [isNewOrder, existingOrder, workspaceSettings]);
 
   // Track if we've initialized formData from existingOrder to prevent overwriting user changes
   const [hasInitializedFromOrder, setHasInitializedFromOrder] = useState(false);
@@ -505,8 +505,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     status: (formData.status as OrderStatus) || 'proposal',
     createdAt: formData.createdAt || existingOrder?.createdAt || new Date(),
     updatedAt: new Date(),
-    taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
-    globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+    taxRate: formData.taxRate ?? workspaceSettings?.defaultTaxRate ?? 0,
+    globalMarkup: formData.globalMarkup ?? workspaceSettings?.defaultMarkup ?? 0,
     currency: formData.currency || 'USD',
     orderType: formData.orderType || '',
     orderTitle: formData.orderTitle || '',
@@ -537,8 +537,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         status: formData.status as OrderStatus || 'proposal',
         createdAt: formData.createdAt || existingOrder?.createdAt || new Date(),
         updatedAt: new Date(),
-        taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
-        globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+        taxRate: formData.taxRate ?? workspaceSettings?.defaultTaxRate ?? 0,
+        globalMarkup: formData.globalMarkup ?? workspaceSettings?.defaultMarkup ?? 0,
         currency: formData.currency || 'USD',
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
@@ -594,8 +594,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         status: formData.status as OrderStatus || 'proposal',
         createdAt: formData.createdAt || new Date(),
         updatedAt: new Date(),
-        taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
-        globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+        taxRate: formData.taxRate ?? workspaceSettings?.defaultTaxRate ?? 0,
+        globalMarkup: formData.globalMarkup ?? workspaceSettings?.defaultMarkup ?? 0,
         currency: formData.currency || 'USD',
         orderType: formData.orderType || '',
         orderTitle: formData.orderTitle || '',
@@ -967,8 +967,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         jobs: formData.jobs || [],
         createdAt: existingOrder?.createdAt || new Date(),
         updatedAt: new Date(),
-        taxRate: formData.taxRate ?? companySettings?.defaultTaxRate ?? 0,
-        globalMarkup: formData.globalMarkup ?? companySettings?.defaultMarkup ?? 0,
+        taxRate: formData.taxRate ?? workspaceSettings?.defaultTaxRate ?? 0,
+        globalMarkup: formData.globalMarkup ?? workspaceSettings?.defaultMarkup ?? 0,
         currency: formData.currency || 'USD',
         timeEstimate: formData.timeEstimate ?? 10,
         isPaid: formData.isPaid === true,
@@ -1009,7 +1009,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
   };
   
   // Document generation handlers — entity picks company block + number series
-  const handleGenerateInvoice = async (entityId: LegalEntityId = 'mk') => {
+  const handleGenerateInvoice = async (entityId: LegalEntityId = workspaceId) => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1038,7 +1038,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
-  const handleGeneratePO = async (entityId: LegalEntityId = 'mk') => {
+  const handleGeneratePO = async (entityId: LegalEntityId = workspaceId) => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1067,7 +1067,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
     });
   };
   
-  const handleGenerateSpecification = async (entityId: LegalEntityId = 'mk') => {
+  const handleGenerateSpecification = async (entityId: LegalEntityId = workspaceId) => {
     if (!formData.clientId || !formData.jobs || formData.jobs.length === 0) {
       toast.error(t('orderDetail.selectClientAndAddItems') || 'Please select a client and add line items');
       return;
@@ -1604,7 +1604,8 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
             
             {showDocumentDropdown && (
               <div className="absolute right-0 top-full mt-1 w-full min-w-[260px] bg-white border border-[#E4E7E7] rounded-lg shadow-lg z-50 overflow-hidden">
-                {LEGAL_ENTITIES.map((entity, entityIndex) => (
+                {/* Documents are issued by the active workspace's company */}
+                {LEGAL_ENTITIES.filter(entity => entity.id === workspaceId).map((entity, entityIndex) => (
                   <div key={entity.id} className={entityIndex > 0 ? 'border-t border-[#E4E7E7]' : ''}>
                     <div className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#7C8085] bg-[#F7F8F8]">
                       {t(entity.labelKey)}

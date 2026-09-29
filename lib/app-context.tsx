@@ -1,13 +1,18 @@
 // Global application context for state management
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Client, JobTemplate, Order, OrderJob, JobPreset, PresetJob, CompanySettings } from './types';
 import { supabase } from './supabase';
 import { normalizePhoneNumber } from './utils';
 import { localeToLanguage } from './i18n';
 import { logger } from './logger';
+import { getLegalEntity, loadMetserviceSettings, type WorkspaceId } from './legal-entities';
 
 interface AppContextType {
+  /** Active company workspace; clients and orders are scoped to it */
+  workspaceId: WorkspaceId;
+  /** Company settings of the active workspace (MK profile or Metservice profile) */
+  workspaceSettings: CompanySettings;
   clients: Client[];
   orders: Order[];
   jobTemplates: JobTemplate[];
@@ -53,6 +58,12 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// ID sequences are per workspace: MK uses the original next_*_id RPCs,
+// Metservice has its own counters producing ms-client-N / ms-order-N.
+function idRpc(workspaceId: WorkspaceId, kind: 'client' | 'order'): string {
+  return workspaceId === 'metservice' ? `next_metservice_${kind}_id` : `next_${kind}_id`;
+}
 
 // Helper function to convert database row to Client
 function dbRowToClient(row: any): Client {
@@ -237,8 +248,12 @@ function dbRowToCompanySettings(row: any): CompanySettings {
 }
 
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({ children, workspaceId }: { children: ReactNode; workspaceId: WorkspaceId }) {
   const queryClient = useQueryClient();
+  const ordersQueryKey = useMemo(() => ['orders', workspaceId], [workspaceId]);
+  // Guards async client loads against a workspace switch mid-request
+  const workspaceRef = useRef(workspaceId);
+  workspaceRef.current = workspaceId;
   const [clients, setClients] = useState<Client[]>([]);
   const [jobPresets, setJobPresets] = useState<JobPreset[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings>({
@@ -256,8 +271,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     poPrefix: 'PO',
     specPrefix: 'SPEC',
   });
+  const [metserviceSettings, setMetserviceSettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // resolveSettings reads the Metservice cache that loadMetserviceSettings fills;
+  // metserviceSettings is a dependency so this recomputes once that load finishes.
+  const workspaceSettings = useMemo(
+    () => getLegalEntity(workspaceId).resolveSettings(companySettings),
+    [workspaceId, companySettings, metserviceSettings]
+  );
 
   // Fetch a page of orders with optional selective job fetching
   const fetchOrdersPage = useCallback(async (
@@ -273,6 +296,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data, error: err } = await supabase
       .from('orders')
       .select('*, total, subtotal, job_count')  // Select denormalized fields
+      .eq('workspaceId', workspaceId)
       .order('createdAt', { ascending: false })
       .range(from, to);
     
@@ -305,7 +329,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // Return orders with empty jobs array (fast)
     return data.map(row => dbRowToOrder(row, new Map()));
-  }, []);
+  }, [workspaceId]);
 
   // Background job loading function (non-blocking)
   const loadRemainingOrderJobsInBackground = useCallback(async (orders: Order[]) => {
@@ -320,7 +344,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const jobsByOrderId = await fetchOrderJobsBatch(batch);
         
         // Update React Query cache with loaded jobs
-        queryClient.setQueryData(['orders'], (oldOrders: Order[] = []) => {
+        queryClient.setQueryData(ordersQueryKey, (oldOrders: Order[] = []) => {
           return oldOrders.map(order => {
             const jobs = jobsByOrderId.get(order.id);
             if (jobs && jobs.length > 0) {
@@ -339,14 +363,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
-  }, [queryClient]);
+  }, [queryClient, ordersQueryKey]);
 
   // Progressive loading: fast initial load, dashboard priority, background jobs
   const fetchAllOrdersProgressive = useCallback(async (): Promise<Order[]> => {
     // Step 1: Get total count
     const { count, error: countErr } = await supabase
       .from('orders')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('workspaceId', workspaceId);
     
     if (countErr) throw countErr;
     const totalCount = count || 0;
@@ -425,7 +450,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     
     return [...ordersWithDashboardJobs, ...remainingOrders];
-  }, [fetchOrdersPage, loadRemainingOrderJobsInBackground]);
+  }, [workspaceId, fetchOrdersPage, loadRemainingOrderJobsInBackground]);
 
   // Fetch a page of job templates
   const fetchJobTemplatesPage = useCallback(async (from: number, to: number): Promise<JobTemplate[]> => {
@@ -480,7 +505,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // React Query for orders
   const { data: orders = [], isLoading: ordersLoading } = useQuery({
-    queryKey: ['orders'],
+    queryKey: ordersQueryKey,
     queryFn: fetchAllOrdersProgressive,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -494,10 +519,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refetchOnWindowFocus: false,
   });
 
-  // Load all data on mount (except orders and jobTemplates which are handled by React Query)
+  // Load all data on mount and on workspace switch (except orders and jobTemplates which are handled by React Query)
   useEffect(() => {
+    setClients([]); // Don't show the previous workspace's clients while reloading
     loadAllData();
-  }, []);
+  }, [workspaceId]);
 
   const loadAllData = async () => {
     setOtherDataLoading(true);
@@ -536,14 +562,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Refresh methods
   const refreshClients = useCallback(async () => {
+    const requestedWorkspace = workspaceId;
     const { data, error: err } = await supabase
       .from('clients')
       .select('*')
+      .eq('workspaceId', requestedWorkspace)
       .order('createdAt', { ascending: false });
     
     if (err) throw err;
+    if (workspaceRef.current !== requestedWorkspace) return;
     setClients((data || []).map(dbRowToClient));
-  }, []);
+  }, [workspaceId]);
 
   // refreshOrders is now handled by React Query, but we keep it for compatibility
   const refreshOrders = useCallback(async () => {
@@ -567,6 +596,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshCompanySettings = useCallback(async () => {
+    // Metservice profile is stored separately (company_settings id=metservice)
+    loadMetserviceSettings()
+      .then(setMetserviceSettings)
+      .catch(err => logger.error('Error loading Metservice settings', err));
+
     const { data, error: err } = await supabase
       .from('company_settings')
       .select('*')
@@ -597,7 +631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Generate ID from database sequence if not provided
     let clientId = client.id;
     if (!clientId || clientId === 'new') {
-      const { data: idData, error: idError } = await supabase.rpc('next_client_id');
+      const { data: idData, error: idError } = await supabase.rpc(idRpc(workspaceId, 'client'));
       if (idError) {
         logger.error('Error generating client ID', idError);
         throw idError;
@@ -609,6 +643,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .from('clients')
       .insert({
         id: clientId,
+        workspaceId,
         name: client.name,
         company: client.company,
         phone: normalizePhoneNumber(client.phone),
@@ -626,7 +661,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (err) throw err;
     await refreshClients();
     return clientId;
-  }, [refreshClients]);
+  }, [workspaceId, refreshClients]);
 
   const updateClient = useCallback(async (id: string, updates: Partial<Client>) => {
     const updateData: any = { ...updates };
@@ -664,7 +699,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Generate ID from database sequence if not provided
       let orderId = order.id;
       if (!orderId || orderId === 'new') {
-        const { data: idData, error: idError } = await supabase.rpc('next_order_id');
+        const { data: idData, error: idError } = await supabase.rpc(idRpc(workspaceId, 'order'));
         if (idError) {
           logger.error('Error generating order ID', idError);
           throw idError;
@@ -677,6 +712,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('orders')
         .insert({
           id: orderId,
+          workspaceId,
           clientId: order.clientId,
           status: order.status,
           createdAt: order.createdAt.toISOString(),
@@ -806,7 +842,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const duplicateOrderMutation = useMutation({
     mutationFn: async (sourceOrder: Order): Promise<string> => {
       // Generate new order ID from database sequence
-      const { data: newOrderId, error: idError } = await supabase.rpc('next_order_id');
+      const { data: newOrderId, error: idError } = await supabase.rpc(idRpc(workspaceId, 'order'));
       if (idError) {
         logger.error('Error generating order ID for duplicate', idError);
         throw idError;
@@ -817,6 +853,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('orders')
         .insert({
           id: newOrderId,
+          workspaceId,
           clientId: sourceOrder.clientId,
           status: 'proposal', // Always start as proposal
           createdAt: new Date().toISOString(),
@@ -1092,7 +1129,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     orderIds: string[]
   ): Promise<void> => {
     // Get current orders from cache
-    const currentOrders = queryClient.getQueryData<Order[]>(['orders']) || [];
+    const currentOrders = queryClient.getQueryData<Order[]>(ordersQueryKey) || [];
     
     // Find orders that need jobs loaded
     const ordersNeedingJobs = orderIds.filter(orderId => {
@@ -1109,7 +1146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const jobsByOrderId = await fetchOrderJobsBatch(ordersNeedingJobs);
       
       // Update cache
-      queryClient.setQueryData(['orders'], (oldOrders: Order[] = []) => {
+      queryClient.setQueryData(ordersQueryKey, (oldOrders: Order[] = []) => {
         return oldOrders.map(order => {
           const jobs = jobsByOrderId.get(order.id);
           if (jobs !== undefined) {
@@ -1122,9 +1159,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       logger.error('Error loading jobs on demand', error);
     }
-  }, [queryClient]);
+  }, [queryClient, ordersQueryKey]);
 
   const value: AppContextType = {
+    workspaceId,
+    workspaceSettings,
     clients,
     orders,
     jobTemplates,

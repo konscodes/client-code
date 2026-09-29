@@ -13,12 +13,8 @@ export interface LegalEntityDefinition {
   labelKey: string;
   /** Short name shown in the generate-documents menu */
   shortName: string;
-  /**
-   * Document number series.
-   * - order: bare CRM order number (current MK behavior)
-   * - metservice: order number + sequential suffix (e.g. 22817-22)
-   */
-  numberSeries: 'order' | 'metservice';
+  /** Two-letter mark shown in the collapsed sidebar */
+  initials: string;
   resolveSettings: (defaultSettings: CompanySettings) => CompanySettings;
 }
 
@@ -53,14 +49,14 @@ export const LEGAL_ENTITIES: LegalEntityDefinition[] = [
     id: 'mk',
     labelKey: 'orderDetail.legalEntityMk',
     shortName: 'МК СЕРВИС',
-    numberSeries: 'order',
+    initials: 'МК',
     resolveSettings: (defaults) => defaults,
   },
   {
     id: 'metservice',
     labelKey: 'orderDetail.legalEntityMetservice',
     shortName: 'МЕТСЕРВИС',
-    numberSeries: 'metservice',
+    initials: 'МС',
     resolveSettings: (defaults) => {
       // Prefer cached settings from last load/save; fall back to built-in defaults.
       // Keep Metservice tax/markup independent from MK (МЕТСЕРВИС is typically without VAT).
@@ -197,120 +193,45 @@ export async function saveMetserviceSettings(settings: CompanySettings): Promise
   }
 }
 
-/** First Metservice journal suffix (then 23, 24, …) */
-export const METSERVICE_SEQ_START = 22;
-
-const LOCAL_STORAGE_KEY = 'metservice-doc-seq-v1';
-
-interface MetserviceSeqStore {
-  next: number;
-  byOrderId: Record<string, number>;
-}
-
-function readLocalStore(): MetserviceSeqStore {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as MetserviceSeqStore;
-      if (typeof parsed?.next === 'number' && parsed.byOrderId && typeof parsed.byOrderId === 'object') {
-        return parsed;
-      }
-    }
-  } catch {
-    // ignore corrupt storage
-  }
-  return { next: METSERVICE_SEQ_START, byOrderId: {} };
-}
-
-function writeLocalStore(store: MetserviceSeqStore): void {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(store));
-  } catch {
-    // private mode / quota — still return in-memory assignment for this session
-  }
-}
-
 /**
- * Assign (or reuse) a Metservice sequential suffix for an order.
- * Format in docs: `{orderNumber}-{suffix}` e.g. `22817-22`.
- * Same order always reuses the same suffix; new orders get the next number.
- *
- * Prefers Supabase `entity_document_numbers` when the table exists;
- * falls back to localStorage so local testing works without a migration.
- */
-export async function allocateMetserviceSuffix(orderId: string): Promise<number> {
-  // 1) Try shared DB (production / multi-user)
-  try {
-    const { data: existing, error: readError } = await supabase
-      .from('entity_document_numbers')
-      .select('sequence_suffix')
-      .eq('entity_id', 'metservice')
-      .eq('order_id', orderId)
-      .maybeSingle();
-
-    if (!readError && existing?.sequence_suffix != null) {
-      return Number(existing.sequence_suffix);
-    }
-
-    if (!readError) {
-      // Allocate next value via counter row
-      const { data: counter } = await supabase
-        .from('entity_document_counters')
-        .select('next_value')
-        .eq('entity_id', 'metservice')
-        .maybeSingle();
-
-      let next = counter?.next_value != null ? Number(counter.next_value) : METSERVICE_SEQ_START;
-
-      const { error: insertError } = await supabase.from('entity_document_numbers').insert({
-        entity_id: 'metservice',
-        order_id: orderId,
-        sequence_suffix: next,
-      });
-
-      if (!insertError) {
-        await supabase.from('entity_document_counters').upsert({
-          entity_id: 'metservice',
-          next_value: next + 1,
-        });
-        // Keep local cache in sync when DB works
-        const local = readLocalStore();
-        local.byOrderId[orderId] = next;
-        local.next = Math.max(local.next, next + 1);
-        writeLocalStore(local);
-        return next;
-      }
-    }
-  } catch (error) {
-    logger.debug('Metservice seq DB unavailable, using localStorage', error);
-  }
-
-  // 2) localStorage fallback
-  const store = readLocalStore();
-  if (store.byOrderId[orderId] != null) {
-    return store.byOrderId[orderId];
-  }
-  const assigned = store.next;
-  store.byOrderId[orderId] = assigned;
-  store.next = assigned + 1;
-  writeLocalStore(store);
-  return assigned;
-}
-
-/**
- * MK: bare order number (links 1:1 to CRM order).
- * Metservice: `{orderNumber}-{seq}` — order link preserved, sequential journal differs from MK.
+ * Document number = the order number. Each workspace has its own order counter
+ * (MK: order-N, Metservice: ms-order-N starting at 22), so no extra journal suffix is needed.
  */
 export async function getEntityDocumentNumber(
-  entityId: LegalEntityId,
+  _entityId: LegalEntityId,
   orderId: string
 ): Promise<string> {
-  const orderNumeric = extractIdNumbers(orderId) || '0';
-  if (entityId === 'metservice') {
-    const suffix = await allocateMetserviceSuffix(orderId);
-    return `${orderNumeric}-${suffix}`;
+  return extractIdNumbers(orderId) || '0';
+}
+
+/**
+ * Workspaces: each legal entity is its own workspace with separate clients and orders
+ * (`workspaceId` column). Job catalog, presets and settings are shared.
+ */
+export type WorkspaceId = LegalEntityId;
+
+const WORKSPACE_STORAGE_KEY = 'active-workspace';
+
+export function isWorkspaceId(value: unknown): value is WorkspaceId {
+  return LEGAL_ENTITIES.some((e) => e.id === value);
+}
+
+export function readStoredWorkspace(): WorkspaceId {
+  try {
+    const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (isWorkspaceId(stored)) return stored;
+  } catch {
+    // ignore
   }
-  return orderNumeric;
+  return 'mk';
+}
+
+export function storeWorkspace(id: WorkspaceId): void {
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+  } catch {
+    // ignore
+  }
 }
 
 export function getLegalEntity(id: LegalEntityId): LegalEntityDefinition {

@@ -19,8 +19,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const { orders, clients, loading } = useApp();
   const { formatCurrency, formatDate } = useFormatting();
   
-  // Show loading if explicitly loading OR if we have no data yet (initial load)
-  const isLoading = loading || (orders.length === 0 && clients.length === 0);
+  // A workspace can legitimately be empty, so rely on the context loading flag only
+  const isLoading = loading;
   
   const kpiData = useMemo(() => {
     const openOrders = orders.filter(o => o.status === 'in-progress').length;

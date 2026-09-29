@@ -16,6 +16,7 @@ import { Settings } from './pages/settings';
 import { Analytics } from './pages/analytics';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
+import { readStoredWorkspace, storeWorkspace, type WorkspaceId } from './lib/legal-entities';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +57,8 @@ function AppContent() {
   const [pageId, setPageId] = useState<string | undefined>(undefined);
   const [previousPage, setPreviousPage] = useState<{ page: Page; id?: string } | null>(null);
   const [orderHasUnsavedChanges, setOrderHasUnsavedChanges] = useState(false);
-  const [pendingNavigation, setPendingNavigation] = useState<{ page: string; id?: string } | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{ page: string; id?: string; workspace?: WorkspaceId } | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<WorkspaceId>(readStoredWorkspace);
   const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
   
   const handleNavigate = (page: string, id?: string) => {
@@ -83,8 +85,35 @@ function AppContent() {
     window.scrollTo(0, 0);
   };
   
+  // Detail pages belong to one workspace; after a switch fall back to their list
+  const listPageFor = (page: Page): Page =>
+    page === 'client-detail' ? 'clients' : page === 'order-detail' ? 'orders' : page;
+
+  const applyWorkspaceSwitch = (next: WorkspaceId) => {
+    storeWorkspace(next);
+    setWorkspaceId(next);
+    setPreviousPage(null);
+    setCurrentPage(listPageFor(currentPage));
+    setPageId(undefined);
+    setOrderHasUnsavedChanges(false);
+    window.scrollTo(0, 0);
+  };
+
+  const handleSwitchWorkspace = (next: WorkspaceId) => {
+    if (next === workspaceId) return;
+    if (currentPage === 'order-detail' && orderHasUnsavedChanges) {
+      setPendingNavigation({ page: 'orders', workspace: next });
+      setShowUnsavedChangesDialog(true);
+      return;
+    }
+    applyWorkspaceSwitch(next);
+  };
+  
   const handleConfirmNavigation = () => {
-    if (pendingNavigation) {
+    if (pendingNavigation?.workspace) {
+      applyWorkspaceSwitch(pendingNavigation.workspace);
+      setPendingNavigation(null);
+    } else if (pendingNavigation) {
       setCurrentPage(pendingNavigation.page as Page);
       setPageId(pendingNavigation.id);
       setPendingNavigation(null);
@@ -150,8 +179,13 @@ function AppContent() {
   };
   
   return (
-    <AppProvider>
-      <AppLayout currentPage={currentPage} onNavigate={handleNavigate}>
+    <AppProvider workspaceId={workspaceId}>
+      <AppLayout
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        workspaceId={workspaceId}
+        onSwitchWorkspace={handleSwitchWorkspace}
+      >
         {renderPage()}
       </AppLayout>
       

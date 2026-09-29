@@ -29,7 +29,7 @@ export function ClientsList({ onNavigate }: ClientsListProps) {
   const { clients, orders, loading } = useApp();
   
   // Show loading if explicitly loading OR if we have no data yet (initial load)
-  const isLoading = loading || (clients.length === 0 && orders.length === 0);
+  const isLoading = loading;
   
   // localStorage keys
   const STORAGE_KEY_PREFIX = 'clients-table-';
