@@ -13,6 +13,8 @@ interface AppContextType {
   workspaceId: WorkspaceId;
   /** Company settings of the active workspace (MK profile or Metservice profile) */
   workspaceSettings: CompanySettings;
+  /** React Query key of the active workspace's orders cache */
+  ordersQueryKey: readonly unknown[];
   clients: Client[];
   orders: Order[];
   jobTemplates: JobTemplate[];
@@ -849,32 +851,46 @@ export function AppProvider({ children, workspaceId }: { children: ReactNode; wo
       }
       
       // Create duplicated order with new ID and reset fields
+      const now = new Date();
+      const duplicate: Order = {
+        ...sourceOrder,
+        id: newOrderId,
+        status: 'proposal', // Always start as proposal
+        createdAt: now,
+        updatedAt: now,
+        orderTitle: `${sourceOrder.orderTitle} (Copy)`,
+        isPaid: false,
+        jobs: (sourceOrder.jobs || []).map(job => ({ ...job, id: crypto.randomUUID() })),
+        total: undefined,
+        subtotal: undefined,
+        job_count: undefined,
+      };
       const { error: orderErr } = await supabase
         .from('orders')
         .insert({
           id: newOrderId,
           workspaceId,
-          clientId: sourceOrder.clientId,
-          status: 'proposal', // Always start as proposal
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          taxRate: sourceOrder.taxRate,
-          globalMarkup: sourceOrder.globalMarkup,
-          currency: sourceOrder.currency,
-          orderType: sourceOrder.orderType,
-          orderTitle: `${sourceOrder.orderTitle} (Copy)`,
-          timeEstimate: sourceOrder.timeEstimate,
+          clientId: duplicate.clientId,
+          status: duplicate.status,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+          taxRate: duplicate.taxRate,
+          globalMarkup: duplicate.globalMarkup,
+          currency: duplicate.currency,
+          orderType: duplicate.orderType,
+          orderTitle: duplicate.orderTitle,
+          timeEstimate: duplicate.timeEstimate,
           isPaid: false,
         });
       
       if (orderErr) throw orderErr;
       
       // Copy all order jobs with new IDs
-      if (sourceOrder.jobs && sourceOrder.jobs.length > 0) {
+      if (duplicate.jobs.length > 0) {
         const { error: jobsErr } = await supabase
           .from('order_jobs')
-          .insert(sourceOrder.jobs.map(job => ({
-            id: crypto.randomUUID(),
+          .insert(duplicate.jobs.map(job => ({
+            id: job.id,
             orderId: newOrderId,
             jobId: job.jobId,
             jobName: job.jobName,
@@ -889,6 +905,9 @@ export function AppProvider({ children, workspaceId }: { children: ReactNode; wo
         
         if (jobsErr) throw jobsErr;
       }
+      
+      // Put the copy in the cache so the detail page can open it before the refetch lands
+      queryClient.setQueryData<Order[]>(ordersQueryKey, (oldOrders = []) => [duplicate, ...oldOrders]);
       
       return newOrderId;
     },
@@ -1164,6 +1183,7 @@ export function AppProvider({ children, workspaceId }: { children: ReactNode; wo
   const value: AppContextType = {
     workspaceId,
     workspaceSettings,
+    ordersQueryKey,
     clients,
     orders,
     jobTemplates,

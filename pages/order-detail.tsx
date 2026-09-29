@@ -138,7 +138,7 @@ interface OrderDetailProps {
 export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChangesChange }: OrderDetailProps) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const { orders, clients, jobTemplates, jobPresets, companySettings, workspaceId, workspaceSettings, addOrder, updateOrder, duplicateOrder, ensureOrderJobsLoaded } = useApp();
+  const { orders, clients, jobTemplates, jobPresets, companySettings, workspaceId, workspaceSettings, ordersQueryKey, addOrder, updateOrder, duplicateOrder, ensureOrderJobsLoaded } = useApp();
   const { formatCurrency, formatDate } = useFormatting();
   
   // Get order type label based on current language
@@ -547,7 +547,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
         jobs: formData.jobs || [],
       };
       await updateOrder(orderData.id, orderData);
-      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+      queryClient.setQueryData<Order[]>(ordersQueryKey, (oldOrders = []) => {
         return oldOrders.map(order => 
           order.id === orderData.id ? orderData : order
         );
@@ -624,7 +624,7 @@ export function OrderDetail({ orderId, onNavigate, previousPage, onUnsavedChange
       };
       
       // Add to cache directly (no refetch needed - much faster!)
-      queryClient.setQueryData<Order[]>(['orders'], (oldOrders = []) => {
+      queryClient.setQueryData<Order[]>(ordersQueryKey, (oldOrders = []) => {
         // Add new order at the beginning (most recent first, matching the fetch order)
         return [newOrder, ...oldOrders];
       });
