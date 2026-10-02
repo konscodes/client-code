@@ -195,7 +195,7 @@ export async function saveMetserviceSettings(settings: CompanySettings): Promise
 
 /**
  * Document number = the order number. Each workspace has its own order counter
- * (MK: order-N, Metservice: ms-order-N starting at 22), so no extra journal suffix is needed.
+ * (MK: order-N, Metservice: ms-order-N starting at 13001), so no extra journal suffix is needed.
  */
 export async function getEntityDocumentNumber(
   _entityId: LegalEntityId,
