@@ -32,8 +32,8 @@ NOTIFY pgrst, 'reload schema';
 -- ============================================================================
 
 CREATE SEQUENCE IF NOT EXISTS public.metservice_client_id_seq START WITH 1;
--- МЕТСЕРВИС order numbering starts at 13001
-CREATE SEQUENCE IF NOT EXISTS public.metservice_order_id_seq START WITH 13001;
+-- МЕТСЕРВИС order numbering starts at 10001
+CREATE SEQUENCE IF NOT EXISTS public.metservice_order_id_seq START WITH 10001;
 
 CREATE OR REPLACE FUNCTION public.next_metservice_client_id()
 RETURNS text
